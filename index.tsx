@@ -1,7 +1,7 @@
 
 import React, { ErrorInfo, ReactNode } from 'react';
 import ReactDOMClient from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
+import { HashRouter } from 'react-router-dom';
 import App from './App';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { RoleProvider } from './contexts/RoleContext';
@@ -53,9 +53,9 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
                </svg>
             </div>
             <h1 className="text-2xl font-bold mb-2">Portal Temporarily Unavailable</h1>
-            <p className="mb-8 text-muted-foreground max-sm mx-auto">An unexpected error occurred. We've logged the incident and are working on it.</p>
+            <p className="mb-8 text-muted-foreground max-w-sm mx-auto">An unexpected error occurred. We've logged the incident and are working on it.</p>
             <button 
-                onClick={() => window.location.href = '/'} 
+                onClick={() => window.location.hash = '#/'} 
                 className="px-6 py-2.5 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg hover:bg-primary/90 transition-all active:scale-95"
             >
                 Return to Home
@@ -75,9 +75,9 @@ root.render(
     <ErrorBoundary>
       <ThemeProvider>
         <RoleProvider>
-          <BrowserRouter>
+          <HashRouter>
             <App />
-          </BrowserRouter>
+          </HashRouter>
         </RoleProvider>
       </ThemeProvider>
     </ErrorBoundary>

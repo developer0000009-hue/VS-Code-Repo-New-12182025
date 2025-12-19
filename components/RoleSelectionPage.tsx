@@ -8,7 +8,6 @@ import { supabase } from '../services/supabase';
 import { XIcon } from './icons/XIcon';
 import { SchoolIcon } from './icons/SchoolIcon';
 import { UsersIcon } from './icons/UsersIcon';
-import { CheckCircleIcon } from './icons/CheckCircleIcon';
 
 interface RoleSelectionPageProps {
     onRoleSelect: (role: Role) => void;
@@ -75,7 +74,7 @@ const RoleSelectionPage: React.FC<RoleSelectionPageProps> = ({ onRoleSelect, onC
         if (createLoading) {
             timer = setTimeout(() => {
                 if (createLoading) {
-                    console.warn("Onboarding watchdog triggered: Resetting createLoading after 8s timeout.");
+                    console.warn("Watchdog: Resetting stuck creation state.");
                     setCreateLoading(false);
                 }
             }, 8000);
@@ -100,7 +99,6 @@ const RoleSelectionPage: React.FC<RoleSelectionPageProps> = ({ onRoleSelect, onC
         setSelectedRole(role);
 
         if (role === BuiltInRoles.SCHOOL_ADMINISTRATION) {
-            // Short delay for visual feedback before opening modal
             setTimeout(() => {
                 setIsSchoolAdminModalOpen(true);
                 setSelectedRole(null);
@@ -117,14 +115,9 @@ const RoleSelectionPage: React.FC<RoleSelectionPageProps> = ({ onRoleSelect, onC
         
         setCreateLoading(true);
         try {
-            // This triggers handleRoleSelect in OnboardingFlow
             await onRoleSelect(BuiltInRoles.SCHOOL_ADMINISTRATION);
         } catch (err) {
             console.error("New School Creation Trigger Failed:", err);
-            setCreateLoading(false);
-        } finally {
-            // Note: If parent transitions state, this component unmounts
-            // so this block is mostly for handled errors.
             setCreateLoading(false);
         }
     }
@@ -169,10 +162,9 @@ const RoleSelectionPage: React.FC<RoleSelectionPageProps> = ({ onRoleSelect, onC
 
     return (
         <div className="min-h-screen w-full flex flex-col items-center justify-center p-6 sm:p-12 relative overflow-hidden bg-background">
-            {/* Background Decoration */}
             <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
                 <div className="absolute -top-[20%] -left-[10%] w-[70%] h-[70%] bg-primary/5 rounded-full blur-[120px]" />
-                <div className="absolute top-[40%] -right-[10%] w-[60%] h-[60%] bg-purple-500/5 rounded-full blur-[100px]" />
+                <div className="absolute top-[40%] -right-[10%] w-[60%] h-[60%] bg-purple-50/5 rounded-full blur-[100px]" />
             </div>
 
             <div className="w-full max-w-7xl mx-auto text-center z-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
@@ -319,7 +311,7 @@ const RoleSelectionPage: React.FC<RoleSelectionPageProps> = ({ onRoleSelect, onC
                         </div>
                         <footer className="p-6 bg-muted/20 border-t border-border/40 text-center">
                             <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-[0.1em]">
-                                Requires an active paid GCP project • <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noreferrer" className="text-primary hover:underline">Billing Docs</a>
+                                Requires a managed institution account • <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noreferrer" className="text-primary hover:underline">Billing Docs</a>
                             </p>
                         </footer>
                     </div>

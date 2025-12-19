@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { supabase, STORAGE_KEY } from './services/supabase';
 import { UserProfile, Role, BuiltInRoles } from './types';
 import AuthPage from './components/AuthPage';
@@ -15,7 +15,6 @@ import TeacherDashboard from './components/TeacherDashboard';
 import TransportDashboard from './components/TransportDashboard';
 import EcommerceDashboard from './components/EcommerceDashboard';
 import NotFound from './components/common/NotFound';
-
 
 // Explicit role mapping to routes
 const ROLE_ROUTES: Record<string, string> = {
@@ -38,7 +37,6 @@ const getHomePath = (userProfile: UserProfile): string => {
     if (userProfile.is_super_admin) return '/super-admin';
     return ROLE_ROUTES[userProfile.role] || '/dashboard';
 };
-
 
 const App: React.FC = () => {
     const [session, setSession] = useState<any | null>(null);
@@ -111,7 +109,7 @@ const App: React.FC = () => {
             navigate('/', { replace: true });
         } catch (err) {
             console.error("Logout Error:", err);
-            window.location.href = '/';
+            window.location.hash = '#/';
         } finally {
             setLoading(false);
         }
@@ -156,14 +154,13 @@ const App: React.FC = () => {
             } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
                 setSession(currentSession);
                 if (currentSession) {
-                    loadUserData(currentSession);
+                    loadUserData(currentSession, true);
                 }
             }
         });
 
         return () => subscription.unsubscribe();
     }, [loadUserData, navigate]);
-
 
     if (loading) {
         return (
@@ -180,6 +177,7 @@ const App: React.FC = () => {
         return <AuthPage />;
     }
     
+    // Redirect to onboarding if profile is incomplete or role is missing
     if (!profile.profile_completed || !profile.role) {
         return (
             <OnboardingFlow 
