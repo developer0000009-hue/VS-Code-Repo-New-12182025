@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { UserProfile, Role, SchoolAdminProfileData, SchoolBranch, BuiltInRoles } from '../types';
 import Navbar from './admin/Navbar';
@@ -25,7 +24,6 @@ import AnalyticsTab from './AnalyticsTab';
 import TeachersManagementTab from './TeachersManagementTab';
 import ClassesTab from './ClassesTab';
 import { getAdminMenu } from './admin/AdminMenuConfig';
-// Fix: Import missing XIcon
 import { XIcon } from './icons/XIcon';
 
 interface SchoolAdminDashboardProps {
@@ -54,7 +52,7 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
                 supabase.rpc('get_school_branches')
             ]);
 
-            if (schoolRes.error) throw schoolRes.error;
+            if (schoolRes.error && schoolRes.error.code !== 'PGRST116') throw schoolRes.error;
             if (branchRes.error) throw branchRes.error;
 
             setSchoolData(schoolRes.data);
@@ -63,6 +61,7 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
             );
             setBranches(sortedBranches);
 
+            // Maintain branch selection across navigations
             if (sortedBranches.length > 0) {
                 const mainBranch = sortedBranches.find(b => b.is_main_branch);
                 setCurrentBranchId(prevId => {
@@ -83,8 +82,7 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
         fetchDashboardData();
     }, [fetchDashboardData]);
 
-    const isHeadOfficeAdmin = useMemo(() => profile.role === BuiltInRoles.SCHOOL_ADMINISTRATION, [profile.role]);
-    const isBranchAdmin = !isHeadOfficeAdmin;
+    const isHeadOfficeAdmin = profile.role === BuiltInRoles.SCHOOL_ADMINISTRATION;
 
     const menuGroups = useMemo(() => {
         if (!profile.role) return [];
@@ -93,13 +91,11 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
 
     const currentBranch = useMemo(() => branches.find(b => b.id === currentBranchId) || null, [branches, currentBranchId]);
 
-    const handleBranchUpdate = () => fetchDashboardData();
-
     if (loadingData) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-background gap-4">
                 <Spinner size="lg" />
-                <p className="text-sm font-bold text-muted-foreground animate-pulse">Initializing Administrative Context...</p>
+                <p className="text-xs font-black uppercase text-muted-foreground animate-pulse tracking-widest">Initializing Administrative Context</p>
             </div>
         );
     }
@@ -107,13 +103,13 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
     if (dataError) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-background p-8 text-center">
-                <div className="p-4 bg-destructive/10 rounded-full mb-4">
-                    <XIcon className="w-8 h-8 text-destructive" />
+                <div className="w-16 h-16 bg-destructive/10 text-destructive rounded-full flex items-center justify-center mb-4">
+                    <XIcon className="w-8 h-8" />
                 </div>
                 <h3 className="text-xl font-bold mb-2">Sync Error</h3>
                 <p className="text-muted-foreground max-w-md mb-6">{dataError}</p>
-                <button onClick={fetchDashboardData} className="px-6 py-2.5 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg hover:bg-primary/90 transition-all">
-                    Retry Synchronization
+                <button onClick={fetchDashboardData} className="px-6 py-2.5 bg-primary text-white font-bold rounded-xl shadow-lg hover:bg-primary/90 transition-all">
+                    Retry Sync
                 </button>
             </div>
         );
@@ -123,7 +119,7 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
         switch (activeComponent) {
             case 'Dashboard': return <DashboardOverview schoolProfile={schoolData} currentBranch={currentBranch} profile={profile} onNavigateToBranches={() => setActiveComponent('Branches')} />;
             case 'Profile': return <ProfileCreationPage profile={profile} role={profile.role!} onComplete={onProfileUpdate} onBack={() => setActiveComponent('Dashboard')} showBackButton={true} />;
-            case 'Branches': return <BranchManagementTab isHeadOfficeAdmin={isHeadOfficeAdmin} branches={branches} isLoading={loadingData} error={dataError} onBranchUpdate={handleBranchUpdate} onSelectBranch={setCurrentBranchId} schoolProfile={schoolData} />;
+            case 'Branches': return <BranchManagementTab isHeadOfficeAdmin={isHeadOfficeAdmin} branches={branches} isLoading={loadingData} error={dataError} onBranchUpdate={fetchDashboardData} onSelectBranch={setCurrentBranchId} schoolProfile={schoolData} />;
             case 'Admissions': return <AdmissionsTab branchId={currentBranchId} />;
             case 'Enquiries': return <EnquiryTab branchId={currentBranchId} onNavigate={setActiveComponent} />;
             case 'Code Verification': return <CodeVerificationTab branchId={currentBranchId} />;
@@ -151,7 +147,7 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
                 setActiveComponent={setActiveComponent}
                 isCollapsed={isSidebarCollapsed}
                 setCollapsed={setIsSidebarCollapsed}
-                isBranchAdmin={isBranchAdmin}
+                isBranchAdmin={!isHeadOfficeAdmin}
                 isHeadOfficeAdmin={isHeadOfficeAdmin}
                 menuGroups={menuGroups}
             />
@@ -160,7 +156,7 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
                 <Navbar 
                     activeComponent={activeComponent}
                     setActiveComponent={setActiveComponent}
-                    isBranchAdmin={isBranchAdmin}
+                    isBranchAdmin={!isHeadOfficeAdmin}
                     isHeadOfficeAdmin={isHeadOfficeAdmin}
                     profile={profile}
                     onSelectRole={onSelectRole}

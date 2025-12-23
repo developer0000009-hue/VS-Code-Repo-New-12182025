@@ -1,16 +1,45 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import RoleSelectionPage from './RoleSelectionPage';
-import { BranchCreationPage } from './BranchCreationPage';
-import { ProfileCreationPage } from './ProfileCreationPage';
-import PricingSelectionPage from './PricingSelectionPage';
-import { Role, UserProfile, BuiltInRoles } from '../types';
-import { supabase } from '../services/supabase';
-import Spinner from './common/Spinner';
-import ThemeSwitcher from './common/ThemeSwitcher';
-import { SchoolIcon } from './icons/SchoolIcon';
-import ProfileDropdown from './common/ProfileDropdown';
-import Stepper from './common/Stepper';
+import RoleSelectionPage from './components/RoleSelectionPage';
+import { BranchCreationPage } from './components/BranchCreationPage';
+import { ProfileCreationPage } from './components/ProfileCreationPage';
+import PricingSelectionPage from './components/PricingSelectionPage';
+import { Role, UserProfile, BuiltInRoles } from './types';
+import { supabase } from './services/supabase';
+import Spinner from './components/common/Spinner';
+import ThemeSwitcher from './components/common/ThemeSwitcher';
+import { SchoolIcon } from './components/icons/SchoolIcon';
+import ProfileDropdown from './components/common/ProfileDropdown';
+import Stepper from './components/common/Stepper';
+
+/**
+ * Robust error message extractor.
+ * Guarantees a string return and prevents [object Object] displays.
+ */
+const formatError = (err: any): string => {
+    if (!err) return "Institutional synchronization failed.";
+    if (typeof err === 'string') return err;
+    
+    // Check common error property paths
+    const message = err.message || err.error_description || err.details || err.hint;
+    if (message && typeof message === 'string' && !message.includes("[object Object]")) {
+        return message;
+    }
+    
+    // Check nested Supabase error object
+    if (err.error) {
+        if (typeof err.error === 'string') return err.error;
+        if (err.error.message && typeof err.error.message === 'string') return err.error.message;
+    }
+
+    // Attempt JSON stringification for debugging if it's a plain object
+    try {
+        const str = JSON.stringify(err);
+        if (str && str !== '{}' && str !== '[]') return str;
+    } catch { }
+
+    const final = String(err);
+    return final === '[object Object]' ? "An unexpected system error occurred during setup." : final;
+};
 
 interface OnboardingFlowProps {
     profile: UserProfile;
@@ -38,11 +67,9 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
         return () => { isMounted.current = false; };
     }, []);
     
-    // Unified state synchronization effect
     useEffect(() => {
         if (!isMounted.current || isTransitioning) return;
 
-        // If no role is selected, we must show the role selection screen
         if (!profile.role) {
             setSelectedRole(null);
             setStep('role');
@@ -50,11 +77,9 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
             return;
         }
 
-        // If a role is present, determine the current step
         setSelectedRole(profile.role);
         
         if (profile.role === BuiltInRoles.SCHOOL_ADMINISTRATION) {
-            // Priority: Database driven onboarding step
             const dbStep = onboardingStep;
             if (dbStep && ['profile', 'pricing', 'branches'].includes(dbStep)) {
                 setStep(dbStep as any);
@@ -62,7 +87,6 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
                 setStep('profile');
             }
         } else {
-            // Non-admin roles: check completion status
             if (profile.profile_completed) {
                 onComplete();
             } else {
@@ -85,11 +109,10 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
         
         try {
             if (role === BuiltInRoles.SCHOOL_ADMINISTRATION) {
-                // Use Atomic RPC to prevent partial creation states
-                const { data, error } = await supabase.rpc('initialize_school_admin');
+                // Initialize School Admin workflow via Secured RPC
+                const { error } = await supabase.rpc('initialize_school_admin');
                 if (error) throw error;
                 
-                // Immediately transition locally while App.tsx re-fetches
                 if (isMounted.current) setStep('profile');
             } else {
                 const { error: updateError } = await supabase
@@ -101,7 +124,6 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
                 if (isMounted.current) setStep('profile');
             }
 
-            // Sync with parent App component and WAIT for it to finish
             if (onStepChange) {
                 await onStepChange();
             }
@@ -110,20 +132,29 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
 
         } catch (err: any) {
             console.error('Role selection failed:', err);
-            // Provide explicit feedback instead of silent failure
-            alert(`Setup failed: ${err.message || "Institutional initialization failed. Please check your connection and try again."}`);
-            setStep('role');
-        } finally {
+            alert(`Role selection failed: ${formatError(err)}`);
             if (isMounted.current) {
-                setIsTransitioning(false);
+                setStep('role');
                 setLoading(false);
+                setIsTransitioning(false);
             }
         }
     };
 
+    /**
+     * PROACTIVE ADVANCEMENT: Predictions for UI steps to eliminate network lag feel.
+     */
     const handleStepAdvance = async () => {
         if (!isMounted.current) return;
-        if (onStepChange) await onStepChange();
+        
+        // Optimistic UI transition based on known flow
+        if (step === 'profile') setStep('pricing');
+        else if (step === 'pricing') setStep('branches');
+
+        // Trigger parent sync for global profile object consistency
+        if (onStepChange) {
+            await onStepChange();
+        }
     };
 
     const handleFinalize = async () => {
@@ -133,7 +164,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
             if (error) throw error;
             if (isMounted.current) await onComplete();
         } catch (error: any) {
-            alert("Error finalizing institutional setup: " + (error.message || String(error)));
+            alert("Error finalizing institutional setup: " + formatError(error));
         } finally {
             if (isMounted.current) setLoading(false);
         }
@@ -152,7 +183,6 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
                      await supabase.from('school_admin_profiles').update({ onboarding_step: 'profile' }).eq('user_id', profile.id);
                      setStep('profile');
                 } else if (step === 'profile') {
-                     // Allow removing role to go back to selection screen
                      await supabase.from('profiles').update({ role: null, profile_completed: false }).eq('id', profile.id);
                      setSelectedRole(null);
                      setStep('role');
@@ -179,7 +209,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
         }
     };
 
-    if (loading) {
+    if (loading && !isTransitioning) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-background">
                 <Spinner size="lg" />

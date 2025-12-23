@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import RoleSelectionPage from './RoleSelectionPage';
 import { BranchCreationPage } from './BranchCreationPage';
@@ -11,6 +10,25 @@ import ThemeSwitcher from './common/ThemeSwitcher';
 import { SchoolIcon } from './icons/SchoolIcon';
 import ProfileDropdown from './common/ProfileDropdown';
 import Stepper from './common/Stepper';
+
+const formatError = (err: any): string => {
+    if (!err) return "An unknown error occurred.";
+    if (typeof err === 'string') return err;
+    const message = err.message || err.error_description || err.details || err.hint;
+    if (message && typeof message === 'string' && !message.includes("[object Object]")) {
+        return message;
+    }
+    if (err.error) {
+        if (typeof err.error === 'string') return err.error;
+        if (err.error.message && typeof err.error.message === 'string') return err.error.message;
+    }
+    try {
+        const str = JSON.stringify(err);
+        if (str && str !== '{}' && str !== '[]') return str;
+    } catch { }
+    const stringified = String(err);
+    return stringified === '[object Object]' ? "Institutional system exception." : stringified;
+};
 
 interface OnboardingFlowProps {
     profile: UserProfile;
@@ -38,14 +56,9 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
         return () => { isMounted.current = false; };
     }, []);
     
-    /**
-     * Reacts to changes in the user profile or the onboarding step from the DB.
-     * This is the core engine that ensures the user is on the right screen.
-     */
     useEffect(() => {
         if (!isMounted.current || isTransitioning) return;
 
-        // Step 0: No Role
         if (!profile.role) {
             setSelectedRole(null);
             setStep('role');
@@ -55,18 +68,14 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
 
         setSelectedRole(profile.role);
         
-        // Step 1+: Has Role
         if (profile.role === BuiltInRoles.SCHOOL_ADMINISTRATION) {
             const dbStep = onboardingStep;
             if (dbStep && ['profile', 'pricing', 'branches'].includes(dbStep)) {
                 setStep(dbStep as any);
-            } else if (dbStep === 'complete') {
-                onComplete();
             } else {
                 setStep('profile');
             }
         } else {
-            // Other roles are simpler: Profile Setup -> Complete
             if (profile.profile_completed) {
                 onComplete();
             } else {
@@ -75,7 +84,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
         }
         
         setLoading(false);
-    }, [profile.role, profile.profile_completed, onboardingStep, isTransitioning, onComplete]);
+    }, [profile.role, profile.profile_completed, onboardingStep, isTransitioning]);
 
     const handleSignOut = async () => {
         if (isMounted.current) setLoading(true);
@@ -89,8 +98,13 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
         
         try {
             if (role === BuiltInRoles.SCHOOL_ADMINISTRATION) {
+                // Initialize School Admin workflow via Secured RPC
                 const { error } = await supabase.rpc('initialize_school_admin');
                 if (error) throw error;
+                
+                // CRITICAL FIX: Explicitly set the next UI step immediately after DB success
+                // This prevents the button from staying in 'Provisioning' state if the Auth refresh is slow
+                if (isMounted.current) setStep('profile');
             } else {
                 const { error: updateError } = await supabase
                     .from('profiles')
@@ -98,26 +112,32 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
                     .eq('id', profile.id);
 
                 if (updateError) throw updateError;
+                if (isMounted.current) setStep('profile');
             }
 
-            // Signal the app to reload the profile
-            if (onStepChange) await onStepChange();
+            // Trigger parent refresh to update the global 'profile' object
+            if (onStepChange) {
+                await onStepChange();
+            }
             
+            setSelectedRole(role);
+
         } catch (err: any) {
             console.error('Role selection failed:', err);
-            alert(`Setup failed: ${err.message || "Institutional initialization failed."}`);
-        } finally {
+            alert(`Role selection failed: ${formatError(err)}`);
             if (isMounted.current) {
-                setIsTransitioning(false);
+                setStep('role');
                 setLoading(false);
+                setIsTransitioning(false);
             }
+        } finally {
+            // Keep loading true for a moment while the component switches content
+            // The useEffect will eventually flip loading to false based on the new profile
         }
     };
 
     const handleStepAdvance = async () => {
         if (!isMounted.current) return;
-        // The individual page has already updated the DB step. 
-        // Signal the app to reload and the useEffect above will pivot the UI.
         if (onStepChange) await onStepChange();
     };
 
@@ -126,46 +146,54 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
         try {
             const { error } = await supabase.rpc('complete_branch_step');
             if (error) throw error;
-            if (onComplete) await onComplete();
+            if (isMounted.current) await onComplete();
         } catch (error: any) {
-            alert("Error finalizing setup: " + (error.message || String(error)));
+            alert("Error finalizing institutional setup: " + formatError(error));
         } finally {
             if (isMounted.current) setLoading(false);
         }
     };
     
     const handleBack = async () => {
-        if (!isMounted.current || profile.profile_completed || isTransitioning) return;
-        setIsTransitioning(true);
-        setLoading(true);
+        if (!isMounted.current || profile.profile_completed) return;
 
-        try {
-            if (selectedRole === BuiltInRoles.SCHOOL_ADMINISTRATION) {
-                let prevStep = 'role';
-                if (step === 'branches') prevStep = 'pricing';
-                else if (step === 'pricing') prevStep = 'profile';
-
-                if (prevStep === 'role') {
-                    await supabase.from('profiles').update({ role: null, profile_completed: false }).eq('id', profile.id);
-                } else {
-                    await supabase.from('school_admin_profiles').update({ onboarding_step: prevStep }).eq('user_id', profile.id);
+        if (selectedRole === BuiltInRoles.SCHOOL_ADMINISTRATION) {
+            setLoading(true);
+            try {
+                if (step === 'branches') {
+                     await supabase.from('school_admin_profiles').update({ onboarding_step: 'pricing' }).eq('user_id', profile.id);
+                     setStep('pricing');
+                } else if (step === 'pricing') {
+                     await supabase.from('school_admin_profiles').update({ onboarding_step: 'profile' }).eq('user_id', profile.id);
+                     setStep('profile');
+                } else if (step === 'profile') {
+                     await supabase.from('profiles').update({ role: null, profile_completed: false }).eq('id', profile.id);
+                     setSelectedRole(null);
+                     setStep('role');
                 }
-            } else {
-                await supabase.from('profiles').update({ role: null, profile_completed: false }).eq('id', profile.id);
+                if (onStepChange) await onStepChange();
+            } catch (err) {
+                 console.error("Back navigation sync error:", err);
+            } finally {
+                 if (isMounted.current) setLoading(false);
             }
-            
-            if (onStepChange) await onStepChange();
-        } catch (err) {
-            console.error("Back navigation error:", err);
-        } finally {
-            if (isMounted.current) {
-                setIsTransitioning(false);
-                setLoading(false);
+            return;
+        }
+
+        if (step === 'profile') {
+            setLoading(true);
+            try {
+                await supabase.from('profiles').update({ role: null, profile_completed: false }).eq('id', profile.id);
+                setSelectedRole(null);
+                setStep('role');
+                if (onStepChange) await onStepChange();
+            } finally {
+                if (isMounted.current) setLoading(false);
             }
         }
     };
 
-    if (loading) {
+    if (loading && !isTransitioning) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-background">
                 <Spinner size="lg" />

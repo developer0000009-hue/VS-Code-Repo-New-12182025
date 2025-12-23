@@ -261,7 +261,7 @@ export const ProfileCreationPage: React.FC<ProfileCreationPageProps> = ({ profil
             return;
         }
 
-        // --- Teacher Photo Upload ---
+        // --- Photo Upload for Teacher ---
         let finalPhotoUrl = (formData as TeacherProfileData).profile_picture_url || null;
         try {
             if (role === BuiltInRoles.TEACHER && profilePhotoFile) {
@@ -332,6 +332,7 @@ export const ProfileCreationPage: React.FC<ProfileCreationPageProps> = ({ profil
                     grade_range_end: formData.grade_range_end
                 };
                 
+                // ADVANCE ONBOARDING: When profile is saved during onboarding, move to pricing step
                 if (isInitialCreation) {
                     adminUpdates.onboarding_step = 'pricing';
                 }

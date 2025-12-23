@@ -1,17 +1,14 @@
-
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { UserProfile, Role, BuiltInRoles } from '../../types';
 import { LogoutIcon } from '../icons/LogoutIcon';
 import { SettingsIcon } from '../icons/SettingsIcon';
 import { useRoles } from '../../contexts/RoleContext';
-// FIX: Add missing import for ROLE_ORDER, which is used for sorting roles in the dropdown.
 import { ROLE_ICONS, ROLE_ORDER } from '../../constants';
 import { PlusIcon } from '../icons/PlusIcon';
 import { supabase } from '../../services/supabase';
 import Spinner from './Spinner';
 import { ChevronDownIcon } from '../icons/ChevronDownIcon';
 import { CheckCircleIcon } from '../icons/CheckCircleIcon';
-// FIX: Add missing import for UserIcon, used as a fallback icon for roles.
 import { UserIcon } from '../icons/UserIcon';
 
 interface ProfileDropdownProps {
@@ -24,6 +21,7 @@ interface ProfileDropdownProps {
 
 const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ profile, onSignOut, onSelectRole, onProfileClick }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [processingRole, setProcessingRole] = useState<string | null>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const { roles } = useRoles();
     
@@ -40,25 +38,26 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ profile, onSignOut, o
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const checkRoles = useCallback(async () => {
+    const discoverIdentities = useCallback(async () => {
         if (!profile) return;
         setCheckingRoles(true);
         
         try {
+            // Find all tables where this user has an entry
             const { data, error } = await supabase.rpc('get_user_completed_roles');
             
             if (!error && data) {
                 const found = new Set<string>(data);
+                // Always include current role just in case
                 if (profile.role) found.add(profile.role);
                 setExistingRoles(found);
             } else {
                  const found = new Set<string>();
                  if (profile.role) found.add(profile.role);
                  setExistingRoles(found);
-                 console.warn("Error fetching roles via RPC:", error);
             }
         } catch (e) {
-            console.error("Exception fetching roles:", e);
+            console.error("Identity discovery failed:", e);
         } finally {
             setCheckingRoles(false);
         }
@@ -66,13 +65,19 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ profile, onSignOut, o
 
     useEffect(() => {
         if (isOpen) {
-            checkRoles();
+            discoverIdentities();
         }
-    }, [isOpen, checkRoles]);
+    }, [isOpen, discoverIdentities]);
 
-    const handleAction = (action?: () => void) => {
-        if (action) action();
-        setIsOpen(false);
+    const handleAction = async (actionRole: Role, isExisting: boolean) => {
+        if (!onSelectRole) return;
+        setProcessingRole(actionRole);
+        try {
+            await onSelectRole(actionRole, isExisting);
+            setIsOpen(false);
+        } finally {
+            setProcessingRole(null);
+        }
     };
     
     const handleSignOutClick = (e: React.MouseEvent) => {
@@ -89,19 +94,18 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ profile, onSignOut, o
         BuiltInRoles.BRANCH_ADMIN
     ];
     
-    const availableProfiles = useMemo(() => roles
+    const switchableIdentities = useMemo(() => roles
         .filter(r => existingRoles.has(r))
         .sort((a, b) => {
             if (a === profile.role) return -1;
             if (b === profile.role) return 1;
-            // Use ROLE_ORDER for consistent sorting
             const indexA = ROLE_ORDER.indexOf(a);
             const indexB = ROLE_ORDER.indexOf(b);
             if (indexA > -1 && indexB > -1) return indexA - indexB;
             return a.localeCompare(b);
         }), [roles, existingRoles, profile.role]);
     
-    const createNewProfiles = useMemo(() => roles
+    const creatableIdentities = useMemo(() => roles
         .filter(r => !existingRoles.has(r) && !internalRoles.includes(r)), 
     [roles, existingRoles, internalRoles]);
 
@@ -109,7 +113,7 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ profile, onSignOut, o
         <div className="relative z-50" ref={dropdownRef}>
             <button 
                 onClick={() => setIsOpen(!isOpen)} 
-                className={`flex items-center gap-3 pl-1 pr-3 py-1 rounded-full transition-all duration-300 group ${isOpen ? 'bg-muted shadow-inner' : 'hover:bg-muted/50'}`}
+                className={`flex items-center gap-3 pl-1 pr-3 py-1 rounded-full transition-all duration-300 group ${isOpen ? 'bg-muted shadow-inner border-border' : 'hover:bg-muted/50'}`}
             >
                 <div className="relative">
                     <img 
@@ -117,68 +121,89 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ profile, onSignOut, o
                         src={`https://api.dicebear.com/8.x/initials/svg?seed=${profile.display_name}&backgroundColor=b6e3f4,c0aede,d1d4f9`} 
                         alt="Avatar" 
                     />
-                    <div className="absolute bottom-0 right-0 h-3 w-3 bg-emerald-500 border-2 border-background rounded-full z-10"></div>
+                    <div className="absolute bottom-0 right-0 h-3 w-3 bg-emerald-500 border-2 border-background rounded-full z-10 shadow-sm"></div>
                 </div>
                 
                 <div className="hidden md:flex flex-col items-start text-left mr-1">
                     <span className="text-xs font-bold text-foreground leading-tight max-w-[100px] truncate">{profile.display_name}</span>
-                    <span className="text-[10px] font-medium text-muted-foreground max-w-[100px] truncate">{profile.role || 'Guest'}</span>
+                    <span className="text-[10px] font-medium text-muted-foreground max-w-[100px] truncate uppercase tracking-wider">{profile.role || 'Portal Access'}</span>
                 </div>
                 
                 <ChevronDownIcon className={`h-4 w-4 text-muted-foreground transition-transform duration-300 ${isOpen ? 'rotate-180 text-primary' : 'group-hover:text-foreground'}`} />
             </button>
 
             {isOpen && (
-                <div className="absolute right-0 mt-2 w-80 bg-card/80 backdrop-blur-2xl rounded-2xl shadow-2xl border border-border origin-top-right ring-1 ring-black/5 focus:outline-none overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                <div className="absolute right-0 mt-3 w-80 bg-card rounded-2xl shadow-2xl border border-border origin-top-right ring-1 ring-black/10 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                     <div className="flex flex-col">
-                        <div className="p-4 flex items-center gap-4 border-b border-border/60">
-                             <img className="h-12 w-12 rounded-full object-cover" src={`https://api.dicebear.com/8.x/initials/svg?seed=${profile.display_name}&backgroundColor=b6e3f4,c0aede,d1d4f9`} alt="Avatar" />
+                        {/* Current User Header */}
+                        <div className="p-5 flex items-center gap-4 bg-muted/20 border-b border-border">
+                             <img className="h-12 w-12 rounded-full object-cover shadow-md border-2 border-background" src={`https://api.dicebear.com/8.x/initials/svg?seed=${profile.display_name}&backgroundColor=b6e3f4,c0aede,d1d4f9`} alt="Avatar" />
                              <div className="min-w-0">
-                                 <p className="font-bold text-foreground truncate">{profile.display_name}</p>
-                                 <p className="text-xs text-muted-foreground truncate">{profile.email}</p>
-                                 {profile.role && <div className="mt-1"><span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider">{profile.role}</span></div>}
+                                 <p className="font-bold text-foreground truncate leading-tight">{profile.display_name}</p>
+                                 <p className="text-xs text-muted-foreground truncate mt-0.5">{profile.email}</p>
+                                 <div className="mt-2"><span className="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest">{profile.role}</span></div>
                              </div>
                         </div>
                         
-                        <div className="p-2">
-                             <button onClick={() => handleAction(onProfileClick)} className="w-full flex items-center gap-3 p-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors">
-                                 <SettingsIcon className="w-4 h-4 text-muted-foreground" /> Manage Account
+                        <div className="p-2 border-b border-border">
+                             <button onClick={() => { onProfileClick?.(); setIsOpen(false); }} className="w-full flex items-center gap-3 p-2.5 rounded-xl text-sm font-semibold text-foreground hover:bg-muted transition-all">
+                                 <SettingsIcon className="w-4 h-4 text-muted-foreground" /> Manage My Credentials
                              </button>
                         </div>
 
-                        <div className="flex-grow max-h-[calc(100vh-350px)] overflow-y-auto custom-scrollbar">
-                            {checkingRoles ? <div className="py-8 flex justify-center"><Spinner /></div> : (
+                        <div className="flex-grow max-h-[400px] overflow-y-auto custom-scrollbar">
+                            {checkingRoles ? <div className="py-12 flex flex-col items-center justify-center gap-3"><Spinner /><p className="text-[10px] font-black uppercase text-muted-foreground animate-pulse">Mapping Identities...</p></div> : (
                                 <>
-                                    {availableProfiles.length > 1 && onSelectRole && (
+                                    {/* Profiles established in the system */}
+                                    {switchableIdentities.length > 0 && onSelectRole && (
                                         <div className="p-2">
-                                            <p className="px-3 py-1 text-[10px] font-extrabold text-muted-foreground/60 uppercase tracking-widest">Switch Profile</p>
-                                            {availableProfiles.map(role => {
+                                            <p className="px-3 py-2 text-[10px] font-black text-muted-foreground/60 uppercase tracking-[0.2em]">Switch Active Identity</p>
+                                            {switchableIdentities.map(role => {
                                                 const Icon = ROLE_ICONS[role] || UserIcon;
                                                 const isCurrent = role === profile.role;
+                                                const isProcessing = processingRole === role;
+                                                
                                                 return (
-                                                    <button key={role} onClick={() => !isCurrent && handleAction(() => onSelectRole(role, true))} disabled={isCurrent} className={`w-full flex items-center p-3 rounded-lg text-sm transition-colors ${isCurrent ? 'bg-primary/10 cursor-default' : 'hover:bg-muted'}`}>
-                                                        <Icon className={`w-5 h-5 mr-3 ${isCurrent ? 'text-primary' : 'text-muted-foreground'}`}/>
-                                                        <div className="flex-grow text-left">
-                                                            <span className={isCurrent ? 'font-bold text-primary' : 'font-medium text-foreground'}>{role}</span>
-                                                            {isCurrent && <span className="block text-xs text-muted-foreground">Currently Active</span>}
+                                                    <button 
+                                                        key={role} 
+                                                        onClick={() => !isCurrent && !processingRole && handleAction(role, true)} 
+                                                        disabled={isCurrent || !!processingRole} 
+                                                        className={`w-full flex items-center p-3 rounded-xl text-sm transition-all group/item ${isCurrent ? 'bg-primary/5 cursor-default' : 'hover:bg-muted'} ${processingRole && !isProcessing ? 'opacity-30' : ''}`}
+                                                    >
+                                                        <div className={`p-2 rounded-lg transition-all mr-3 ${isCurrent ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-muted text-muted-foreground group-hover/item:bg-background group-hover/item:text-primary shadow-inner'}`}>
+                                                             <Icon className="w-5 h-5"/>
                                                         </div>
-                                                        {isCurrent && <CheckCircleIcon className="w-5 h-5 text-primary" />}
+                                                        <div className="flex-grow text-left">
+                                                            <span className={`block transition-colors ${isCurrent ? 'font-black text-primary' : 'font-bold text-foreground group-hover/item:text-primary'}`}>{role}</span>
+                                                            {isCurrent && <span className="block text-[10px] text-emerald-500 font-bold uppercase tracking-wider">Active</span>}
+                                                        </div>
+                                                        {isProcessing ? <Spinner size="sm" className="text-primary" /> : isCurrent && <CheckCircleIcon className="w-5 h-5 text-primary" />}
                                                     </button>
                                                 )
                                             })}
                                         </div>
                                     )}
 
-                                    {createNewProfiles.length > 0 && onSelectRole && (
-                                        <div className="p-2">
-                                             <p className="px-3 py-1 text-[10px] font-extrabold text-muted-foreground/60 uppercase tracking-widest">Add New Profile</p>
-                                             {createNewProfiles.map(role => {
+                                    {/* Roles available for initialization */}
+                                    {creatableIdentities.length > 0 && onSelectRole && (
+                                        <div className="p-2 mt-2 pt-4 border-t border-border/60">
+                                             <p className="px-3 py-2 text-[10px] font-black text-muted-foreground/60 uppercase tracking-[0.2em]">Initialize New Profile</p>
+                                             {creatableIdentities.map(role => {
                                                  const Icon = ROLE_ICONS[role] || UserIcon;
+                                                 const isProcessing = processingRole === role;
+                                                 
                                                  return (
-                                                     <button key={role} onClick={() => handleAction(() => onSelectRole(role, false))} className="w-full flex items-center p-3 rounded-lg text-sm hover:bg-muted transition-colors">
-                                                         <Icon className="w-5 h-5 mr-3 text-muted-foreground" />
-                                                         <span className="font-medium text-foreground">{`Create ${role} Profile`}</span>
-                                                         <PlusIcon className="w-4 h-4 ml-auto text-muted-foreground" />
+                                                     <button 
+                                                        key={role} 
+                                                        onClick={() => !processingRole && handleAction(role, false)} 
+                                                        disabled={!!processingRole}
+                                                        className={`w-full flex items-center p-3 rounded-xl text-sm hover:bg-muted transition-all group/item ${processingRole && !isProcessing ? 'opacity-30' : ''}`}
+                                                     >
+                                                         <div className="p-2 rounded-lg bg-muted text-muted-foreground transition-all mr-3 group-hover/item:bg-indigo-500/10 group-hover/item:text-indigo-500 shadow-inner">
+                                                             <Icon className="w-5 h-5" />
+                                                         </div>
+                                                         <span className="font-bold text-foreground group-hover/item:text-indigo-500">{`Create ${role} Profile`}</span>
+                                                         {isProcessing ? <Spinner size="sm" className="ml-auto text-indigo-500" /> : <PlusIcon className="w-4 h-4 ml-auto text-muted-foreground opacity-0 group-hover/item:opacity-100 transition-opacity" />}
                                                      </button>
                                                  )
                                              })}
@@ -188,9 +213,9 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ profile, onSignOut, o
                             )}
                         </div>
 
-                        <div className="p-2 border-t border-border/60">
-                             <button onClick={handleSignOutClick} className="w-full flex items-center gap-3 p-2 rounded-lg text-sm text-red-500 hover:bg-red-500/10 transition-colors">
-                                 <LogoutIcon className="w-4 h-4"/> Sign Out
+                        <div className="p-3 bg-muted/10 border-t border-border">
+                             <button onClick={handleSignOutClick} className="w-full flex items-center gap-3 p-3 rounded-xl text-sm font-black text-red-500 hover:bg-red-500/10 transition-all uppercase tracking-widest">
+                                 <LogoutIcon className="w-5 h-5"/> Terminate Session
                              </button>
                         </div>
                     </div>

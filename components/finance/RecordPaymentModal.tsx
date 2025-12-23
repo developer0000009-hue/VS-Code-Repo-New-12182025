@@ -1,25 +1,9 @@
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabase';
 import Spinner from '../common/Spinner';
 import { XIcon } from '../icons/XIcon';
 import { DollarSignIcon } from '../icons/DollarSignIcon';
 import { CheckCircleIcon } from '../icons/CheckCircleIcon';
-
-// Robust error formatter helper
-const formatError = (err: any): string => {
-    if (!err) return "An unknown error occurred.";
-    if (typeof err === 'string') return err;
-    const message = err.message || err.error_description || err.details || err.hint;
-    if (message && typeof message === 'string' && !message.includes("[object Object]")) return message;
-    return "An unexpected error occurred while processing the payment.";
-};
-
-interface PayableInvoice {
-    id: number;
-    description: string;
-    amount_due: number;
-}
 
 interface RecordPaymentModalProps {
     studentId: string;
@@ -29,166 +13,125 @@ interface RecordPaymentModalProps {
 }
 
 const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({ studentId, studentName, onClose, onSuccess }) => {
-    const [step, setStep] = useState<'form' | 'processing' | 'success'>('form');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState(false);
 
-    const [invoices, setInvoices] = useState<PayableInvoice[]>([]);
+    const [invoices, setInvoices] = useState<any[]>([]);
     const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>('');
     const [amount, setAmount] = useState<string>('');
-    const [paymentMethod, setPaymentMethod] = useState('Cash');
-    const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+    const [method, setMethod] = useState('Digital');
     const [reference, setReference] = useState('');
-    const [notes, setNotes] = useState('');
 
     useEffect(() => {
-        const fetchPayableInvoices = async () => {
-            const { data, error } = await supabase.rpc('get_payable_invoices_for_student', { p_student_id: studentId });
+        const fetchInvoices = async () => {
+            const { data } = await supabase.rpc('get_payable_invoices_for_student', { p_student_id: studentId });
             if (data) {
                 setInvoices(data);
                 if (data.length > 0) {
-                    setSelectedInvoiceId(String(data[0].id));
-                    setAmount(String(data[0].amount_due));
+                    setSelectedInvoiceId(data[0].id.toString());
+                    setAmount(data[0].amount_due.toString());
                 }
             }
         };
-        fetchPayableInvoices();
+        fetchInvoices();
     }, [studentId]);
-
-    useEffect(() => {
-        const selected = invoices.find(inv => inv.id === Number(selectedInvoiceId));
-        if (selected) {
-            setAmount(String(selected.amount_due));
-        }
-    }, [selectedInvoiceId, invoices]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError(null);
-        setStep('processing');
+        const payAmount = parseFloat(amount);
+        
+        if (isNaN(payAmount) || payAmount <= 0) {
+            setError("Invalid payment amount.");
+            return;
+        }
+
         setLoading(true);
+        setError(null);
         
         try {
             const { error: rpcError } = await supabase.rpc('record_fee_payment', {
-                p_invoice_id: Number(selectedInvoiceId),
-                p_amount: parseFloat(amount),
-                p_method: paymentMethod,
-                p_reference: `${reference} ${notes ? `| Notes: ${notes}`: ''}`.trim()
+                p_invoice_id: parseInt(selectedInvoiceId),
+                p_amount: payAmount,
+                p_method: method,
+                p_reference: reference
             });
-
             if (rpcError) throw rpcError;
             
-            setStep('success');
+            setSuccess(true);
             setTimeout(() => {
                 onSuccess();
-            }, 1500); 
+            }, 1500);
         } catch (err: any) {
-            setError(formatError(err));
-            setStep('form');
+            setError(err.message || "Financial transaction rejected by institutional gateway.");
         } finally {
             setLoading(false);
         }
     };
 
-    const renderContent = () => {
-        if (step === 'processing' || loading) {
-            return (
-                <div className="p-12 flex flex-col items-center justify-center gap-4 text-center">
-                    <Spinner size="lg" />
-                    <h3 className="font-bold text-foreground">Recording Payment...</h3>
-                    <p className="text-sm text-muted-foreground">Updating student ledger and invoice status.</p>
-                </div>
-            );
-        }
-
-        if (step === 'success') {
-            return (
-                <div className="p-12 flex flex-col items-center justify-center gap-2 text-center animate-in zoom-in-95">
-                    <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-4">
-                        <CheckCircleIcon className="w-8 h-8"/>
+    return (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[200] flex items-center justify-center p-4 animate-in fade-in" onClick={onClose}>
+            <div className="bg-card w-full max-w-lg rounded-[2.5rem] shadow-2xl border border-white/10 overflow-hidden ring-1 ring-black/5" onClick={e => e.stopPropagation()}>
+                {success ? (
+                    <div className="p-12 text-center space-y-6 animate-in zoom-in-95">
+                        <div className="w-20 h-20 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/20 animate-bounce">
+                            <CheckCircleIcon className="w-10 h-10"/>
+                        </div>
+                        <h3 className="text-2xl font-black tracking-tight">Reconciliation Secured</h3>
+                        <p className="text-muted-foreground text-sm leading-relaxed">The payment has been successfully allocated to the student's ledger and the invoice has been adjusted.</p>
                     </div>
-                    <h3 className="font-bold text-xl text-foreground">Payment Recorded!</h3>
-                    <p className="text-sm text-muted-foreground">The student's financial records have been updated.</p>
-                </div>
-            );
-        }
+                ) : (
+                    <form onSubmit={handleSubmit} className="flex flex-col">
+                        <div className="p-8 border-b border-border bg-muted/20 flex justify-between items-center">
+                            <div>
+                                <h3 className="text-xl font-bold">Process Transaction</h3>
+                                <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mt-1">Student: {studentName}</p>
+                            </div>
+                            <button type="button" onClick={onClose} className="p-2 rounded-full hover:bg-muted text-muted-foreground transition-all"><XIcon className="w-5 h-5"/></button>
+                        </div>
 
-        return (
-            <form onSubmit={handleSubmit} className="flex flex-col h-full">
-                <div className="p-6 overflow-y-auto space-y-5">
-                    {error && <div className="bg-destructive/10 text-destructive p-3 rounded-lg text-sm border border-destructive/20 font-medium">{error}</div>}
+                        <div className="p-8 space-y-6">
+                            {error && <div className="p-4 bg-red-500/10 text-red-500 rounded-2xl text-xs font-bold border border-red-500/20 animate-in shake">{error}</div>}
 
-                    <div>
-                        <label className="input-label">Invoice to Pay</label>
-                        <select value={selectedInvoiceId} onChange={e => setSelectedInvoiceId(e.target.value)} className="input-base w-full">
-                            {invoices.length === 0 && <option>No payable invoices found</option>}
-                            {invoices.map(inv => (
-                                <option key={inv.id} value={inv.id}>{inv.description} - Due: ${inv.amount_due.toFixed(2)}</option>
-                            ))}
-                        </select>
-                    </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Allocate to Specific Invoice</label>
+                                <select value={selectedInvoiceId} onChange={e => setSelectedInvoiceId(e.target.value)} className="w-full p-4 rounded-2xl bg-muted/40 border border-border font-bold text-sm outline-none focus:ring-4 focus:ring-primary/10 transition-all cursor-pointer">
+                                    {invoices.map(inv => <option key={inv.id} value={inv.id}>{inv.description} (Due: ${inv.amount_due})</option>)}
+                                    {invoices.length === 0 && <option disabled>No actionable invoices found</option>}
+                                </select>
+                            </div>
 
-                    <div className="grid grid-cols-2 gap-5">
-                        <div>
-                            <label className="input-label">Amount</label>
-                            <div className="relative">
-                                <DollarSignIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"/>
-                                <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} required className="input-base w-full pl-8" />
+                            <div className="grid grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Payment Amount</label>
+                                    <div className="relative">
+                                        <DollarSignIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-primary"/>
+                                        <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} required className="w-full p-4 pl-11 rounded-2xl bg-muted/40 border border-border font-mono font-bold text-sm outline-none focus:ring-4 focus:ring-primary/10 transition-all" />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Execution Method</label>
+                                    <select value={method} onChange={e => setMethod(e.target.value)} className="w-full p-4 rounded-2xl bg-muted/40 border border-border font-bold text-sm outline-none focus:ring-4 focus:ring-primary/10 transition-all cursor-pointer">
+                                        <option>Digital Gateway</option><option>Cash Receipt</option><option>Bank Draft / Cheque</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">System Reference ID</label>
+                                <input value={reference} onChange={e => setReference(e.target.value)} placeholder="Enter banking or internal reference..." className="w-full p-4 rounded-2xl bg-muted/40 border border-border font-bold text-sm outline-none focus:ring-4 focus:ring-primary/10 transition-all shadow-inner" />
                             </div>
                         </div>
-                        <div>
-                            <label className="input-label">Payment Method</label>
-                            <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className="input-base w-full">
-                                <option>Cash</option><option>Cheque</option><option>Bank Transfer</option><option>Other</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-5">
-                        <div>
-                            <label className="input-label">Payment Date</label>
-                            <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} required className="input-base w-full" />
-                        </div>
-                        <div>
-                            <label className="input-label">Reference # (Optional)</label>
-                            <input type="text" value={reference} onChange={e => setReference(e.target.value)} placeholder="Cheque No, Txn ID..." className="input-base w-full" />
-                        </div>
-                    </div>
-                    <div>
-                        <label className="input-label">Notes (Optional)</label>
-                        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="input-base w-full" />
-                    </div>
-                </div>
 
-                <footer className="p-6 border-t border-border flex justify-end gap-3 bg-muted/20 mt-auto">
-                    <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
-                    <button type="submit" disabled={!selectedInvoiceId} className="btn-primary min-w-[150px]">
-                        Record Payment
-                    </button>
-                </footer>
-            </form>
-        );
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-card w-full max-w-lg rounded-2xl shadow-xl border border-border flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
-                <header className="p-6 border-b border-border bg-muted/20 flex justify-between items-center bg-muted/20">
-                    <div>
-                        <h3 className="text-lg font-bold text-foreground">Record Payment</h3>
-                        <p className="text-xs text-muted-foreground">For: {studentName}</p>
-                    </div>
-                    <button type="button" onClick={onClose} className="p-1 rounded-full hover:bg-muted"><XIcon className="w-5 h-5"/></button>
-                </header>
-                {renderContent()}
+                        <div className="p-8 bg-muted/20 border-t border-border flex justify-end gap-4">
+                            <button type="button" onClick={onClose} className="px-6 py-3 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+                            <button type="submit" disabled={loading || !selectedInvoiceId} className="px-10 py-3.5 bg-primary text-white font-black text-xs rounded-2xl shadow-xl shadow-primary/20 hover:bg-primary/90 transition-all flex items-center gap-2 transform active:scale-95 disabled:opacity-50 uppercase tracking-[0.2em]">
+                                {loading ? <Spinner size="sm" className="text-white" /> : 'Confirm Payment'}
+                            </button>
+                        </div>
+                    </form>
+                )}
             </div>
-            <style>{`
-                .input-base { width: 100%; background-color: hsl(var(--background)); border: 1px solid hsl(var(--input)); border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; outline: none; transition: all 0.2s; }
-                .input-base:focus { border-color: hsl(var(--primary)); box-shadow: 0 0 0 2px hsl(var(--primary) / 0.1); }
-                .input-label { font-size: 0.875rem; font-weight: 500; color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem; display: block; }
-                .btn-primary { padding: 0.75rem 1.5rem; background-color: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border-radius: 0.5rem; font-weight: 700; font-size: 0.9rem; display: inline-flex; align-items: center; justify-content: center; } .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
-                .btn-secondary { padding: 0.75rem 1.5rem; background-color: hsl(var(--muted)); color: hsl(var(--foreground)); border-radius: 0.5rem; font-weight: 600; }
-            `}</style>
         </div>
     );
 };
