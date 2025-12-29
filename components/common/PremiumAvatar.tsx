@@ -6,7 +6,7 @@ import { BUCKETS } from '../../services/storage';
 interface PremiumAvatarProps {
     src?: string | null; 
     name: string;
-    size?: 'sm' | 'md' | 'lg' | 'xl';
+    size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
     statusColor?: string;
     className?: string;
 }
@@ -21,27 +21,26 @@ const PremiumAvatar: React.FC<PremiumAvatarProps> = ({ src, name, size = 'md', s
             return;
         }
 
-        // 1. If it's already a full URL, use it directly
         if (src.startsWith('http')) {
             setResolvedUrl(src);
+            setImgStatus('loading');
             return;
         }
 
-        // 2. Resolve storage path
         const { data } = supabase.storage
             .from(BUCKETS.PROFILES)
             .getPublicUrl(src);
         
-        // Append cache buster for fresh uploads
         setResolvedUrl(`${data.publicUrl}?t=${Date.now()}`);
         setImgStatus('loading');
     }, [src]);
 
     const sizeMap = {
-        sm: 'w-10 h-10 text-[10px]',
-        md: 'w-20 h-20 text-xl',
-        lg: 'w-32 h-32 md:w-40 md:h-40 text-2xl',
-        xl: 'w-48 h-48 text-4xl'
+        xs: 'w-10 h-10 text-[10px]',
+        sm: 'w-14 h-14 text-xs',
+        md: 'w-24 h-24 text-2xl',
+        lg: 'w-32 h-32 md:w-40 md:h-40 text-3xl',
+        xl: 'w-48 h-48 text-5xl'
     };
 
     const getInitials = (n: string) => {
@@ -66,11 +65,10 @@ const PremiumAvatar: React.FC<PremiumAvatarProps> = ({ src, name, size = 'md', s
 
     return (
         <div className={`relative flex-shrink-0 ${sizeMap[size]} ${className} group/avatar`}>
-            {/* Ambient status glow */}
-            <div className={`absolute -inset-2 rounded-[35%] blur-xl opacity-20 transition-all duration-700 ${statusColor || 'bg-primary'} group-hover/avatar:opacity-40`}></div>
+            <div className={`absolute -inset-2 rounded-[35%] blur-2xl opacity-20 transition-all duration-1000 ${statusColor || 'bg-primary'} group-hover/avatar:opacity-50`}></div>
             
-            <div className="relative w-full h-full rounded-[2.2rem] md:rounded-[2.8rem] overflow-hidden bg-[#13151b] border border-white/10 shadow-2xl ring-1 ring-white/5 flex items-center justify-center transition-all duration-700 group-hover/avatar:scale-[1.03]">
-                <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/[0.02] to-white/[0.05] pointer-events-none z-20"></div>
+            <div className="relative w-full h-full rounded-[2.2rem] md:rounded-[2.8rem] overflow-hidden bg-[#13151b] border border-white/10 shadow-3xl ring-1 ring-white/5 flex items-center justify-center transition-all duration-700 group-hover/avatar:scale-[1.05] group-hover/avatar:rotate-2">
+                <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/[0.01] to-white/[0.05] pointer-events-none z-20"></div>
 
                 {resolvedUrl && imgStatus !== 'error' && (
                     <img 
@@ -78,7 +76,7 @@ const PremiumAvatar: React.FC<PremiumAvatarProps> = ({ src, name, size = 'md', s
                         alt={name}
                         onLoad={() => setImgStatus('loaded')}
                         onError={() => setImgStatus('error')}
-                        className={`w-full h-full object-cover transition-all duration-1000 ease-out z-10 ${imgStatus === 'loaded' ? 'opacity-100 scale-100' : 'opacity-0 scale-110'}`}
+                        className={`w-full h-full object-cover transition-all duration-1000 ease-[cubic-bezier(0.23,1,0.32,1)] z-10 ${imgStatus === 'loaded' ? 'opacity-100 scale-100' : 'opacity-0 scale-110'}`}
                     />
                 )}
 

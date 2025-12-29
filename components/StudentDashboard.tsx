@@ -19,7 +19,6 @@ import DocumentsTab from './student_tabs/DocumentsTab';
 import SupportTab from './student_tabs/SupportTab';
 import { SchoolIcon } from './icons/SchoolIcon';
 
-
 interface StudentDashboardProps {
     profile: UserProfile;
     onSignOut: () => void;
@@ -34,7 +33,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ profile, onSignOut,
     // State for data and view type (student vs parent)
     const [isParentView, setIsParentView] = useState(false);
     const [currentStudentId, setCurrentStudentId] = useState<string | null>(null);
-    const [currentAdmissionId, setCurrentAdmissionId] = useState<number | null>(null);
+    const [currentAdmissionId, setCurrentAdmissionId] = useState<string | null>(null);
     const [allMyChildren, setAllMyChildren] = useState<AdmissionApplication[]>([]);
     const [dashboardData, setDashboardData] = useState<StudentDashboardData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -44,7 +43,11 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ profile, onSignOut,
     useEffect(() => {
         const initializeView = async () => {
             setLoading(true);
-            if (!profile.id) { setLoading(false); setError("User ID not available."); return; }
+            if (!profile.id) { 
+                setLoading(false); 
+                setError("User ID not available."); 
+                return; 
+            }
 
             // Check if current user is a parent in the Parent Profile registry
             const { count, error: parentProfileError } = await supabase
@@ -94,22 +97,27 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ profile, onSignOut,
 
         setLoading(true);
         setError(null);
-        const { data, error } = await supabase.rpc('get_student_dashboard_data', { p_student_id: currentStudentId });
-        
-        if (error) {
-            setError(`Failed to load dashboard data: ${error.message}`);
-            console.error(error);
-        } else {
-            setDashboardData(data);
+        try {
+            const { data, error } = await supabase.rpc('get_student_dashboard_data', { p_student_id: currentStudentId });
+            
+            if (error) {
+                setError(`Failed to load dashboard data: ${error.message}`);
+                console.error(error);
+            } else {
+                setDashboardData(data);
+            }
+        } catch (e: any) {
+            setError(e.message || "Failed to load dashboard.");
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     }, [currentStudentId]);
 
     useEffect(() => {
         fetchDashboardData();
     }, [fetchDashboardData]);
     
-    const handleSwitchStudent = async (newAdmissionId: number) => {
+    const handleSwitchStudent = async (newAdmissionId: string) => {
         if (newAdmissionId === currentAdmissionId) return; // No change
 
         setLoading(true);
@@ -121,7 +129,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ profile, onSignOut,
         }
         
         setCurrentAdmissionId(newAdmissionId);
-        setCurrentStudentId(newAdmissionId.toString());
+        setCurrentStudentId(newAdmissionId);
     };
     
     if (dashboardData?.needs_onboarding) {
@@ -142,7 +150,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ profile, onSignOut,
                     <h3 className="text-xl font-bold text-foreground">No Students Linked</h3>
                     <p className="text-muted-foreground mt-2 max-w-md">It seems you haven't enrolled any children yet, or their profiles haven't been approved by the admin.</p>
                 </div>
-             )
+             );
         }
 
         if (error) {

@@ -17,8 +17,10 @@ interface StudentHeaderProps {
     // Props for parent view
     isParentView: boolean;
     allMyChildren: AdmissionApplication[];
-    currentChildId: number | null;
-    onSwitchStudent: (admissionId: number) => void;
+    // Fix: Changed currentChildId from number to string to match UUID.
+    currentChildId: string | null;
+    // Fix: Changed admissionId from number to string.
+    onSwitchStudent: (admissionId: string) => void;
     currentStudentName?: string | null;
 }
 
@@ -40,6 +42,7 @@ const StudentSwitcher: React.FC<Omit<StudentHeaderProps, 'pageTitle' | 'onMenuCl
     // Even if 1 child, we might want to show context, but usually dropdown implies choice.
     // If only 1 child, we just show the name, no dropdown arrow.
     const hasMultiple = allMyChildren.length > 1;
+    // Fix: Type comparison now between string and string.
     const currentChild = allMyChildren.find(c => c.id === currentChildId);
 
     return (
@@ -80,23 +83,28 @@ const StudentSwitcher: React.FC<Omit<StudentHeaderProps, 'pageTitle' | 'onMenuCl
                         {allMyChildren.map(child => (
                             <button
                                 key={child.id}
+                                // Fix: child.id is already a string.
                                 onClick={() => { onSwitchStudent(child.id); setIsOpen(false); }}
                                 className={`w-full text-left flex items-center justify-between gap-3 p-2 rounded-lg transition-all group ${
+                                    // Fix: String comparison.
                                     child.id === currentChildId ? 'bg-primary/10' : 'hover:bg-muted'
                                 }`}
                             >
                                 <div className="flex items-center gap-3">
                                     <img 
-                                        className={`w-9 h-9 rounded-full border-2 ${child.id === currentChildId ? 'border-primary/20' : 'border-transparent'}`}
+                                        className={`w-9 h-9 rounded-full border-2 ${// Fix: String comparison.
+                                        child.id === currentChildId ? 'border-primary/20' : 'border-transparent'}`}
                                         src={child.profile_photo_url || `https://api.dicebear.com/8.x/initials/svg?seed=${child.applicant_name}`} 
                                         alt={child.applicant_name} 
                                     />
                                     <div>
-                                        <p className={`text-sm font-semibold ${child.id === currentChildId ? 'text-primary' : 'text-foreground'}`}>{child.applicant_name}</p>
+                                        <p className={`text-sm font-semibold ${// Fix: String comparison.
+                                        child.id === currentChildId ? 'text-primary' : 'text-foreground'}`}>{child.applicant_name}</p>
                                         <p className="text-xs text-muted-foreground">Grade {child.grade}</p>
                                     </div>
                                 </div>
-                                {child.id === currentChildId && <CheckCircleIcon className="h-5 w-5 text-primary" />}
+                                {// Fix: String comparison.
+                                child.id === currentChildId && <CheckCircleIcon className="h-5 w-5 text-primary" />}
                             </button>
                         ))}
                     </div>

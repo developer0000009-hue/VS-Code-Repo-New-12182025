@@ -1,11 +1,10 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import RoleSelectionPage from './components/RoleSelectionPage';
 import { BranchCreationPage } from './components/BranchCreationPage';
 import { ProfileCreationPage } from './components/ProfileCreationPage';
 import PricingSelectionPage from './components/PricingSelectionPage';
 import { Role, UserProfile, BuiltInRoles } from './types';
-import { supabase } from './services/supabase';
+import { supabase, formatError } from './services/supabase';
 import Spinner from './components/common/Spinner';
 import ThemeSwitcher from './components/common/ThemeSwitcher';
 import { SchoolIcon } from './components/icons/SchoolIcon';
@@ -94,8 +93,8 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
             }
 
         } catch (err: any) {
-            console.error('Identity Provisioning failure:', err);
-            alert(`Setup Failed: ${err.message || "Institutional context error"}`);
+            console.error('Identity Provisioning failure:', formatError(err));
+            alert(`Setup Failed: ${formatError(err)}`);
             if (isMounted.current) {
                 setStep('role');
                 setLoading(false);

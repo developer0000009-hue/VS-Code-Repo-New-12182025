@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../services/supabase';
+import { supabase, formatError } from '../services/supabase';
 import { VerifiedShareCodeData } from '../types';
 import Spinner from './common/Spinner';
 import { KeyIcon } from './icons/KeyIcon';
@@ -10,6 +11,7 @@ import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { LockIcon } from './icons/LockIcon';
 import { UsersIcon } from './icons/UsersIcon';
 import { XCircleIcon } from './icons/XCircleIcon';
+import { ChevronRightIcon } from './icons/ChevronRightIcon';
 
 interface InfoRowProps {
     label: string;
@@ -26,9 +28,10 @@ const InfoRow: React.FC<InfoRowProps> = ({ label, value, valueClassName = "text-
 
 interface CodeVerificationTabProps {
     branchId?: number | null;
+    onNavigate?: (component: string) => void;
 }
 
-const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId }) => {
+const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onNavigate }) => {
     const [code, setCode] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -52,27 +55,29 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId }) =
         setImportSuccessMessage(null);
 
         try {
-            // Institutional Handshake: Resolving Cryptographic Token
             const { data, error: rpcError } = await supabase.rpc('admin_verify_share_code', { 
                 p_code: cleanCode 
             });
 
             if (rpcError) throw rpcError;
             
-            // RPC Returns Table (Array of Rows)
             const result = Array.isArray(data) ? data[0] : data;
 
             if (!result || result.error || !result.found) {
-                setError(result?.error === 'CRYPTOGRAPHIC_TOKEN_NOT_FOUND' 
+                const rawError = result?.error;
+                setError(rawError === 'CRYPTOGRAPHIC_TOKEN_NOT_FOUND' 
                     ? "Cryptographic token not found or decommissioned." 
-                    : (result?.error || "Handshake sequence failed to resolve token."));
+                    : formatError(rawError || "Handshake sequence failed to resolve token."));
             } else {
-                setVerifiedData(result);
+                setVerifiedData({
+                    ...result,
+                    vault_access: result.code_type === 'Admission'
+                });
                 setError(null);
             }
         } catch (err: any) {
             console.error("RPC Protocol Error:", err);
-            setError(`Handshake Failed: ${err.message || "Institutional server timeout."}`);
+            setError(`Handshake Failed: ${formatError(err)}`);
         } finally {
             setLoading(false);
         }
@@ -97,23 +102,35 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId }) =
 
             if (rpcError) throw rpcError;
 
+            const targetModule = verifiedData.code_type === 'Admission' ? 'Admissions' : 'Enquiries';
+
             setImportSuccessMessage(
-                <div className="flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left bg-emerald-500/10 p-6 rounded-[2rem] border border-emerald-500/20 shadow-xl animate-in zoom-in-95">
+                <div className="flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left bg-emerald-500/10 p-6 rounded-[2.5rem] border border-emerald-500/20 shadow-xl animate-in zoom-in-95">
                     <div className="p-3 bg-emerald-500 rounded-2xl text-white shadow-lg shadow-emerald-500/30">
                         <CheckCircleIcon className="w-8 h-8" />
                     </div>
-                    <div>
-                        <p className="font-black text-emerald-600 uppercase tracking-widest text-xs">Identity Integrated</p>
-                        <p className="text-sm text-muted-foreground mt-1 font-medium leading-relaxed">
-                            Payload for <strong>{verifiedData.applicant_name}</strong> integrated into the system node.
-                        </p>
+                    <div className="flex flex-col gap-3">
+                        <div>
+                            <p className="font-black text-emerald-600 uppercase tracking-widest text-xs">Identity Integrated</p>
+                            <p className="text-sm text-muted-foreground mt-1 font-medium leading-relaxed">
+                                Payload for <strong>{verifiedData.applicant_name}</strong> integrated into the system node.
+                            </p>
+                        </div>
+                        {onNavigate && (
+                            <button 
+                                onClick={() => onNavigate(targetModule)}
+                                className="flex items-center gap-2 text-[10px] font-black text-emerald-500 hover:text-emerald-400 transition-colors uppercase tracking-widest bg-emerald-500/5 px-4 py-2 rounded-xl border border-emerald-500/10 w-fit"
+                            >
+                                Open {targetModule} {verifiedData.code_type === 'Admission' ? 'Vault' : 'Desk'} <ChevronRightIcon className="w-3 h-3"/>
+                            </button>
+                        )}
                     </div>
                 </div>
             );
             setVerifiedData(null); 
             setCode('');
         } catch (err: any) {
-            setError(`Import Protocol Failure: ${err.message}`);
+            setError(`Import Protocol Failure: ${formatError(err)}`);
         } finally {
             setLoading(false);
         }

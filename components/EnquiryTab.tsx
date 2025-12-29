@@ -11,6 +11,7 @@ import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { ClockIcon } from './icons/ClockIcon';
 import { FilterIcon } from './icons/FilterIcon';
 import { MegaphoneIcon } from './icons/MegaphoneIcon';
+import { RefreshIcon } from './icons/RefreshIcon';
 
 const statusColors: { [key in EnquiryStatus]: string } = {
   'New': 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800',
@@ -56,14 +57,15 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
         }
         setLoading(true);
         setError(null);
-        // Using branch-specific RPC
-        const { data, error } = await supabase.rpc('get_all_enquiries', { p_branch_id: branchId });
-        if (error) {
-            setError(`Failed to fetch enquiries: ${error.message}`);
-        } else {
+        try {
+            const { data, error } = await supabase.rpc('get_all_enquiries', { p_branch_id: branchId });
+            if (error) throw error;
             setEnquiries(data || []);
+        } catch (err: any) {
+            setError(`Failed to fetch enquiries: ${err.message}`);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     }, [branchId]);
 
     useEffect(() => {
@@ -154,15 +156,20 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                         To see student enquiries here, verify the <strong>Share Code</strong> provided by the parent in the Verification tab.
                     </p>
                     <div className="p-5 bg-muted/30 rounded-xl border border-border/50 max-w-sm w-full text-left">
-                        <p className="text-xs font-bold uppercase text-muted-foreground tracking-wider mb-3">Quick Import</p>
+                        <p className="text-xs font-bold uppercase text-muted-foreground tracking-wider mb-3">Quick Import Protocol</p>
                         <ol className="text-sm space-y-2 text-foreground/80 list-decimal list-inside">
-                            <li>Go to <strong>Verification Code</strong> tab.</li>
-                            <li>Enter parent's "Enquiry Code".</li>
-                            <li>Review and Import.</li>
+                            <li>Navigate to <strong>Quick Verification</strong>.</li>
+                            <li>Enter the "Enquiry Code" shared by parent.</li>
+                            <li>Review and click <strong>Integrate Identity</strong>.</li>
                         </ol>
-                        <button onClick={() => onNavigate && onNavigate('Code Verification')} className="w-full mt-4 py-2 bg-background border border-border rounded-lg text-xs font-bold hover:bg-muted transition-colors shadow-sm">
-                            Go to Verification
-                        </button>
+                        <div className="flex flex-col gap-2 mt-6">
+                            <button onClick={() => onNavigate && onNavigate('Code Verification')} className="w-full py-3 bg-primary text-white rounded-xl text-xs font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/20">
+                                Go to Verification
+                            </button>
+                            <button onClick={fetchEnquiries} className="w-full py-3 bg-card border border-border rounded-xl text-xs font-bold hover:bg-muted transition-all flex items-center justify-center gap-2">
+                                <RefreshIcon className="w-3.5 h-3.5" /> Re-sync Registry
+                            </button>
+                        </div>
                     </div>
                 </div>
             );
@@ -234,9 +241,14 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
             {/* Header & Stats */}
-            <div>
-                <h2 className="text-3xl font-serif font-bold text-foreground tracking-tight">Enquiries</h2>
-                <p className="text-muted-foreground mt-2 text-lg">Manage incoming student interest and initial communications.</p>
+            <div className="flex justify-between items-end">
+                <div>
+                    <h2 className="text-3xl font-serif font-bold text-foreground tracking-tight">Inquiry Desk</h2>
+                    <p className="text-muted-foreground mt-2 text-lg">Manage incoming student interest and initial communications.</p>
+                </div>
+                <button onClick={fetchEnquiries} className="p-3 rounded-xl bg-card border border-border hover:bg-muted text-muted-foreground transition-all shadow-sm group">
+                    <RefreshIcon className={`w-5 h-5 ${loading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform'}`}/>
+                </button>
             </div>
 
             {enquiries.length > 0 && (

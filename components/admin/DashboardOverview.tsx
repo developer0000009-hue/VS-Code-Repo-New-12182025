@@ -49,7 +49,6 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ schoolProfile, cu
 
     const isBranchAdmin = profile.role === BuiltInRoles.BRANCH_ADMIN;
     const branchStatus = currentBranch?.status || 'Active';
-    // Success criteria for full sync
     const isBranchLinked = branchStatus === 'Active' || branchStatus === 'Linked' || !!profile.branch_id;
 
     return (
@@ -82,10 +81,10 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ schoolProfile, cu
                         </div>
                         
                         <div>
-                            <h1 className="text-5xl md:text-7xl font-serif font-black text-white tracking-tight leading-none mb-2">
-                                Welcome, {(profile.display_name || 'Admin').split(' ')[0]}!
+                            <h1 className="text-5xl md:text-7xl font-serif font-black text-white tracking-tight leading-none mb-2 uppercase">
+                                Welcome, <br/><span className="text-white/30 italic">{(profile.display_name || 'Admin').split(' ')[0]}!</span>
                             </h1>
-                            <p className="text-white/40 text-lg md:text-xl font-medium tracking-tight">System Status: {currentBranch ? 'Operating under local node context.' : 'Standby mode. Node resolution required.'}</p>
+                            <p className="text-white/40 text-lg md:text-xl font-medium tracking-tight font-serif italic mt-6 border-l border-white/10 pl-8">System Status: {currentBranch ? 'Operating under local node context.' : 'Standby mode. Node resolution required.'}</p>
                         </div>
 
                         {currentBranch ? (

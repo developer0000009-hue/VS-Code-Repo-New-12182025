@@ -4,17 +4,8 @@ import { AdmissionApplication } from '../../types';
 import { DocumentTextIcon } from '../icons/DocumentTextIcon';
 import { GraduationCapIcon } from '../icons/GraduationCapIcon';
 import { EditIcon } from '../icons/EditIcon';
-import { ClockIcon } from '../icons/ClockIcon';
 import { ShieldCheckIcon } from '../icons/ShieldCheckIcon';
 import PremiumAvatar from '../common/PremiumAvatar';
-
-/**
- * Enterprise Card Tokens:
- * Radius: 18px
- * Padding: 18px
- * Integrity Bar: 4px
- * Transitions: 160ms cubic-bezier(0.4, 0, 0.2, 1)
- */
 
 interface ChildProfileCardProps {
     child: AdmissionApplication;
@@ -26,106 +17,94 @@ interface ChildProfileCardProps {
     index?: number;
 }
 
-const ChildProfileCard: React.FC<ChildProfileCardProps> = ({ child, onEdit, onManageDocuments, onNavigateDashboard, index }) => {
-    // Calculate sync progress based on status
+const ChildProfileCard: React.FC<ChildProfileCardProps> = ({ child, onEdit, onManageDocuments, onNavigateDashboard }) => {
     const getProgress = () => {
+        // Fix: Use correct Title Case string literals ('Approved', 'Verified') to match AdmissionStatus type definition.
         if (child.status === 'Approved' || child.status === 'Verified') return 100;
-        if (child.status === 'Documents Requested') return 65;
-        if (child.status === 'Pending Review') return 40;
-        return 20;
+        // Fix: Use correct Title Case string literal ('Pending Review') to match AdmissionStatus type definition.
+        if (child.status === 'Pending Review') return 45;
+        // Fix: Use correct Title Case string literal ('Registered') to match AdmissionStatus type definition.
+        if (child.status === 'Registered') return 20;
+        return 10;
     };
 
     const progress = getProgress();
     const isVerified = progress === 100;
-    const isPending = child.status === 'Pending Review' || child.status === 'Documents Requested';
 
     return (
-        <div className="group relative bg-gradient-to-b from-white/[0.04] to-white/[0.02] border border-white/[0.05] rounded-[18px] shadow-[0_14px_34px_rgba(0,0,0,0.45)] inset-shadow-sm transition-all duration-[160ms] ease-[cubic-bezier(0.4,0,0.2,1)] hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_18px_44px_rgba(0,0,0,0.55)] flex flex-col h-full overflow-hidden">
-            
-            {/* Inset Ring for Depth */}
-            <div className="absolute inset-0 rounded-[18px] border border-white/[0.04] pointer-events-none"></div>
+        <div className="group relative bg-[#0d0f14] border border-white/5 rounded-[2.5rem] shadow-[0_48px_128px_-24px_rgba(0,0,0,1)] transition-all duration-300 hover:border-primary/40 hover:-translate-y-1.5 flex flex-col h-full overflow-hidden ring-1 ring-black/50">
+            <div className="absolute inset-0 bg-gradient-to-tr from-primary/[0.02] to-transparent pointer-events-none"></div>
 
-            <div className="p-[18px] flex-grow space-y-6 relative z-10">
-                {/* --- Header: Exact Scale Identity --- */}
-                <div className="flex items-center gap-4">
-                    <div className="relative shrink-0">
+            <div className="p-8 flex-grow space-y-10 relative z-10">
+                <div className="flex items-center gap-6">
+                    <div className="relative shrink-0 group/avatar">
+                        <div className={`absolute -inset-1 rounded-full blur-md opacity-20 group-hover/avatar:opacity-40 transition-opacity ${isVerified ? 'bg-emerald-500' : 'bg-primary'}`}></div>
                         <PremiumAvatar 
                             src={child.profile_photo_url} 
                             name={child.applicant_name} 
                             size="sm" 
-                            statusColor={isVerified ? 'bg-emerald-500' : isPending ? 'bg-amber-500' : 'bg-primary'}
-                            className="shadow-xl border border-white/10 w-[52px] h-[52px]"
+                            className="shadow-2xl border border-white/10 w-[64px] h-[64px] relative z-10"
                         />
                     </div>
                     <div className="flex-grow min-w-0">
-                         <div className="flex items-center gap-2 mb-1">
-                             <span className="text-[11px] font-bold text-white/20 uppercase tracking-[0.15em] leading-none">Node</span>
-                             <span className="text-[11px] font-mono text-white/30 tracking-tighter">{index ? `#${index}` : (child.application_number || '---')}</span>
+                         <div className="flex items-center gap-3 mb-1.5">
+                             <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.3em]">Node Protocol</span>
+                             <span className="text-[9px] font-mono font-bold text-indigo-400/60 bg-indigo-500/5 px-2 py-0.5 rounded border border-indigo-500/10 uppercase tracking-widest">{child.application_number || 'ACTIVE'}</span>
                          </div>
-                        <h3 className="text-[16px] font-serif font-bold text-white tracking-tight leading-tight truncate">
+                        <h3 className="text-xl md:text-2xl font-serif font-black text-white tracking-tight leading-tight truncate">
                             {child.applicant_name}
                         </h3>
-                        <div className="flex items-center gap-2 mt-1.5">
-                            <span className="text-[12px] font-medium text-white/40 leading-none">
-                                Grade {child.grade} Block
-                            </span>
-                        </div>
+                        <p className="text-[11px] font-bold text-white/30 uppercase tracking-widest mt-2">Grade {child.grade} Block</p>
                     </div>
                 </div>
 
-                {/* --- Integrity Status: Subtle Thin Bar --- */}
-                <div className="bg-white/[0.02] p-4 rounded-[14px] border border-white/5">
-                    <div className="flex justify-between items-end mb-3">
-                        <div className="space-y-1">
-                            <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest leading-none">
-                                Integrity Index
-                            </p>
-                            <div className="flex items-center gap-1.5">
-                                <span className={`text-[12px] font-bold tracking-tight ${isVerified ? 'text-emerald-500' : 'text-primary/80'}`}>{child.status}</span>
-                                {isVerified && <ShieldCheckIcon className="w-3 h-3 text-emerald-500" />}
+                <div className="bg-black/40 p-6 rounded-3xl border border-white/5 shadow-inner">
+                    <div className="flex justify-between items-end mb-4">
+                        <div className="space-y-2">
+                            <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.4em] leading-none">Integrity Index</p>
+                            <div className="flex items-center gap-2">
+                                <span className={`text-xs font-black tracking-[0.1em] uppercase ${isVerified ? 'text-emerald-500' : 'text-primary'}`}>{child.status.replace(/_/g, ' ')}</span>
+                                {isVerified && <ShieldCheckIcon className="w-3.5 h-3.5 text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />}
                             </div>
                         </div>
                         <div className="text-right">
-                            <p className={`text-xl font-bold font-serif tracking-tighter leading-none ${isVerified ? 'text-emerald-500' : 'text-white/70'}`}>
-                                {progress}<span className="text-[10px] opacity-20 ml-0.5">%</span>
+                            <p className={`text-2xl font-serif font-black tracking-tighter leading-none ${isVerified ? 'text-emerald-500' : 'text-white'}`}>
+                                {progress}<span className="text-[10px] opacity-20 ml-1">%</span>
                             </p>
                         </div>
                     </div>
-                    <div className="h-[4px] w-full bg-white/[0.06] rounded-full overflow-hidden">
+                    <div className="h-[6px] w-full bg-white/[0.03] rounded-full overflow-hidden p-[1px] border border-white/5 shadow-inner">
                         <div 
-                            className={`h-full rounded-full transition-all duration-[1000ms] ease-[cubic-bezier(0.23,1,0.32,1)] ${isVerified ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]' : 'bg-[#8B5CF6] shadow-[0_0_8px_rgba(139,92,246,0.2)]'}`}
+                            className={`h-full rounded-full transition-all duration-[1500ms] ease-out shadow-lg ${isVerified ? 'bg-emerald-500' : 'bg-primary shadow-primary/20'}`}
                             style={{ width: `${progress}%` }}
                         ></div>
                     </div>
                 </div>
             </div>
 
-            {/* --- Footer Actions: Refined & Compact --- */}
-            <div className="px-[18px] pb-[18px] flex items-center justify-between gap-2.5 relative z-10">
+            <div className="px-8 pb-8 flex items-center justify-between gap-4 relative z-10">
                 <button 
                     onClick={onManageDocuments}
-                    className="flex-1 h-[34px] flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/5 transition-all group/btn active:scale-95"
-                    title="Verification Vault"
+                    className="flex-1 h-[54px] flex items-center justify-center gap-3 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 transition-all group/btn active:scale-95 shadow-sm"
                 >
-                    <DocumentTextIcon className="w-3.5 h-3.5 text-white/20 group-hover/btn:text-primary transition-colors" />
-                    <span className="text-[11px] font-bold text-white/30 group-hover/btn:text-white/60">Vault</span>
+                    <DocumentTextIcon className="w-4.5 h-4.5 text-white/20 group-hover:btn:text-primary transition-colors" />
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30 group-hover:btn:text-white/60">Vault</span>
                 </button>
 
                 <button 
                     onClick={onNavigateDashboard}
-                    className="flex-1 h-[34px] flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/5 transition-all group/btn active:scale-95"
-                    title="Academy Portal"
+                    className="flex-1 h-[54px] flex items-center justify-center gap-3 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 transition-all group/btn active:scale-95 shadow-sm"
                 >
-                    <GraduationCapIcon className="w-3.5 h-3.5 text-white/20 group-hover/btn:text-primary transition-colors" />
-                    <span className="text-[11px] font-bold text-white/30 group-hover/btn:text-white/60">Portal</span>
+                    <GraduationCapIcon className="w-4.5 h-4.5 text-white/20 group-hover:btn:text-primary transition-colors" />
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30 group-hover:btn:text-white/60">Portal</span>
                 </button>
 
                 <button 
                     onClick={onEdit}
-                    className="w-[34px] h-[34px] flex items-center justify-center rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/5 transition-all group/btn active:scale-95"
-                    title="Profile Settings"
+                    className="w-[54px] h-[54px] flex items-center justify-center rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 transition-all group/btn active:scale-95 shadow-sm"
+                    title="Edit Node"
                 >
-                    <EditIcon className="w-3.5 h-3.5 text-white/20 group-hover/btn:text-white/60 transition-colors" />
+                    <EditIcon className="w-4.5 h-4.5 text-white/20 group-hover:btn:text-white/60 transition-colors" />
                 </button>
             </div>
         </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../services/supabase';
+import { supabase, formatError } from '../services/supabase';
 import { Enquiry, TimelineItem, EnquiryStatus } from '../types';
 import Spinner from './common/Spinner';
 import { XIcon } from './icons/XIcon';
@@ -33,40 +33,6 @@ const STATUS_CONFIG: Record<EnquiryStatus, { icon: React.ReactNode, label: strin
 };
 
 const ORDERED_STATUSES: EnquiryStatus[] = ['New', 'Contacted', 'In Review', 'Completed'];
-
-/**
- * Robust error formatting utility to prevent [object Object].
- */
-const formatError = (err: any): string => {
-    if (!err) return "An unknown error occurred.";
-    if (typeof err === 'string') {
-        return (err === "[object Object]" || err === "{}") ? "Mapping protocol failed." : err;
-    }
-    
-    // Check common error fields
-    const candidates = [
-        err.message,
-        err.error_description,
-        err.details,
-        err.hint,
-        err.error?.message,
-        err.error
-    ];
-
-    for (const val of candidates) {
-        if (typeof val === 'string' && val !== "[object Object]" && val !== "{}") return val;
-        if (typeof val === 'object' && val?.message && typeof val.message === 'string') return val.message;
-    }
-
-    try {
-        const str = JSON.stringify(err);
-        if (str && str !== '{}' && str !== '[]' && !str.includes("[object Object]")) {
-            return str;
-        }
-    } catch { }
-
-    return "An unexpected system error occurred while processing the enquiry details.";
-};
 
 // --- Helper Components ---
 
@@ -254,7 +220,7 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
 
     const [guardianRelationship, setGuardianRelationship] = useState<string>('');
     const [newMessage, setNewMessage] = useState('');
-    const [currentAdmissionId, setCurrentAdmissionId] = useState<number | null>(enquiry.admission_id || null);
+    const [currentAdmissionId, setCurrentAdmissionId] = useState<string | null>(enquiry.admission_id || null);
     
     // UI/UX State
     const [loading, setLoading] = useState({ timeline: true, saving: false, sending: false });
@@ -311,7 +277,7 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
             const { data, error } = await supabase.rpc('get_enquiry_timeline', { p_enquiry_id: enquiry.id });
             if (!error) setTimeline(data || []);
         } catch (e) {
-            console.error("Timeline fetch error", e);
+            console.error("Timeline fetch error", formatError(e));
         } finally {
             setLoading(prev => ({ ...prev, timeline: false }));
         }
@@ -350,7 +316,7 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
             
             if (currentAdmissionId) {
                  const { error: admError } = await supabase.from('admissions').update({ applicant_name: formData.applicant_name, grade: formData.grade, parent_name: formData.parent_name, parent_email: formData.parent_email, parent_phone: formData.parent_phone }).eq('id', currentAdmissionId);
-                 if (admError) console.warn("Failed to sync admission record:", admError);
+                 if (admError) console.warn("Failed to sync admission record:", formatError(admError));
             }
 
             onUpdate();

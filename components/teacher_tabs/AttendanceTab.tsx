@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../../services/supabase';
 import { SchoolClass, StudentRosterItem, AttendanceRecord, AttendanceStatus, FunctionComponentWithIcon } from '../../types';
@@ -196,7 +195,7 @@ const AttendanceTab: FunctionComponentWithIcon<{}> = () => {
             <style>{`.input-base { appearance: none; display: block; width: 100%; padding: 0.5rem 0.75rem; border: 1px solid hsl(var(--input)); border-radius: 0.375rem; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05); background-color: hsl(var(--background)); color: hsl(var(--foreground)); } .input-base:focus { outline: none; box-shadow: 0 0 0 1px hsl(var(--ring)); border-color: hsl(var(--primary)); }`}</style>
         </div>
     );
-}
+};
 
 AttendanceTab.Icon = ChecklistIcon;
 export default AttendanceTab;

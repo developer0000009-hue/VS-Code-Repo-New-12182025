@@ -1,119 +1,36 @@
 -- ===============================================================================================
 --  GURUKUL OS - MASTER SCHEMA
---  Version: 10.7.0 (Verification Protocol Integrity)
---  Description: Resolves Case-Sensitivity and Search Path for Secure Handshakes.
+--  Version: 12.5.0 (Identity Consistency & Multi-Verify)
 -- ===============================================================================================
 
--- 1. FORCE CLEANUP (Idempotent Drop)
--- -----------------------------------------------------------------------------------------------
-DROP FUNCTION IF EXISTS public.generate_admission_share_code(bigint, text, text);
-DROP FUNCTION IF EXISTS public.admin_verify_share_code(text);
+DO $$ 
+BEGIN 
+    -- 1. TEARDOWN REMAINING BIGINT CONSTRAINTS
+    ALTER TABLE IF EXISTS public.admission_audit_logs DROP CONSTRAINT IF EXISTS admission_audit_logs_admission_id_fkey;
+    ALTER TABLE IF EXISTS public.enquiry_messages DROP CONSTRAINT IF EXISTS enquiry_messages_admission_id_fkey;
 
--- 2. CANONICAL PERMIT GENERATION
--- -----------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.generate_admission_share_code(
-    p_admission_id bigint,
-    p_purpose text,
-    p_code_type text
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-    v_code text;
-    v_permit_id bigint;
-    v_type public.share_code_type;
-BEGIN
-    -- Authorization Guard
-    IF NOT EXISTS (
-        SELECT 1 FROM admissions 
-        WHERE id = p_admission_id 
-        AND (parent_id = auth.uid() OR submitted_by = auth.uid())
-    ) THEN
-        RETURN jsonb_build_object('success', false, 'error', 'HANDSHAKE_RESTRICTED', 'details', 'Identity precedence check failed.');
+    -- 2. CASCADE IDENTITY TYPE CHANGE (If not already UUID)
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='admission_audit_logs' AND column_name='admission_id' AND data_type='bigint') THEN
+        ALTER TABLE public.admission_audit_logs ALTER COLUMN admission_id TYPE uuid USING (NULL);
     END IF;
 
-    -- Type Casting
-    BEGIN
-        v_type := p_code_type::public.share_code_type;
-    EXCEPTION WHEN OTHERS THEN
-        RETURN jsonb_build_object('success', false, 'error', 'INVALID_SCOPE', 'details', 'Handshake scope must be Enquiry or Admission.');
-    END;
-
-    -- Token Generation (12-char cryptographic string)
-    v_code := upper(substring(replace(gen_random_uuid()::text, '-', '') from 1 for 12));
-
-    INSERT INTO share_codes (
-        admission_id,
-        code,
-        code_type,
-        purpose,
-        expires_at,
-        status
-    )
-    VALUES (
-        p_admission_id,
-        v_code,
-        v_type,
-        p_purpose,
-        now() + interval '24 hours',
-        'Active'
-    )
-    RETURNING id INTO v_permit_id;
-
-    RETURN jsonb_build_object('success', true, 'id', v_permit_id, 'code', v_code);
-END;
-$$;
-
--- 3. ADMINISTRATIVE VERIFICATION PROTOCOL (Handshake Resolver)
--- -----------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.admin_verify_share_code(p_code text)
-RETURNS TABLE (
-    found boolean,
-    admission_id bigint,
-    applicant_name text,
-    grade text,
-    parent_name text,
-    parent_phone text,
-    code_type text,
-    vault_access boolean,
-    error text
-) 
-LANGUAGE plpgsql 
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-    v_rec record;
-BEGIN
-    -- Case-Insensitive Cryptographic Resolution
-    SELECT 
-        sc.*, a.applicant_name, a.grade, a.parent_name, a.parent_phone 
-    INTO v_rec
-    FROM share_codes sc
-    JOIN admissions a ON sc.admission_id = a.id
-    WHERE upper(sc.code) = upper(trim(p_code)) 
-    AND sc.status = 'Active' 
-    AND sc.expires_at > now();
-
-    IF v_rec.id IS NULL THEN
-        RETURN QUERY SELECT false, null::bigint, null::text, null::text, null::text, null::text, null::text, false, 'CRYPTOGRAPHIC_TOKEN_NOT_FOUND'::text;
-        RETURN;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='enquiry_messages' AND column_name='admission_id' AND data_type='bigint') THEN
+        ALTER TABLE public.enquiry_messages ALTER COLUMN admission_id TYPE uuid USING (NULL);
     END IF;
 
-    RETURN QUERY SELECT 
-        true, 
-        v_rec.admission_id, 
-        v_rec.applicant_name, 
-        v_rec.grade, 
-        v_rec.parent_name, 
-        v_rec.parent_phone, 
-        v_rec.code_type::text,
-        (v_rec.code_type = 'Admission'),
-        null::text;
-END;
-$$;
+    -- 3. RE-ESTABLISH CRYPTOGRAPHIC LINKS
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'admission_audit_logs') THEN
+        ALTER TABLE public.admission_audit_logs 
+        ADD CONSTRAINT admission_audit_logs_admission_id_fkey 
+        FOREIGN KEY (admission_id) REFERENCES public.admissions(id) ON DELETE CASCADE;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'enquiry_messages') THEN
+        ALTER TABLE public.enquiry_messages 
+        ADD CONSTRAINT enquiry_messages_admission_id_fkey 
+        FOREIGN KEY (admission_id) REFERENCES public.admissions(id) ON DELETE CASCADE;
+    END IF;
+
+END $$;
 
 NOTIFY pgrst, 'reload schema';

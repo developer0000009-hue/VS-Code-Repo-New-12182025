@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { UserProfile, Role, SchoolAdminProfileData, SchoolBranch, BuiltInRoles } from './types';
 import Navbar from './components/admin/Navbar';
@@ -49,11 +50,37 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
 
     const isBranchAdmin = !isHeadOfficeAdmin;
 
+    const menuGroups = useMemo(() => {
+        if (!profile.role) return [];
+        return getAdminMenu(isHeadOfficeAdmin, profile.role);
+    }, [isHeadOfficeAdmin, profile.role]);
+
+    // SYNC STATE WITH HASH: Enables deep linking and redirection from modals
+    useEffect(() => {
+        const handleHashChange = () => {
+            const hash = window.location.hash.replace('#/', '');
+            const decodedHash = decodeURIComponent(hash);
+            
+            if (decodedHash) {
+                // Flatten items to find match
+                const allItems = menuGroups.flatMap(g => g.items);
+                const matchedItem = allItems.find(item => item.id === decodedHash);
+                if (matchedItem) {
+                    setActiveComponent(matchedItem.id);
+                }
+            }
+        };
+
+        window.addEventListener('hashchange', handleHashChange);
+        handleHashChange(); // Run on mount
+        
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, [menuGroups]);
+
     const fetchDashboardData = useCallback(async () => {
         setLoadingData(true);
         setDataError(null);
         try {
-            // 1. Parallel fetch for core data and current profile state
             const [schoolRes, branchRes, latestProfileRes] = await Promise.all([
                 supabase.from('school_admin_profiles').select('*').eq('user_id', profile.id).maybeSingle(),
                 supabase.rpc('get_school_branches'),
@@ -68,7 +95,6 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
             let rawBranches = (branchRes.data || []) as SchoolBranch[];
             const profileBranchId = latestProfileRes.data?.branch_id;
 
-            // 2. IDENTITY SELF-HEALING: If Branch Admin, resolve branch by email if profile link is missing
             if (isBranchAdmin) {
                 const { data: identityMatch } = await supabase
                     .from('school_branches')
@@ -77,7 +103,6 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
                     .maybeSingle();
                 
                 if (identityMatch) {
-                    // Inject the resolved node into the local set if it's missing from the broad fetch
                     if (!rawBranches.some(b => b.id === identityMatch.id)) {
                         rawBranches = [identityMatch, ...rawBranches];
                     }
@@ -90,15 +115,11 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
             
             setBranches(sortedBranches);
 
-            // 3. CONTEXT RESOLUTION LOGIC
             let targetId: number | null = null;
-
             if (isBranchAdmin) {
-                // For Branch Admins, we lock the context to their assigned node
                 if (profileBranchId) {
                     targetId = profileBranchId;
                 } else {
-                    // Try to resolve via email fallback
                     const emailMatch = sortedBranches.find(b => 
                         b.admin_email?.trim().toLowerCase() === profile.email.trim().toLowerCase()
                     );
@@ -106,7 +127,6 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
                     else if (sortedBranches.length > 0) targetId = sortedBranches[0].id;
                 }
             } else if (sortedBranches.length > 0) {
-                // For Head Office, maintain selection or default to Main Branch
                 if (currentBranchId && sortedBranches.some(b => b.id === currentBranchId)) {
                     targetId = currentBranchId;
                 } else {
@@ -114,7 +134,6 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
                     targetId = mainBranch ? mainBranch.id : sortedBranches[0].id;
                 }
             }
-
             setCurrentBranchId(targetId);
 
         } catch (e: any) {
@@ -128,11 +147,6 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
     useEffect(() => {
         fetchDashboardData();
     }, [fetchDashboardData]);
-
-    const menuGroups = useMemo(() => {
-        if (!profile.role) return [];
-        return getAdminMenu(isHeadOfficeAdmin, profile.role);
-    }, [isHeadOfficeAdmin, profile.role]);
 
     const currentBranch = useMemo(() => 
         branches.find(b => b.id === currentBranchId) || null, 

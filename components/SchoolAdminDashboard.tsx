@@ -43,59 +43,128 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
     const [loadingData, setLoadingData] = useState(true);
     const [dataError, setDataError] = useState<string | null>(null);
 
-    const fetchDashboardData = useCallback(async () => {
-        setLoadingData(true);
-        setDataError(null);
-        try {
-            const [schoolRes, branchRes] = await Promise.all([
-                supabase.from('school_admin_profiles').select('*').eq('user_id', profile.id).maybeSingle(),
-                supabase.rpc('get_school_branches')
-            ]);
+    const isHeadOfficeAdmin = useMemo(() => {
+        return profile.role === BuiltInRoles.SCHOOL_ADMINISTRATION;
+    }, [profile.role]);
 
-            if (schoolRes.error && schoolRes.error.code !== 'PGRST116') throw schoolRes.error;
-            if (branchRes.error) throw branchRes.error;
-
-            setSchoolData(schoolRes.data);
-            const sortedBranches = (branchRes.data || []).sort((a: SchoolBranch, b: SchoolBranch) => 
-                (b.is_main_branch ? 1 : 0) - (a.is_main_branch ? 1 : 0)
-            );
-            setBranches(sortedBranches);
-
-            // Maintain branch selection across navigations
-            if (sortedBranches.length > 0) {
-                const mainBranch = sortedBranches.find(b => b.is_main_branch);
-                setCurrentBranchId(prevId => {
-                    if (prevId && sortedBranches.some(b => b.id === prevId)) return prevId;
-                    return mainBranch ? mainBranch.id : sortedBranches[0].id;
-                });
-            }
-
-        } catch (e: any) {
-            console.error("Dashboard Data Fetch Error:", e);
-            setDataError(e.message || "Failed to synchronize institutional data.");
-        } finally {
-            setLoadingData(false);
-        }
-    }, [profile.id]);
-
-    useEffect(() => {
-        fetchDashboardData();
-    }, [fetchDashboardData]);
-
-    const isHeadOfficeAdmin = profile.role === BuiltInRoles.SCHOOL_ADMINISTRATION;
+    const isBranchAdmin = !isHeadOfficeAdmin;
 
     const menuGroups = useMemo(() => {
         if (!profile.role) return [];
         return getAdminMenu(isHeadOfficeAdmin, profile.role);
     }, [isHeadOfficeAdmin, profile.role]);
 
-    const currentBranch = useMemo(() => branches.find(b => b.id === currentBranchId) || null, [branches, currentBranchId]);
+    // Sync state with hash for reliable redirection from modals and other components
+    useEffect(() => {
+        const handleHashChange = () => {
+            const rawHash = window.location.hash.replace('#/', '');
+            // Simple decode in case of spaces in tab names (e.g. Student%20Management)
+            const hash = decodeURIComponent(rawHash);
+            
+            if (hash) {
+                // Flatten items to check if hash matches a valid component
+                const allItems = menuGroups.flatMap(g => g.items);
+                const matchedItem = allItems.find(item => item.id === hash);
+                if (matchedItem) {
+                    setActiveComponent(matchedItem.id);
+                }
+            }
+        };
 
-    if (loadingData) {
+        window.addEventListener('hashchange', handleHashChange);
+        handleHashChange(); // Sync initial mount state
+        
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, [menuGroups]);
+
+    const fetchDashboardData = useCallback(async () => {
+        setLoadingData(true);
+        setDataError(null);
+        try {
+            const [schoolRes, branchRes, latestProfileRes] = await Promise.all([
+                supabase.from('school_admin_profiles').select('*').eq('user_id', profile.id).maybeSingle(),
+                supabase.rpc('get_school_branches'),
+                supabase.from('profiles').select('branch_id').eq('id', profile.id).maybeSingle()
+            ]);
+
+            if (schoolRes.error && schoolRes.error.code !== 'PGRST116') throw schoolRes.error;
+            if (branchRes.error) throw branchRes.error;
+
+            setSchoolData(schoolRes.data);
+            
+            let rawBranches = (branchRes.data || []) as SchoolBranch[];
+            const profileBranchId = latestProfileRes.data?.branch_id;
+
+            if (isBranchAdmin) {
+                const { data: identityMatch } = await supabase
+                    .from('school_branches')
+                    .select('*')
+                    .or(`admin_email.ilike.${profile.email},id.eq.${profileBranchId || -1}`)
+                    .maybeSingle();
+                
+                if (identityMatch) {
+                    if (!rawBranches.some(b => b.id === identityMatch.id)) {
+                        rawBranches = [identityMatch, ...rawBranches];
+                    }
+                }
+            }
+
+            const sortedBranches = [...rawBranches].sort((a, b) => 
+                (b.is_main_branch ? 1 : 0) - (a.is_main_branch ? 1 : 0)
+            );
+            
+            setBranches(sortedBranches);
+
+            let targetId: number | null = null;
+            if (isBranchAdmin) {
+                if (profileBranchId) {
+                    targetId = profileBranchId;
+                } else {
+                    const emailMatch = sortedBranches.find(b => 
+                        b.admin_email?.trim().toLowerCase() === profile.email.trim().toLowerCase()
+                    );
+                    if (emailMatch) targetId = emailMatch.id;
+                    else if (sortedBranches.length > 0) targetId = sortedBranches[0].id;
+                }
+            } else if (sortedBranches.length > 0) {
+                if (currentBranchId && sortedBranches.some(b => b.id === currentBranchId)) {
+                    targetId = currentBranchId;
+                } else {
+                    const mainBranch = sortedBranches.find(b => b.is_main_branch);
+                    targetId = mainBranch ? mainBranch.id : sortedBranches[0].id;
+                }
+            }
+            setCurrentBranchId(targetId);
+
+        } catch (e: any) {
+            console.error("Institutional Context Sync Error:", e);
+            setDataError(e.message || "Failed to synchronize institutional context.");
+        } finally {
+            setLoadingData(false);
+        }
+    }, [profile.id, profile.email, isBranchAdmin, currentBranchId]);
+
+    useEffect(() => {
+        fetchDashboardData();
+    }, [fetchDashboardData]);
+
+    const currentBranch = useMemo(() => 
+        branches.find(b => b.id === currentBranchId) || null, 
+    [branches, currentBranchId]);
+
+    const handleBranchUpdate = (updatedBranch?: SchoolBranch, isDelete: boolean = false) => {
+        if (isDelete && updatedBranch) {
+            setBranches(prev => prev.filter(b => b.id !== updatedBranch.id));
+        } else {
+            fetchDashboardData();
+        }
+    };
+
+    if (loadingData && branches.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-background gap-4">
                 <Spinner size="lg" />
-                <p className="text-xs font-black uppercase text-muted-foreground animate-pulse tracking-widest">Initializing Administrative Context</p>
+                <p className="text-[10px] font-black uppercase text-muted-foreground animate-pulse tracking-[0.3em]">Establishing Secure Context</p>
             </div>
         );
     }
@@ -106,10 +175,10 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
                 <div className="w-16 h-16 bg-destructive/10 text-destructive rounded-full flex items-center justify-center mb-4">
                     <XIcon className="w-8 h-8" />
                 </div>
-                <h3 className="text-xl font-bold mb-2">Sync Error</h3>
+                <h3 className="text-xl font-bold mb-2">Sync Protocol Failure</h3>
                 <p className="text-muted-foreground max-w-md mb-6">{dataError}</p>
                 <button onClick={fetchDashboardData} className="px-6 py-2.5 bg-primary text-white font-bold rounded-xl shadow-lg hover:bg-primary/90 transition-all">
-                    Retry Sync
+                    Retry Connection
                 </button>
             </div>
         );
@@ -117,10 +186,9 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
 
     const renderContent = () => {
         switch (activeComponent) {
-            // Fix: Updated DashboardOverview usage to use generic onNavigate prop instead of onNavigateToBranches
             case 'Dashboard': return <DashboardOverview schoolProfile={schoolData} currentBranch={currentBranch} profile={profile} onNavigate={setActiveComponent} />;
             case 'Profile': return <ProfileCreationPage profile={profile} role={profile.role!} onComplete={onProfileUpdate} onBack={() => setActiveComponent('Dashboard')} showBackButton={true} />;
-            case 'Branches': return <BranchManagementTab isHeadOfficeAdmin={isHeadOfficeAdmin} branches={branches} isLoading={loadingData} error={dataError} onBranchUpdate={fetchDashboardData} onSelectBranch={setCurrentBranchId} schoolProfile={schoolData} />;
+            case 'Branches': return <BranchManagementTab isHeadOfficeAdmin={isHeadOfficeAdmin} branches={branches} isLoading={loadingData} error={dataError} onBranchUpdate={handleBranchUpdate} onSelectBranch={setCurrentBranchId} schoolProfile={schoolData} />;
             case 'Admissions': return <AdmissionsTab branchId={currentBranchId} />;
             case 'Enquiries': return <EnquiryTab branchId={currentBranchId} onNavigate={setActiveComponent} />;
             case 'Code Verification': return <CodeVerificationTab branchId={currentBranchId} />;
@@ -148,7 +216,7 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
                 setActiveComponent={setActiveComponent}
                 isCollapsed={isSidebarCollapsed}
                 setCollapsed={setIsSidebarCollapsed}
-                isBranchAdmin={!isHeadOfficeAdmin}
+                isBranchAdmin={isBranchAdmin}
                 isHeadOfficeAdmin={isHeadOfficeAdmin}
                 menuGroups={menuGroups}
             />
@@ -157,7 +225,7 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
                 <Navbar 
                     activeComponent={activeComponent}
                     setActiveComponent={setActiveComponent}
-                    isBranchAdmin={!isHeadOfficeAdmin}
+                    isBranchAdmin={isBranchAdmin}
                     isHeadOfficeAdmin={isHeadOfficeAdmin}
                     profile={profile}
                     onSelectRole={onSelectRole}

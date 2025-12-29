@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabase';
-import { ShareCode, ShareCodeStatus, AdmissionApplication, ShareCodeType } from '../../types';
+import { ShareCode, ShareCodeStatus, AdmissionApplication, ShareCodeType } from '../types';
 import Spinner from './common/Spinner';
 
 // --- Icons (as they are not in separate files) ---
@@ -32,8 +32,8 @@ const statusConfig: { [key in ShareCodeStatus]: { text: string; bg: string; bord
   'Redeemed': { text: 'text-blue-700 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/30', border: 'border-blue-200 dark:border-blue-900' },
 };
 
-
-const ShareCodesTab: React.FC = () => {
+// Fix: Changed to explicit default export function and corrected relative import paths to resolve "no default export" and path ambiguity errors.
+export default function ShareCodesTab() {
   const [codes, setCodes] = useState<ShareCode[]>([]);
   const [myApplications, setMyApplications] = useState<AdmissionApplication[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,7 +90,7 @@ const ShareCodesTab: React.FC = () => {
 
     try {
       const { data, error } = await supabase.rpc('generate_admission_share_code', {
-        p_admission_id: Number(selectedAdmission),
+        p_admission_id: selectedAdmission,
         p_purpose: purpose,
         p_code_type: codeType,
       });
@@ -214,7 +214,7 @@ const ShareCodesTab: React.FC = () => {
                                     <div className={`w-4 h-4 rounded-full border-2 absolute top-4 right-4 flex items-center justify-center ${codeType === 'Enquiry' ? 'border-blue-500' : 'border-muted-foreground/30'}`}>{codeType === 'Enquiry' && <div className="w-2 h-2 bg-blue-500 rounded-full" />}</div>
                                     <span className="block font-bold text-sm mb-1 text-foreground">Enquiry</span><span className="block text-xs text-muted-foreground group-hover:text-foreground/70">For initial questions & desk visits</span>
                                 </button>
-                                <button type="button" onClick={() => setCodeType('Admission')} className={`relative p-4 rounded-xl border-2 text-left transition-all duration-200 group ${codeType === 'Admission' ? 'border-purple-500 bg-purple-50/50 dark:bg-purple-900/20 ring-1 ring-purple-500/30' : 'border-border bg-card hover:border-purple-300/50 hover:bg-purple-50/30'}`}>
+                                <button type="button" onClick={() => setCodeType('Admission')} className={`relative p-4 rounded-xl border-2 text-left transition-all duration-200 group ${codeType === 'Admission' ? 'border-purple-500 bg-purple-50/50 dark:bg-purple-900/20 ring-1 ring-purple-500/30' : 'border-border bg-card hover:border-purple-300/50 hover:bg-blue-50/30'}`}>
                                     <div className={`w-4 h-4 rounded-full border-2 absolute top-4 right-4 flex items-center justify-center ${codeType === 'Admission' ? 'border-purple-500' : 'border-muted-foreground/30'}`}>{codeType === 'Admission' && <div className="w-2 h-2 bg-purple-500 rounded-full" />}</div>
                                     <span className="block font-bold text-sm mb-1 text-foreground">Admission</span><span className="block text-xs text-muted-foreground group-hover:text-foreground/70">Share full documents for review</span>
                                 </button>
@@ -266,8 +266,5 @@ const ShareCodesTab: React.FC = () => {
                 </div>
             </div>
         </div>
-    </div>
-  );
-};
-
-export default ShareCodesTab;
+    );
+}

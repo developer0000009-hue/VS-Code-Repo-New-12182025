@@ -23,12 +23,12 @@ export const StorageService = {
 
     /**
      * Standardizes document paths
-     * Pattern: parent/[parent_id]/child/[child_id]/[type]/[uuid].[ext]
+     * Pattern: documents/[parent_id]/[admission_id]/[type]/[uuid].[ext]
+     * CRITICAL: parent_id MUST be at index 2 for RLS policies using (storage.foldername(name))[2]
      */
     getDocumentPath: (parentId: string, childId: string | number, type: string, fileName: string) => {
-        const cleanType = type.toLowerCase().replace(/\s+/g, '_');
-        const ext = fileName.split('.').pop();
-        // Note: For RLS (foldername[2]), we must put parentId in the second segment
+        const cleanType = type.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const ext = fileName.split('.').pop() || 'dat';
         return `documents/${parentId}/${childId}/${cleanType}/${crypto.randomUUID()}.${ext}`;
     },
 
@@ -43,7 +43,10 @@ export const StorageService = {
                 upsert: true
             });
 
-        if (error) throw error;
+        if (error) {
+            console.error(`Storage Upload Error [${bucket}]:`, error);
+            throw error;
+        }
 
         return {
             path: data.path
@@ -60,12 +63,21 @@ export const StorageService = {
         return data.publicUrl;
     },
 
-    // Fix: Added missing resolveUrl method to provide signed URLs for sensitive documents as expected by DocumentsTab
+    /**
+     * Generates a short-lived signed URL for sensitive document viewing.
+     */
     async resolveUrl(bucket: BucketName, path: string, expiresIn = 3600) {
+        if (!path) throw new Error("Reference path missing.");
+        
         const { data, error } = await supabase.storage
             .from(bucket)
             .createSignedUrl(path, expiresIn);
-        if (error) throw error;
+            
+        if (error) {
+            console.error(`Storage Resolve Error [${bucket}]:`, error);
+            throw error;
+        }
+        
         return data.signedUrl;
     }
 };

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../services/supabase';
 import { SchoolClass, Course, UserProfile, SchoolAdminProfileData } from '../types';
@@ -34,6 +35,7 @@ interface ExtendedClass extends SchoolClass {
     name: string;
     grade_level: string;
     capacity: number;
+    class_teacher_id?: string | null; // Fix: Explicitly included for 'No Teacher' filtering
     teacher_name?: string;
     student_count?: number;
     created_at?: string;

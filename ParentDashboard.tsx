@@ -1,19 +1,20 @@
+
 import React, { useState, useEffect } from 'react';
-import { UserProfile, Role } from '../types';
-import Header from './parent/Header';
-import { ProfileCreationPage } from './ProfileCreationPage';
+import { UserProfile, Role } from './types';
+import Header from './components/parent/Header';
+import { ProfileCreationPage } from './components/ProfileCreationPage';
 
 // Import the tab components
-import OverviewTab from './parent_tabs/OverviewTab';
-import MyChildrenTab from './parent_tabs/MyChildrenTab';
-import DocumentsTab from './parent_tabs/DocumentsTab';
-import ShareCodesTab from './parent_tabs/ShareCodesTab';
-import MessagesTab from './parent_tabs/MessagesTab';
-import { HomeIcon } from './icons/HomeIcon';
-import { StudentsIcon } from './icons/StudentsIcon';
-import { DocumentTextIcon } from './icons/DocumentTextIcon';
-import { CommunicationIcon } from './icons/CommunicationIcon';
-import { ReceiptIcon } from './icons/ReceiptIcon'; 
+import OverviewTab from './components/parent_tabs/OverviewTab';
+import MyChildrenTab from './components/parent_tabs/MyChildrenTab';
+import DocumentsTab from './components/parent_tabs/DocumentsTab';
+import ShareCodesTab from './components/parent_tabs/ShareCodesTab';
+import MessagesTab from './components/parent_tabs/MessagesTab';
+import { HomeIcon } from './components/icons/HomeIcon';
+import { StudentsIcon } from './components/icons/StudentsIcon';
+import { DocumentTextIcon } from './components/icons/DocumentTextIcon';
+import { CommunicationIcon } from './components/icons/CommunicationIcon';
+import { ReceiptIcon } from './components/icons/ReceiptIcon'; 
 
 interface ParentDashboardProps {
     profile: UserProfile;
@@ -32,7 +33,6 @@ const navItems = [
 
 const ParentDashboard: React.FC<ParentDashboardProps> = ({ profile, onSelectRole, onProfileUpdate, onSignOut }) => {
     const [activeComponent, setActiveComponent] = useState('Overview');
-    
     // Fix: Updated focusedAdmissionId to string | null to match UUID standard.
     const [focusedAdmissionId, setFocusedAdmissionId] = useState<string | null>(null);
 

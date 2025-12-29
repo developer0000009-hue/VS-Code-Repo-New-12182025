@@ -1,13 +1,13 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { supabase, STORAGE_KEY } from './services/supabase';
+import { supabase, STORAGE_KEY, formatError } from './services/supabase';
 import { UserProfile, BuiltInRoles, Role } from './types';
 import AuthPage from './components/AuthPage';
 import SchoolAdminDashboard from './components/SchoolAdminDashboard';
 import ParentDashboard from './components/ParentDashboard';
 import StudentDashboard from './components/StudentDashboard';
 import TeacherDashboard from './components/TeacherDashboard';
+import MinimalAdminDashboard from './components/MinimalAdminDashboard';
 import OnboardingFlow from './OnboardingFlow';
 import Spinner from './components/common/Spinner';
 import NotFound from './components/common/NotFound';
@@ -97,7 +97,7 @@ const App: React.FC = () => {
     const handleRoleSelect = async (role: Role, isExisting?: boolean) => {
         setLoading(true);
         try {
-            const { data, error } = await supabase.rpc('switch_active_role', { p_target_role: role });
+            const { error } = await supabase.rpc('switch_active_role', { p_target_role: role });
             if (error) throw error;
 
             if (session) await loadUserData(session, true);
@@ -106,6 +106,7 @@ const App: React.FC = () => {
             navigate('/', { replace: true });
         } catch (err: any) {
             console.error("Role Switch Protocol failed:", err);
+            alert(formatError(err));
             setLoading(false);
         }
     };
@@ -145,6 +146,8 @@ const App: React.FC = () => {
 
     const renderDashboard = () => {
         switch (profile.role) {
+            case BuiltInRoles.SUPER_ADMIN:
+                return <MinimalAdminDashboard profile={profile} onSignOut={handleSignOut} onSelectRole={handleRoleSelect} />;
             case BuiltInRoles.SCHOOL_ADMINISTRATION:
             case BuiltInRoles.BRANCH_ADMIN:
             case BuiltInRoles.PRINCIPAL:
@@ -157,7 +160,6 @@ const App: React.FC = () => {
             case BuiltInRoles.STUDENT:
                 return <StudentDashboard profile={profile} onSignOut={handleSignOut} onSwitchRole={() => handleRoleSelect(null as any)} onSelectRole={handleRoleSelect} />;
             case BuiltInRoles.TEACHER:
-                // Fix: Added missing required onSwitchRole prop to satisfy TeacherDashboardProps interface
                 return <TeacherDashboard profile={profile} onSignOut={handleSignOut} onProfileUpdate={handleOnboardingComplete} onSelectRole={handleRoleSelect} onSwitchRole={() => handleRoleSelect(null as any)} />;
             default:
                 return <div className="p-20 text-center">Identity Mismatch: Role {profile.role} is not mapped to a telemetry dashboard.</div>;
