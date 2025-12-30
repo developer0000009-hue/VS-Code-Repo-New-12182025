@@ -25,42 +25,62 @@ export const formatError = (err: any): string => {
     if (!err) return "An unknown error occurred.";
     
     const isJunkString = (s: string) => {
+        if (typeof s !== 'string') return true;
         const lower = s.toLowerCase().trim();
         return lower === "[object object]" || lower === "{}" || lower === "null" || lower === "undefined" || lower === "";
     };
 
-    // 1. Direct string check
+    // 1. Direct string check with junk protection
     if (typeof err === 'string') {
+        if (isJunkString(err)) return "Institutional Protocol Failure (Object Context)";
+        
+        // INTERCEPT CASTING ERRORS
+        if (err.toLowerCase().includes("cannot cast type bigint to uuid") || err.toLowerCase().includes("invalid input syntax for type uuid")) {
+            return "Security Handshake Mismatch: This access code is linked to an incompatible identity format. Please re-provision the code in the Parent Portal.";
+        }
+        
         if (err.toLowerCase().includes("referenced identity node is unavailable")) {
             return "Node Desynchronization: The parent identity record is currently unreachable in the master registry.";
         }
-        return isJunkString(err) ? "Institutional Protocol Failure" : err;
+        return err;
     }
 
     // 2. Standardize Error object handling
     if (err instanceof Error) {
         const msg = err.message;
-        if (msg.toLowerCase().includes("identity node is unavailable")) {
-             return "Registry Alert: Parent identity node not found or de-provisioned.";
-        }
-        return msg && !isJunkString(msg) ? msg : "Institutional Protocol Failure";
+        if (isJunkString(msg)) return "Institutional Protocol Failure (Error Context)";
+        return msg;
     }
 
-    // 3. Deep check for common nested error fields
-    if (typeof err === 'object') {
+    // 3. Deep check for common nested error fields in plain objects
+    if (typeof err === 'object' && err !== null) {
+        // Recursively handle cases where `err.message` is an object (common in complex RPC failures)
+        if (err.message && typeof err.message === 'object') {
+            return formatError(err.message);
+        }
+        
         // Handle PostgREST/Supabase error structure
         const message = err.message || err.error_description || err.error?.message;
         if (message && typeof message === 'string' && !isJunkString(message)) {
             const lowerMsg = message.toLowerCase();
             
-            // Mask technical DB errors with professional, descriptive messages
+            // INTERCEPT CASTING ERRORS IN OBJECTS
+            if (lowerMsg.includes("cannot cast type bigint to uuid") || lowerMsg.includes("invalid input syntax for type uuid")) {
+                return "Security Handshake Mismatch: Incompatible identity format detected. Access code requires re-provisioning.";
+            }
+
             if (lowerMsg.includes("foreign key") || lowerMsg.includes("violates constraint")) {
                 return "Data Integrity Alert: A linked identity node is missing from the core registry.";
             }
             if (lowerMsg.includes("schema cache") || lowerMsg.includes("column") || lowerMsg.includes("does not exist")) {
-                return "System Sync Delay: Data structure alignment is in progress. Please retry.";
+                return `Data Structure Alignment Error: ${message}. Please verify the database schema and retry.`;
             }
             return message;
+        }
+        
+        // Handle if err.error is a string
+        if (err.error && typeof err.error === 'string' && !isJunkString(err.error)) {
+            return err.error;
         }
 
         // Handle nested error property
@@ -69,24 +89,18 @@ export const formatError = (err: any): string => {
         }
 
         // Check for other common error fields
-        const candidates = [
-            err.details,
-            err.hint,
-            err.code,
-            err.msg
-        ];
-
+        const candidates = [err.details, err.hint, err.code, err.msg];
         for (const val of candidates) {
             if (typeof val === 'string' && !isJunkString(val)) {
                 return val;
             }
         }
-
-        // 4. Final attempt: stringify with junk protection
+        
+        // Final attempt: stringify to reveal internal structure if not already tried
         try {
             const stringified = JSON.stringify(err);
             if (stringified && !isJunkString(stringified)) {
-                return stringified.length > 150 ? stringified.substring(0, 147) + "..." : stringified;
+                return stringified.length > 200 ? stringified.substring(0, 197) + "..." : stringified;
             }
         } catch {
             // Fall through
