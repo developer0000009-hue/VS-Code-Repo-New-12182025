@@ -249,17 +249,25 @@ No changes required - the RPC function accepts the correct parameters.
 
 ## Implementation Steps
 
-1. **Apply Database Migration**
-   - Open Supabase Dashboard → SQL Editor
-   - Execute the complete `schema_updates.sql` content
-   - Verify tables and functions created
+1. **Apply Database Migration** ✅ COMPLETED
+   - Updated `schema_updates.sql` with complete fix including:
+     - `enrollments` table creation
+     - Updated `get_all_students_for_admin` function to query `enrollments` table
+     - Changed enrollment status to 'ACTIVE' for immediate visibility
+   - **Action Required**: Copy and execute `schema_updates.sql` in Supabase SQL Editor
 
-2. **Test Enrollment Flow**
+2. **Frontend Updates** ✅ COMPLETED
+   - Updated `StudentManagementTab.tsx` to auto-refresh when coming from admissions
+   - Updated `AdmissionDetailsModal.tsx` to navigate to Student Directory after enrollment
+   - Error handling in `services/supabase.ts` masks schema errors
+
+3. **Test Enrollment Flow**
    - Create test admission with accepted documents
    - Click "Finalize Enrollment"
-   - Verify success and student directory update
+   - Verify automatic navigation to Student Directory
+   - Confirm student appears with ACTIVE status and Total Roster updates
 
-3. **Validate Error Handling**
+4. **Validate Error Handling**
    - Test with incomplete documents
    - Confirm user-friendly error messages
 

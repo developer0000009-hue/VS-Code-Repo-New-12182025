@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, formatError } from '../services/supabase';
 import { StudentForAdmin } from '../types';
@@ -22,7 +21,6 @@ import { UserPlusIcon } from './icons/UserPlusIcon';
 import { DocumentTextIcon } from './icons/DocumentTextIcon';
 import StudentProfileModal from './students/StudentProfileModal';
 import BulkStudentActionsModal, { BulkStudentActionType } from './students/BulkStudentActionsModal';
-// Fix: Imported PremiumAvatar to resolve 'Cannot find name' error on line 179.
 import PremiumAvatar from './common/PremiumAvatar';
 
 interface StudentManagementTabProps {
@@ -69,7 +67,6 @@ const KPICard: React.FC<{
     );
 };
 
-// Fix: Defined and exported AddStudentModal to resolve 'Cannot find name' in this file and import error in UserManagementTab.
 export const AddStudentModal: React.FC<{ onClose: () => void; onSave: () => void }> = ({ onClose, onSave }) => {
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
@@ -146,6 +143,8 @@ const StudentManagementTab: React.FC<StudentManagementTabProps> = ({ branchId })
     const [selectedStudent, setSelectedStudent] = useState<StudentForAdmin | null>(null);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [bulkAction, setBulkAction] = useState<BulkStudentActionType | null>(null);
+    const [refreshKey, setRefreshKey] = useState(0);
+    const [highlightedId, setHighlightedId] = useState<string | null>(null);
 
     const itemsPerPage = 12;
 
@@ -165,7 +164,39 @@ const StudentManagementTab: React.FC<StudentManagementTabProps> = ({ branchId })
         }
     }, [branchId]);
 
-    useEffect(() => { fetchData(); }, [fetchData]);
+    // FIX: Listen to hash changes to trigger data refresh and highlighting.
+    useEffect(() => {
+        const handleHashChange = () => {
+            if (window.location.hash.startsWith('#/Student Management')) {
+                setRefreshKey(Date.now()); // Trigger re-fetch
+                const params = new URLSearchParams(window.location.hash.split('?')[1]);
+                const idToHighlight = params.get('highlight');
+                if (idToHighlight) {
+                    setHighlightedId(idToHighlight);
+                    setTimeout(() => setHighlightedId(null), 3000); // Clear highlight after 3s
+                }
+            }
+        };
+        window.addEventListener('hashchange', handleHashChange);
+        handleHashChange(); // Run once on mount
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, []);
+
+    // Auto-refresh when coming from admissions (enrollment completed)
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.hash.split('?')[1]);
+        const fromAdmission = params.get('from_admission');
+        if (fromAdmission === 'true') {
+            // Clear the param and refresh
+            const newHash = window.location.hash.replace('?from_admission=true', '').replace('&from_admission=true', '');
+            window.location.hash = newHash;
+            setRefreshKey(Date.now());
+        }
+    }, []);
+
+    useEffect(() => { 
+        fetchData(); 
+    }, [fetchData, refreshKey]); // Re-fetch when refreshKey changes
 
     const filteredStudents = useMemo(() => {
         return allStudents.filter(s => {
@@ -241,7 +272,7 @@ const StudentManagementTab: React.FC<StudentManagementTabProps> = ({ branchId })
                             {loading ? (
                                 <tr><td colSpan={5} className="p-40 text-center"><Spinner size="lg" className="text-primary" /><p className="text-[10px] font-black uppercase text-white/10 mt-6 tracking-[0.5em] animate-pulse">Syncing Registry...</p></td></tr>
                             ) : paginatedData.map(student => (
-                                <tr key={student.id} className="hover:bg-white/[0.02] cursor-pointer group transition-all duration-300" onClick={() => setSelectedStudent(student)}>
+                                <tr key={student.id} className={`hover:bg-white/[0.02] cursor-pointer group transition-all duration-300 ${student.id === highlightedId ? 'bg-primary/10 animate-pulse' : ''}`} onClick={() => setSelectedStudent(student)}>
                                     <td className="p-8 pl-10">
                                         <div className="flex items-center gap-6">
                                             <PremiumAvatar src={student.profile_photo_url} name={student.display_name} size="xs" className="w-14 h-14 rounded-2xl border border-white/10 shadow-2xl relative z-10" />
