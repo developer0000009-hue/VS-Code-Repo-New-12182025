@@ -1,1 +1,0 @@
--- This file's contents have been merged into schema.txt and it is now deprecated.
