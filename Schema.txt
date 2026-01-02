@@ -1,0 +1,2 @@
+-- This file is deprecated. All schema updates are consolidated in `schema.txt`.
+-- Please use the master schema file for all database operations.

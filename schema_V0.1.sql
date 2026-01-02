@@ -990,8 +990,11 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+    -- Temporarily disable RLS for profile creation
+    SET LOCAL row_security = off;
     INSERT INTO public.profiles (id, email, display_name)
     VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'display_name');
+    SET LOCAL row_security = on;
     RETURN NEW;
 END;
 $$;

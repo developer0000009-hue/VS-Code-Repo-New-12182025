@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, useNavigate } from 'react-router-dom';
 import { supabase, STORAGE_KEY, formatError } from './services/supabase';
 import { UserProfile, BuiltInRoles, Role } from './types';
 import AuthPage from './components/AuthPage';
 import SchoolAdminDashboard from './components/SchoolAdminDashboard';
-import ParentDashboard from './components/ParentDashboard';
+import ParentDashboard from './ParentDashboard';
 import StudentDashboard from './components/StudentDashboard';
 import TeacherDashboard from './components/TeacherDashboard';
 import MinimalAdminDashboard from './components/MinimalAdminDashboard';
@@ -16,7 +16,7 @@ import NotFound from './components/common/NotFound';
 const App: React.FC = () => {
     const [session, setSession] = useState<any | null>(null);
     const [profile, setProfile] = useState<UserProfile | null>(null);
-    const [loading, setLoading] = useState<boolean>(true);
+    const [loading, setLoading] = useState(true);
     const [onboardingStep, setOnboardingStep] = useState<string | null>(null);
     
     const navigate = useNavigate();
@@ -27,7 +27,6 @@ const App: React.FC = () => {
         isFetching.current = true;
         
         try {
-            // Identity Handshake: Check if profile exists
             const { data: profileData, error: profileError } = await supabase
                 .from('profiles')
                 .select('*')
@@ -37,35 +36,41 @@ const App: React.FC = () => {
             if (profileError) throw profileError;
 
             if (!profileData) {
-                // IMPORTANT: If profile is missing but user exists in Auth, 
-                // initialize it using user_metadata from the signup process
+                // Fallback for race condition: create profile from metadata if trigger hasn't finished
                 const metadata = currentSession.user.user_metadata || {};
-                const { data: newProfile, error: insertError } = await supabase.from('profiles').upsert({
-                    id: currentSession.user.id,
-                    email: currentSession.user.email,
-                    display_name: metadata.display_name || 'Anonymous Node',
-                    role: metadata.role || null, // Map from metadata.role
-                    is_active: true,
-                    profile_completed: false
-                }).select().maybeSingle();
+                const { data: newProfile, error: upsertError } = await supabase
+                    .from('profiles')
+                    .upsert({
+                        id: currentSession.user.id,
+                        email: currentSession.user.email,
+                        display_name: metadata.display_name || 'Identity Node',
+                        phone: metadata.phone || currentSession.user.phone || null,
+                        role: null,
+                        is_active: true,
+                        profile_completed: false
+                    }, { onConflict: 'id' })
+                    .select()
+                    .maybeSingle();
                 
-                if (insertError) throw insertError;
+                if (upsertError) throw upsertError;
                 setProfile(newProfile as UserProfile);
             } else {
                 setProfile(profileData as UserProfile);
                 
-                // Track administrative onboarding lifecycle
+                // Fetch admin onboarding state if applicable
                 if (profileData.role === BuiltInRoles.SCHOOL_ADMINISTRATION) {
-                    const { data: adminProfile } = await supabase
+                    const { data: adminProfile, error: adminError } = await supabase
                         .from('school_admin_profiles')
                         .select('onboarding_step')
                         .eq('user_id', profileData.id)
                         .maybeSingle();
-                    setOnboardingStep(adminProfile?.onboarding_step || 'profile');
+                    
+                    if (!adminError) {
+                        setOnboardingStep(adminProfile?.onboarding_step || 'profile');
+                    }
                 }
             }
         } catch (e) {
-            // FIX: Use formatError to prevent [object Object] in logs/telemetry
             console.error("CRITICAL: Identity Sync Protocol failure.", formatError(e));
         } finally {
             isFetching.current = false;
@@ -80,10 +85,11 @@ const App: React.FC = () => {
             else setLoading(false);
         });
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
             setSession(currentSession);
-            if (currentSession) loadUserData(currentSession, true);
-            else {
+            if (currentSession) {
+                loadUserData(currentSession, true);
+            } else {
                 setProfile(null);
                 setLoading(false);
             }
@@ -96,16 +102,15 @@ const App: React.FC = () => {
         if (session) await loadUserData(session, true);
     };
 
-    const handleRoleSelect = async (role: Role, isExisting?: boolean) => {
+    const handleRoleSelect = async (role: Role) => {
         setLoading(true);
         try {
             const { error } = await supabase.rpc('switch_active_role', { p_target_role: role });
             if (error) throw error;
-
             if (session) await loadUserData(session, true);
             navigate('/', { replace: true });
         } catch (err: any) {
-            console.error("Role Switch Protocol failed:", err);
+            console.error("Role Switch Protocol failed:", formatError(err));
             alert(formatError(err));
             setLoading(false);
         }
@@ -132,7 +137,7 @@ const App: React.FC = () => {
 
     if (!session || !profile) return <AuthPage />;
 
-    // Force Onboarding if profile is incomplete
+    // Force onboarding if role is missing or profile incomplete
     if (!profile.role || (!profile.profile_completed && profile.role !== BuiltInRoles.SUPER_ADMIN)) {
         return (
             <OnboardingFlow 
@@ -162,7 +167,7 @@ const App: React.FC = () => {
             case BuiltInRoles.TEACHER:
                 return <TeacherDashboard profile={profile} onSignOut={handleSignOut} onProfileUpdate={handleOnboardingComplete} onSelectRole={handleRoleSelect} onSwitchRole={() => handleRoleSelect(null as any)} />;
             default:
-                return <div className="p-20 text-center">Identity Mismatch: Role {profile.role} is not mapped to a telemetry dashboard.</div>;
+                return <div className="p-20 text-center font-serif italic text-white/40">Identity Mismatch: Role {profile.role} is not mapped to a telemetry dashboard.</div>;
         }
     };
 

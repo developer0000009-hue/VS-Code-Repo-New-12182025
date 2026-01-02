@@ -1,8 +1,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://lnqfoffbmafwkhgdadgw.supabase.co';
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxucWZvZmZibWFmd2toZ2RhZGd3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5MjM2NjUsImV4cCI6MjA3ODQ5OTY2NX0.kxsaKzmK4uYfOqjDSglL0s2FshAbd8kqt77EZiOI5Gg';
+const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://jforwngnlqyvlpqzuqpz.supabase.co';
+const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impmb3J3bmdubHF5dmxwcXp1cXB6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczNjY0NTksImV4cCI6MjA4Mjk0MjQ1OX0.f3WXFI972q4P-PKD_vWQo6fKzh9bedoQ6FzIgpJxU8M';
 
 export const STORAGE_KEY = 'school_v14_auth';
 
@@ -19,33 +19,28 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 /**
  * Robust error formatter for enterprise-grade user feedback.
- * Recursively scans and sanitizes error objects to prevent [object Object] output.
+ * Prevents [object Object] by recursively extracting messages or stringifying the payload.
  */
 export const formatError = (err: any): string => {
     if (!err) return "Synchronization Idle.";
     
     const JUNK_STRINGS = ["[object Object]", "{}", "null", "undefined"];
 
-    // 1. Handle string errors directly
+    // Handle string errors
     if (typeof err === 'string') {
         if (JUNK_STRINGS.includes(err)) return "Institutional system synchronization exception.";
         return err;
     }
 
-    // 2. Recursive message extractor for complex objects
+    // Helper to find a descriptive message in an error object
     const getDeepMessage = (obj: any): string | null => {
         if (!obj || typeof obj !== 'object') return null;
         
-        // Priority fields for database and SDK errors
+        // Standard Supabase/Postgres error keys
         const keys = ['message', 'error_description', 'details', 'hint', 'error'];
         for (const key of keys) {
             const val = obj[key];
-            
-            if (val && typeof val === 'string') {
-                // Return value only if it's not a junk stringified object
-                if (!JUNK_STRINGS.includes(val)) return val;
-            }
-            
+            if (val && typeof val === 'string' && !JUNK_STRINGS.includes(val)) return val;
             if (val && typeof val === 'object') {
                 const deep = getDeepMessage(val);
                 if (deep) return deep;
@@ -54,20 +49,22 @@ export const formatError = (err: any): string => {
         return null;
     };
 
-    // 3. Handle specific Postgres Error Codes
-    if (err.code === '42501') return "Security Violation: Access denied to this database node.";
+    // Handle specific Postgres error codes
+    if (err.code === '42501') return "Security Violation: Access denied to this database node. Check RLS and Grants.";
+    if (err.code === '42804') return "Database Engine Error: Type mismatch detected (UUID vs BIGINT). Please run schema migration.";
     if (err.code === '22P02') return "Data Integrity Error: Invalid identification format detected.";
     if (err.code === '23505') return "Registry Conflict: This identity node is already registered.";
-    if (err.code === 'PGRST116') return "Resource Resolution Failure: Record not found.";
 
     const extracted = getDeepMessage(err);
-    if (extracted) {
-        // Suppress technical keyword leak
-        if (extracted.toLowerCase().includes("uuid") || extracted.toLowerCase().includes("row-level security")) {
-            return "Security Context Sync Error: Please ensure you have permission to perform this action.";
-        }
-        return extracted;
+    if (extracted) return extracted;
+
+    // Last resort: Stringify the object to avoid [object Object]
+    try {
+        const str = JSON.stringify(err);
+        if (str && !JUNK_STRINGS.includes(str)) return str;
+    } catch (e) {
+        // Fallback for circular references
     }
 
-    return "Institutional system exception during verification.";
+    return String(err) || "Institutional system exception during verification.";
 };
