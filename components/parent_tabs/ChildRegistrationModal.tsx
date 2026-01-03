@@ -182,7 +182,19 @@ const ChildRegistrationModal: React.FC<ChildRegistrationModalProps> = ({ child, 
             if (photoFile) {
                 const storagePath = StorageService.getProfilePath('child', currentUserId);
                 const { path } = await StorageService.upload(BUCKETS.PROFILES, storagePath, photoFile);
-                finalPhotoPath = path;
+                finalPhotoPath = StorageService.getPublicUrl(BUCKETS.PROFILES, path);
+
+                // Verify the uploaded image is accessible
+                try {
+                    const response = await fetch(finalPhotoPath, { method: 'HEAD' });
+                    if (!response.ok) {
+                        console.warn('Uploaded image not accessible:', finalPhotoPath);
+                        // Continue anyway - some buckets may not be immediately accessible
+                    }
+                } catch (verifyError) {
+                    console.warn('Could not verify uploaded image accessibility:', verifyError);
+                    // Continue anyway
+                }
             }
 
             const payload: any = {

@@ -46,6 +46,16 @@ export const StorageService = {
         return { path: data.path };
     },
 
+    /**
+     * Get public URL for a file in a public bucket
+     */
+    getPublicUrl(bucket: BucketName, path: string) {
+        const { data } = supabase.storage
+            .from(bucket)
+            .getPublicUrl(path);
+        return data.publicUrl;
+    },
+
     async getSignedUrl(bucket: BucketName, path: string, expiresIn = 3600) {
         const { data, error } = await supabase.storage
             .from(bucket)
