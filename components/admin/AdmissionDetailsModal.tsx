@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AdmissionApplication, DocumentRequirement, TimelineItem } from '../../types';
+import { StorageService, BUCKETS } from '../../services/storage';
 import { XIcon } from '../icons/XIcon';
 import { CheckCircleIcon } from '../icons/CheckCircleIcon';
 import { XCircleIcon } from '../icons/XCircleIcon';
@@ -126,17 +127,17 @@ const AdmissionDetailsModal: React.FC<AdmissionDetailsModalProps> = ({ admission
 
     const handleView = async (path: string) => {
         try {
-            const { data, error } = await supabase.storage.from('guardian-documents').createSignedUrl(path, 3600);
-            if (error) throw error;
-            window.open(data.signedUrl, '_blank');
-        } catch (e) { alert("Protocol Failure: Could not resolve artifact path."); }
+            const signedUrl = await StorageService.getSignedUrl(BUCKETS.GUARDIAN_DOCUMENTS, path, 3600);
+            window.open(signedUrl, '_blank');
+        } catch (error: any) {
+            alert("Protocol Failure: Could not resolve artifact path. " + (error.message || "Please check storage configuration."));
+        }
     };
 
     const handleDownload = async (path: string, fileName: string) => {
         setDownloadingPath(path);
         try {
-            const { data, error } = await supabase.storage.from('guardian-documents').download(path);
-            if (error) throw error;
+            const data = await StorageService.download(BUCKETS.GUARDIAN_DOCUMENTS, path);
             const blob = new Blob([data], { type: data.type });
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -146,8 +147,11 @@ const AdmissionDetailsModal: React.FC<AdmissionDetailsModalProps> = ({ admission
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
-        } catch (err) { alert("Protocol Failure: Asset retrieval timed out."); }
-        finally { setDownloadingPath(null); }
+        } catch (error: any) {
+            alert("Protocol Failure: Asset retrieval timed out. " + (error.message || "Please check storage configuration."));
+        } finally {
+            setDownloadingPath(null);
+        }
     };
 
     const mandatoryPending = requirements.filter(r => r.is_mandatory && r.status !== 'Verified').length;

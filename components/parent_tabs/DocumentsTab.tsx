@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../services/supabase';
+import { StorageService, BUCKETS } from '../../services/storage';
 import { AdmissionApplication } from '../../types';
 import Spinner from '../common/Spinner';
 import { DocumentTextIcon } from '../icons/DocumentTextIcon';
@@ -180,22 +181,29 @@ const DocumentsTab: React.FC<{ focusOnAdmissionId?: string | null; onClearFocus?
 
     const handleUpload = async (file: File, reqId: number, admId: string) => {
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        
-        const filePath = `parent/${user.id}/adm-${admId}/req-${reqId}_${Date.now()}`;
-        const { error: upErr } = await supabase.storage.from('guardian-documents').upload(filePath, file);
-        if (upErr) throw upErr;
+        if (!user) throw new Error('User authentication required');
 
-        const { error: dbErr } = await supabase.rpc('parent_complete_document_upload', {
-            p_requirement_id: reqId,
-            p_admission_id: admId,
-            p_file_name: file.name,
-            p_storage_path: filePath,
-            p_file_size: file.size,
-            p_mime_type: file.type
-        });
-        if (dbErr) throw dbErr;
-        fetchData();
+        const filePath = `parent/${user.id}/adm-${admId}/req-${reqId}_${Date.now()}`;
+
+        try {
+            // Use StorageService for consistent bucket handling
+            await StorageService.upload(BUCKETS.GUARDIAN_DOCUMENTS, filePath, file);
+
+            const { error: dbErr } = await supabase.rpc('parent_complete_document_upload', {
+                p_requirement_id: reqId,
+                p_admission_id: admId,
+                p_file_name: file.name,
+                p_storage_path: filePath,
+                p_file_size: file.size,
+                p_mime_type: file.type
+            });
+            if (dbErr) throw dbErr;
+
+            fetchData();
+        } catch (error: any) {
+            console.error("Document upload failed:", error);
+            throw new Error(error.message || 'Failed to upload document. Please try again.');
+        }
     };
 
     const toggleChild = (id: string) => {

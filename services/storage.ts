@@ -3,7 +3,8 @@ import { supabase } from './supabase';
 
 export const BUCKETS = {
     PROFILES: 'profile-images',
-    DOCUMENTS: 'student-documents' // Standardized for Admissions
+    DOCUMENTS: 'student-documents', // Standardized for Admissions
+    GUARDIAN_DOCUMENTS: 'guardian-documents' // For parent-uploaded admission documents
 } as const;
 
 export type BucketName = typeof BUCKETS[keyof typeof BUCKETS];
@@ -35,16 +36,43 @@ export const StorageService = {
                 upsert: true
             });
 
-        if (error) throw error;
+        if (error) {
+            // Handle bucket not found error gracefully
+            if (error.message?.includes('Bucket not found')) {
+                throw new Error(`Storage bucket '${bucket}' not found. Please ensure the bucket exists in Supabase Storage and has proper permissions.`);
+            }
+            throw error;
+        }
         return { path: data.path };
     },
 
-    async getSignedUrl(path: string, expiresIn = 3600) {
+    async getSignedUrl(bucket: BucketName, path: string, expiresIn = 3600) {
         const { data, error } = await supabase.storage
-            .from(BUCKETS.DOCUMENTS)
+            .from(bucket)
             .createSignedUrl(path, expiresIn);
-            
-        if (error) throw error;
+
+        if (error) {
+            // Handle bucket not found error gracefully
+            if (error.message?.includes('Bucket not found')) {
+                throw new Error(`Storage bucket '${bucket}' not found. Please ensure the bucket exists in Supabase Storage and has proper permissions.`);
+            }
+            throw error;
+        }
         return data.signedUrl;
+    },
+
+    async download(bucket: BucketName, path: string) {
+        const { data, error } = await supabase.storage
+            .from(bucket)
+            .download(path);
+
+        if (error) {
+            // Handle bucket not found error gracefully
+            if (error.message?.includes('Bucket not found')) {
+                throw new Error(`Storage bucket '${bucket}' not found. Please ensure the bucket exists in Supabase Storage and has proper permissions.`);
+            }
+            throw error;
+        }
+        return data;
     }
 };
