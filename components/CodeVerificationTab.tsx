@@ -78,7 +78,7 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
 
             // Step 3: Domain-Specific Processing
             if (verificationResult.code_type === 'Enquiry') {
-                const result = await EnquiryService.processEnquiryVerification(verificationResult.id as string);
+                const result = await EnquiryService.processEnquiryVerification(verificationResult.admission_id);
                 if (result.success) {
                     setSyncSuccess(true);
                     setTimeout(() => onNavigate?.('Enquiries'), 1500);

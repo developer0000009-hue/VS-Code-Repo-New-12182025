@@ -10,17 +10,17 @@ export const EnquiryService = {
      * Processes an enquiry identity verification.
      * Strictly updates Enquiry state only.
      */
-    async processEnquiryVerification(enquiryId: string) {
+    async processEnquiryVerification(admissionId: string) {
         try {
-            if (!enquiryId) throw new Error("Reference ID required for processing.");
+            if (!admissionId) throw new Error("Reference ID required for processing.");
 
             const { data, error } = await supabase
                 .from('enquiries')
-                .update({ 
-                    status: 'ENQUIRY_VERIFIED',
+                .update({
+                    status: 'ENQUIRY_NODE_VERIFIED',
                     updated_at: new Date().toISOString()
                 })
-                .eq('id', enquiryId)
+                .eq('admission_id', admissionId)
                 .select()
                 .maybeSingle();
 
