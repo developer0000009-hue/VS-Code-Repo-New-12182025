@@ -26,13 +26,13 @@ const LocalSendIcon = (props: React.SVGProps<SVGSVGElement>) => (
 );
 
 const STATUS_CONFIG: Record<string, { icon: React.ReactNode, label: string, color: string, ring: string, bg: string }> = {
-    'ENQUIRY_ACTIVE': { icon: <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"/>, label: 'Active', color: 'text-blue-700', ring: 'ring-blue-600', bg: 'bg-blue-50' },
-    'ENQUIRY_VERIFIED': { icon: <ShieldCheckIcon className="w-4 h-4"/>, label: 'Verified', color: 'text-teal-700', ring: 'ring-teal-500', bg: 'bg-teal-50' },
-    'ENQUIRY_IN_PROGRESS': { icon: <div className="w-2 h-2 rounded-full bg-purple-600"/>, label: 'In Progress', color: 'text-purple-700', ring: 'ring-purple-500', bg: 'bg-purple-50' },
+    'ENQUIRY_NODE_ACTIVE': { icon: <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"/>, label: 'Active', color: 'text-blue-700', ring: 'ring-blue-600', bg: 'bg-blue-50' },
+    'ENQUIRY_NODE_VERIFIED': { icon: <ShieldCheckIcon className="w-4 h-4"/>, label: 'Verified', color: 'text-teal-700', ring: 'ring-teal-500', bg: 'bg-teal-50' },
+    'ENQUIRY_NODE_IN_PROGRESS': { icon: <div className="w-2 h-2 rounded-full bg-purple-600"/>, label: 'In Progress', color: 'text-purple-700', ring: 'ring-purple-500', bg: 'bg-purple-50' },
     'CONVERTED': { icon: <CheckCircleIcon className="w-4 h-4"/>, label: 'Converted', color: 'text-emerald-700', ring: 'ring-emerald-500', bg: 'bg-emerald-50' },
 };
 
-const ORDERED_STATUSES: EnquiryStatus[] = ['ENQUIRY_ACTIVE', 'ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'];
+const ORDERED_STATUSES: EnquiryStatus[] = ['ENQUIRY_NODE_ACTIVE', 'ENQUIRY_NODE_VERIFIED', 'ENQUIRY_NODE_IN_PROGRESS', 'CONVERTED'];
 
 const TimelineEntry: React.FC<{ item: TimelineItem }> = ({ item }) => {
     if (item.item_type === 'MESSAGE') {
@@ -338,12 +338,12 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
                             <section className="pt-10 border-t border-white/5 space-y-8">
                                 <button 
                                     onClick={handleConvert}
-                                    disabled={loading.converting || enquiry.status === 'ENQUIRY_ACTIVE'}
-                                    className={`w-full py-7 md:py-8 rounded-[2.8rem] flex items-center justify-center gap-6 font-black text-xs uppercase tracking-[0.5em] transition-all duration-700 shadow-2xl active:scale-95 ${enquiry.status !== 'ENQUIRY_ACTIVE' ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-500/20' : 'bg-white/5 text-white/5 cursor-not-allowed border border-white/5 grayscale'}`}
+                                    disabled={loading.converting || enquiry.status === 'ENQUIRY_NODE_ACTIVE'}
+                                    className={`w-full py-7 md:py-8 rounded-[2.8rem] flex items-center justify-center gap-6 font-black text-xs uppercase tracking-[0.5em] transition-all duration-700 shadow-2xl active:scale-95 ${enquiry.status !== 'ENQUIRY_NODE_ACTIVE' ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-500/20' : 'bg-white/5 text-white/5 cursor-not-allowed border border-white/5 grayscale'}`}
                                 >
                                     {loading.converting ? <Spinner size="sm" className="text-white"/> : <><GraduationCapIcon className="w-7 h-7 opacity-60" /> PROMOTE TO ADMISSION</>}
                                 </button>
-                                {enquiry.status === 'ENQUIRY_ACTIVE' && <p className="text-[9px] text-amber-500/60 font-black uppercase tracking-[0.2em] text-center leading-relaxed">Identity verification protocol required <br/> prior to Promotion.</p>}
+                                {enquiry.status === 'ENQUIRY_NODE_ACTIVE' && <p className="text-[9px] text-amber-500/60 font-black uppercase tracking-[0.2em] text-center leading-relaxed">Identity verification protocol required <br/> prior to Promotion.</p>}
                             </section>
                         )}
 

@@ -55,7 +55,7 @@ export const getAdminMenu = (isHeadOfficeAdmin: boolean, userRole: string): Menu
             title: 'Enrollment',
             items: [
                 { id: 'Code Verification', label: 'Quick Verification', icon: <KeyIcon className="w-5 h-5" /> },
-                { id: 'Enquiries', label: 'Enquiry Desk', icon: <MailIcon className="w-5 h-5" /> },
+                { id: 'Enquiries', label: 'Enquiry Node', icon: <MailIcon className="w-5 h-5" /> },
                 { id: 'Admissions', label: 'Admission Vault', icon: <ClipboardListIcon className="w-5 h-5" /> },
             ]
         },

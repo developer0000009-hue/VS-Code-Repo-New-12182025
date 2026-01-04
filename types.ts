@@ -40,7 +40,7 @@ export interface UserProfile {
     grade?: string;
 }
 
-export type AdmissionStatus = 'Registered' | 'Pending Review' | 'Verified' | 'Approved' | 'Rejected' | 'Cancelled' | 'Enquiry Active' | 'ENQUIRY_ACTIVE' | 'ENQUIRY_VERIFIED' | 'ENQUIRY_IN_PROGRESS' | 'CONVERTED';
+export type AdmissionStatus = 'Registered' | 'Pending Review' | 'Verified' | 'Approved' | 'Rejected' | 'Cancelled' | 'Enquiry Node Active' | 'ENQUIRY_NODE_ACTIVE' | 'ENQUIRY_NODE_VERIFIED' | 'ENQUIRY_NODE_IN_PROGRESS' | 'CONVERTED';
 
 export interface AdmissionApplication {
     id: string;
@@ -210,7 +210,7 @@ export interface Communication {
     target_criteria?: any;
 }
 
-export type EnquiryStatus = 'New' | 'Contacted' | 'Verified' | 'ENQUIRY_VERIFIED' | 'In Review' | 'ENQUIRY_IN_PROGRESS' | 'ENQUIRY_ACTIVE' | 'Completed' | 'CONVERTED';
+export type EnquiryStatus = 'New' | 'Contacted' | 'Verified' | 'ENQUIRY_NODE_VERIFIED' | 'In Review' | 'ENQUIRY_NODE_IN_PROGRESS' | 'ENQUIRY_NODE_ACTIVE' | 'Completed' | 'CONVERTED';
 
 export interface MyEnquiry {
     id: string;

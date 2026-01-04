@@ -468,6 +468,7 @@ CREATE TABLE IF NOT EXISTS public.enquiries (
     parent_email text,
     parent_phone text,
     notes text,
+    updated_at timestamptz DEFAULT now(),
     admission_id bigint UNIQUE REFERENCES public.admissions(id) ON DELETE SET NULL,
     branch_id bigint REFERENCES public.school_branches(id) ON DELETE CASCADE
 );
@@ -1106,7 +1107,7 @@ CREATE OR REPLACE FUNCTION public.get_enquiry_timeline(p_enquiry_id bigint) RETU
 CREATE OR REPLACE FUNCTION public.update_enquiry_status(p_enquiry_id bigint, p_new_status text, p_notes text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN UPDATE public.enquiries SET status = p_new_status, notes = p_notes WHERE id = p_enquiry_id; END; $$;
 CREATE OR REPLACE FUNCTION public.convert_enquiry_to_admission(p_enquiry_id bigint) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$ DECLARE v_adm_id bigint; BEGIN SELECT admission_id INTO v_adm_id FROM public.enquiries WHERE id = p_enquiry_id; UPDATE public.admissions SET status = 'Pending Review', has_enquiry = true, submitted_by = auth.uid() WHERE id = v_adm_id; UPDATE public.enquiries SET status = 'Completed' WHERE id = p_enquiry_id; END; $$;
 CREATE OR REPLACE FUNCTION public.admin_verify_share_code(p_code text) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER AS $$ DECLARE v_share record; v_admission record; v_enquiry record; v_main_id bigint; BEGIN SELECT * INTO v_share FROM public.share_codes WHERE code = p_code AND status = 'Active' AND expires_at > now(); IF v_share IS NULL THEN RETURN jsonb_build_object('found', false, 'error', 'Invalid or expired code'); END IF; SELECT * INTO v_admission FROM public.admissions WHERE id = v_share.admission_id; IF v_share.code_type = 'Enquiry' THEN SELECT * INTO v_enquiry FROM public.enquiries WHERE admission_id = v_share.admission_id; v_main_id := v_enquiry.id; ELSE v_main_id := v_admission.id; END IF; RETURN jsonb_build_object( 'found', true, 'id', v_main_id, 'admission_id', v_admission.id, 'enquiry_id', v_enquiry.id, 'code_type', v_share.code_type, 'applicant_name', v_admission.applicant_name, 'grade', v_admission.grade, 'date_of_birth', v_admission.date_of_birth, 'gender', v_admission.gender, 'parent_name', v_admission.parent_name, 'parent_email', v_admission.parent_email, 'parent_phone', v_admission.parent_phone, 'already_imported', FALSE ); END; $$;
-CREATE OR REPLACE FUNCTION public.admin_import_record_from_share_code( p_admission_id bigint, p_code_type text, p_branch_id bigint ) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN IF p_code_type = 'Enquiry' THEN UPDATE public.admissions SET branch_id = p_branch_id, status = 'Enquiry' WHERE id = p_admission_id; INSERT INTO public.enquiries (admission_id, applicant_name, grade, branch_id, parent_name, parent_email, parent_phone) SELECT id, applicant_name, grade, p_branch_id, parent_name, parent_email, parent_phone FROM public.admissions WHERE id = p_admission_id ON CONFLICT DO NOTHING; ELSE UPDATE public.admissions SET branch_id = p_branch_id, status = 'Pending Review' WHERE id = p_admission_id; END IF; UPDATE public.share_codes SET status = 'Redeemed' WHERE admission_id = p_admission_id; END; $$;
+CREATE OR REPLACE FUNCTION public.admin_import_record_from_share_code( p_admission_id bigint, p_code_type text, p_branch_id bigint ) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN IF p_code_type = 'Enquiry' THEN UPDATE public.admissions SET branch_id = p_branch_id, status = 'Enquiry Node' WHERE id = p_admission_id; INSERT INTO public.enquiries (admission_id, applicant_name, grade, branch_id, parent_name, parent_email, parent_phone) SELECT id, applicant_name, grade, p_branch_id, parent_name, parent_email, parent_phone FROM public.admissions WHERE id = p_admission_id ON CONFLICT DO NOTHING; ELSE UPDATE public.admissions SET branch_id = p_branch_id, status = 'Pending Review' WHERE id = p_admission_id; END IF; UPDATE public.share_codes SET status = 'Redeemed' WHERE admission_id = p_admission_id; END; $$;
 CREATE OR REPLACE FUNCTION public.get_my_share_codes() RETURNS TABLE (
     id bigint,
     admission_id bigint,
@@ -1152,7 +1153,7 @@ BEGIN
     -- Complete the permit handshake based on code type
     IF p_code_type = 'Enquiry' THEN
         -- For Enquiry permits, create enquiry record and update admission status
-        UPDATE public.admissions SET status = 'Enquiry' WHERE id = p_admission_id;
+        UPDATE public.admissions SET status = 'Enquiry Node' WHERE id = p_admission_id;
         INSERT INTO public.enquiries (admission_id, applicant_name, grade, parent_name, parent_email, parent_phone)
         SELECT id, applicant_name, grade, parent_name, parent_email, parent_phone FROM public.admissions WHERE id = p_admission_id
         ON CONFLICT (admission_id) DO NOTHING;
