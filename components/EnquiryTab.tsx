@@ -232,7 +232,7 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                         <Spinner size="lg" className="text-primary" />
                         <p className="text-[11px] font-black uppercase text-white/20 tracking-[0.5em] animate-pulse">Syncing Lifecycle Protocol</p>
                     </div>
-                ) : processedEnquiries.length === 0 ? (
+                ) : stats.verified === 0 ? (
                     <div className="flex flex-col items-center justify-center py-48 text-center px-12 animate-in fade-in duration-1000">
                         <div className="w-32 h-32 bg-white/[0.01] rounded-[3rem] flex items-center justify-center mb-10 border border-white/5 shadow-inner">
                             <KeyIcon className="h-14 w-14 text-white/10" />
@@ -242,7 +242,7 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                             Verified enquiries from the <strong className="text-primary">Verification Center</strong> will appear here upon authorization.
                         </p>
                         {onNavigate && (
-                            <button 
+                            <button
                                 onClick={() => onNavigate('Code Verification')}
                                 className="mt-12 px-10 py-4 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-[0.3em] transition-all border border-white/5"
                             >

@@ -81,12 +81,12 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
                 const result = await EnquiryService.processEnquiryVerification(verificationResult.admission_id);
                 if (result.success) {
                     setSyncSuccess(true);
-                    setTimeout(() => onNavigate?.('Enquiries'), 1500);
+                    onNavigate?.('Enquiries');
                 }
             } else {
                 // Admission Import Flow (already imported above)
                 setSyncSuccess(true);
-                setTimeout(() => onNavigate?.('Admissions'), 1500);
+                onNavigate?.('Admissions');
             }
         } catch (err: any) {
             setError(formatError(err));
