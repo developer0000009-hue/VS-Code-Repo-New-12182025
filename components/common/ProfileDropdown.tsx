@@ -47,8 +47,8 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ profile, onSignOut, o
             const { data, error } = await supabase.rpc('get_user_completed_roles');
             if (!error && data) {
                 const found = new Set<string>();
-                (data as any[]).forEach(item => {
-                    if (item.is_completed) found.add(item.role_name);
+                (data as string[]).forEach(roleName => {
+                    found.add(roleName);
                 });
                 if (profile.role) found.add(profile.role);
                 setCompletedRoles(found);
