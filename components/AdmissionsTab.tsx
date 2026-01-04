@@ -188,8 +188,8 @@ const AdmissionsTab: React.FC<{ branchId?: string | null }> = ({ branchId }) => 
             const { data, error } = await supabase.rpc('get_admissions', { p_branch_id: branchId });
             if (error) throw error;
             
-            const admissionOnlyRoster = (data || []).filter((a: any) => 
-                !['Enquiry Active', 'ENQUIRY_ACTIVE', 'ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'].includes(a.status)
+            const admissionOnlyRoster = (data || []).filter((a: any) =>
+                !['Enquiry Active', 'ENQUIRY_ACTIVE', 'ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED', 'Enquiry Node', 'ENQUIRY_NODE_ACTIVE', 'ENQUIRY_NODE_VERIFIED', 'ENQUIRY_NODE_IN_PROGRESS'].includes(a.status)
             );
             setApplicants(admissionOnlyRoster as AdmissionApplication[]);
         } catch (err) {

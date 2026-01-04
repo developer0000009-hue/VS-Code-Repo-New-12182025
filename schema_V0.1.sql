@@ -1381,7 +1381,7 @@ END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.update_admission_status(p_admission_id bigint, p_new_status text) RETURNS void LANGUAGE sql SECURITY DEFINER AS $$ UPDATE public.admissions SET status = p_new_status WHERE id = p_admission_id; $$;
-CREATE OR REPLACE FUNCTION public.get_admissions(p_branch_id bigint DEFAULT NULL) RETURNS SETOF public.admissions LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN RETURN QUERY SELECT * FROM public.admissions WHERE branch_id IN (SELECT get_my_branch_ids()) AND (p_branch_id IS NULL OR branch_id = p_branch_id) AND status != 'Enquiry'; END; $$;
+CREATE OR REPLACE FUNCTION public.get_admissions(p_branch_id bigint DEFAULT NULL) RETURNS SETOF public.admissions LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN RETURN QUERY SELECT * FROM public.admissions WHERE branch_id IN (SELECT get_my_branch_ids()) AND (p_branch_id IS NULL OR branch_id = p_branch_id) AND status NOT IN ('Enquiry', 'Enquiry Node', 'ENQUIRY_NODE_ACTIVE', 'ENQUIRY_NODE_VERIFIED', 'ENQUIRY_NODE_IN_PROGRESS', 'CONVERTED'); END; $$;
 CREATE OR REPLACE FUNCTION public.get_all_enquiries(p_branch_id bigint DEFAULT NULL) RETURNS SETOF public.enquiries LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN RETURN QUERY SELECT * FROM public.enquiries WHERE branch_id IN (SELECT get_my_branch_ids()) AND (p_branch_id IS NULL OR branch_id = p_branch_id); END; $$;
 CREATE OR REPLACE FUNCTION public.get_parent_dashboard_stats() RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER AS $$ DECLARE v_total int; v_pending int; v_approved int; BEGIN SELECT COUNT(*) INTO v_total FROM public.admissions WHERE parent_id = auth.uid(); SELECT COUNT(*) INTO v_pending FROM public.admissions WHERE parent_id = auth.uid() AND status IN ('Pending Review', 'Documents Requested'); SELECT COUNT(*) INTO v_approved FROM public.admissions WHERE parent_id = auth.uid() AND status = 'Approved'; RETURN jsonb_build_object('total_applications', v_total, 'pending_applications', v_pending, 'approved_applications', v_approved); END; $$;
 CREATE OR REPLACE FUNCTION public.teacher_create_assignment(p_class_id bigint, p_subject_id bigint, p_title text, p_description text, p_due_date timestamptz, p_teacher_id uuid) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN INSERT INTO public.assignments (class_id, subject_id, teacher_id, title, description, due_date) VALUES (p_class_id, p_subject_id, p_teacher_id, p_title, p_description, p_due_date); END; $$;
@@ -1843,5 +1843,16 @@ CREATE INDEX IF NOT EXISTS idx_storage_files_entity ON public.storage_files(enti
 CREATE INDEX IF NOT EXISTS idx_storage_files_uploaded_by ON public.storage_files(uploaded_by);
 CREATE INDEX IF NOT EXISTS idx_user_role_assignments_user ON public.user_role_assignments(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_role_assignments_branch ON public.user_role_assignments(branch_id);
+
+-- Data cleanup: Remove any enquiry records that slipped into admissions table
+UPDATE public.admissions
+SET status = 'Removed'
+WHERE status IN ('Enquiry Node', 'ENQUIRY_NODE_ACTIVE', 'ENQUIRY_NODE_VERIFIED', 'ENQUIRY_NODE_IN_PROGRESS')
+AND has_enquiry = true;
+
+-- Add check constraint to prevent enquiry statuses in admissions table
+ALTER TABLE public.admissions
+ADD CONSTRAINT check_admission_status
+CHECK (status NOT IN ('Enquiry Node', 'ENQUIRY_NODE_ACTIVE', 'ENQUIRY_NODE_VERIFIED', 'ENQUIRY_NODE_IN_PROGRESS'));
 
 NOTIFY pgrst, 'reload schema';
