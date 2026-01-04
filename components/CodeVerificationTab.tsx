@@ -65,9 +65,18 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
         if (!verificationResult) return;
         setProcessing(true);
         setError(null);
-        
+
         try {
-            // Step 2: Domain-Specific Processing
+            // Step 2: Import Record (sets branch_id for enquiries)
+            const { data: importData, error: impError } = await supabase.rpc('admin_import_record_from_share_code', {
+                p_admission_id: verificationResult.admission_id,
+                p_code_type: verificationResult.code_type,
+                p_branch_id: branchId || null
+            });
+
+            if (impError) throw impError;
+
+            // Step 3: Domain-Specific Processing
             if (verificationResult.code_type === 'Enquiry') {
                 const result = await EnquiryService.processEnquiryVerification(verificationResult.id as string);
                 if (result.success) {
@@ -75,14 +84,7 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
                     setTimeout(() => onNavigate?.('Enquiries'), 1500);
                 }
             } else {
-                // Admission Import Flow
-                const { data, error: impError } = await supabase.rpc('admin_import_record_from_share_code', {
-                    p_admission_id: verificationResult.admission_id,
-                    p_code_type: verificationResult.code_type,
-                    p_branch_id: branchId || null
-                });
-                
-                if (impError) throw impError;
+                // Admission Import Flow (already imported above)
                 setSyncSuccess(true);
                 setTimeout(() => onNavigate?.('Admissions'), 1500);
             }

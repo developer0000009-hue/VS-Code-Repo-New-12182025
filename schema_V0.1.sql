@@ -1713,7 +1713,12 @@ CREATE POLICY "Parents can view their own enquiries" ON public.enquiries
 FOR SELECT USING (EXISTS (SELECT 1 FROM admissions WHERE id = admission_id AND parent_id = auth.uid()));
 DROP POLICY IF EXISTS "Admins can manage enquiries in their branch" ON public.enquiries;
 CREATE POLICY "Admins can manage enquiries in their branch" ON public.enquiries
-FOR ALL USING (branch_id IN (SELECT get_my_branch_ids()));
+FOR ALL USING (
+    branch_id IN (SELECT get_my_branch_ids()) OR
+    (branch_id IS NULL AND admission_id IN (
+        SELECT id FROM public.admissions WHERE branch_id IN (SELECT get_my_branch_ids())
+    ))
+);
 
 -- NEW RLS for FINANCE
 ALTER TABLE public.vendors ENABLE ROW LEVEL SECURITY;
