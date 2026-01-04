@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { supabase, formatError } from '../services/supabase';
 import { EnquiryService } from '../services/enquiry';
+import { AdmissionService } from '../services/admission';
 import { VerifiedShareCodeData } from '../types';
 import Spinner from './common/Spinner';
 import { KeyIcon } from './icons/KeyIcon';
@@ -84,9 +85,12 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
                     onNavigate?.('Enquiries');
                 }
             } else {
-                // Admission Import Flow (already imported above)
-                setSyncSuccess(true);
-                onNavigate?.('Admissions');
+                // Admission Verification Flow
+                const result = await AdmissionService.processAdmissionVerification(verificationResult.admission_id);
+                if (result.success) {
+                    setSyncSuccess(true);
+                    onNavigate?.('Admissions');
+                }
             }
         } catch (err: any) {
             setError(formatError(err));

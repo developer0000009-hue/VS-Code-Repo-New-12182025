@@ -200,7 +200,20 @@ const AdmissionsTab: React.FC<{ branchId?: string | null }> = ({ branchId }) => 
         }
     }, [branchId]);
 
-    useEffect(() => { fetchApplicants(); }, [fetchApplicants]);
+    useEffect(() => {
+        fetchApplicants();
+
+        const channel = supabase.channel(`admissions-vault-sync-${branchId || 'master'}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'admissions' }, (payload) => {
+                const record = payload.new as any || payload.old as any;
+                if (branchId === null || branchId === undefined || record.branch_id === branchId) {
+                    fetchApplicants(true);
+                }
+            })
+            .subscribe();
+
+        return () => { supabase.removeChannel(channel); };
+    }, [fetchApplicants, branchId]);
 
     const filteredApps = (applicants || []).filter(app => 
         filterStatus === 'All' || app.status === filterStatus
