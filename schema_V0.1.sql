@@ -1197,19 +1197,24 @@ AS $$
 DECLARE
     v_code text;
 BEGIN
+    -- Validate input parameters
+    IF p_admission_id IS NULL THEN
+        RAISE EXCEPTION 'Admission ID cannot be null';
+    END IF;
+
     -- Verify that the admission belongs to the authenticated parent
     IF NOT EXISTS (SELECT 1 FROM public.admissions WHERE id = p_admission_id AND parent_id = auth.uid()) THEN
         RAISE EXCEPTION 'Unauthorized access to admission';
     END IF;
 
     v_code := upper(substring(md5(random()::text), 1, 12));
-    INSERT INTO public.share_codes (code, admission_id, purpose, code_type, expires_at) VALUES (v_code, p_admission_id, p_purpose, p_code_type, now() + interval '1 day');
 
-    -- Only handle Admission codes - Enquiry codes are handled separately
-    IF p_code_type = 'Admission' THEN
-        -- For Admission permits, update admission status to indicate document request phase
-        UPDATE public.admissions SET status = 'Pending Review' WHERE id = p_admission_id;
-    END IF;
+    -- Fix: Ensure code_type is set to 'Admission' for admission codes to satisfy the CHECK constraint
+    INSERT INTO public.share_codes (code, admission_id, purpose, code_type, expires_at)
+    VALUES (v_code, p_admission_id, p_purpose, 'Admission', now() + interval '1 day');
+
+    -- For Admission permits, update admission status to indicate document request phase
+    UPDATE public.admissions SET status = 'Pending Review' WHERE id = p_admission_id;
 
     RETURN v_code;
 END;

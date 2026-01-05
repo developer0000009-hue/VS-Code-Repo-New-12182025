@@ -78,11 +78,11 @@ export default function ShareCodesTab() {
 
   const handleGenerateCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedAdmission) {
-      alert('Please select an application.');
+    if (!selectedAdmission || selectedAdmission.trim() === '') {
+      setError('Please select a child application before generating a code.');
       return;
     }
-    
+
     setGenerating(true);
     setGeneratedCode(null);
     setError(null);
@@ -93,15 +93,15 @@ export default function ShareCodesTab() {
 
       if (codeType === 'Enquiry') {
         const result = await supabase.rpc('generate_enquiry_share_code', {
-          p_admission_id: selectedAdmission,
-          p_purpose: purpose,
+          p_admission_id: selectedAdmission.trim(),
+          p_purpose: purpose.trim(),
         });
         data = result.data;
         error = result.error;
       } else {
         const result = await supabase.rpc('generate_admission_share_code', {
-          p_admission_id: selectedAdmission,
-          p_purpose: purpose,
+          p_admission_id: selectedAdmission.trim(),
+          p_purpose: purpose.trim(),
           p_code_type: codeType,
         });
         data = result.data;
