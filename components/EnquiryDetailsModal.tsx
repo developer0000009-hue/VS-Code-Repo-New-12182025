@@ -32,7 +32,7 @@ const STATUS_CONFIG: Record<string, { icon: React.ReactNode, label: string, colo
     'CONVERTED': { icon: <CheckCircleIcon className="w-4 h-4"/>, label: 'Converted', color: 'text-emerald-700', ring: 'ring-emerald-500', bg: 'bg-emerald-50' },
 };
 
-const ORDERED_STATUSES: EnquiryStatus[] = ['ENQUIRY_NODE_ACTIVE', 'ENQUIRY_NODE_VERIFIED', 'ENQUIRY_NODE_IN_PROGRESS', 'CONVERTED'];
+const ORDERED_STATUSES: EnquiryStatus[] = ['ENQUIRY_ACTIVE', 'ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'];
 
 const TimelineEntry: React.FC<{ item: TimelineItem }> = ({ item }) => {
     if (item.item_type === 'MESSAGE') {
@@ -114,24 +114,32 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
     }, [timeline]);
 
     const handleAIGenerateSummary = async () => {
+        const apiKey = import.meta.env.VITE_GOOGLE_AI_API_KEY;
+        if (!apiKey) {
+            console.error("Google AI API key not configured");
+            setAiSummary("AI summary unavailable - API key not configured.");
+            return;
+        }
+
         setLoading(prev => ({ ...prev, ai: true }));
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenAI({ apiKey });
             const conversationText = timeline
                 .filter(t => t.item_type === 'MESSAGE')
                 .map(t => `${t.is_admin ? 'Admin' : 'Parent'}: ${t.details.message}`)
                 .join('\n');
-                
+
             const prompt = `Summarize the following school admission enquiry conversation for ${enquiry.applicant_name} (Grade ${enquiry.grade}). Provide a concise analysis of the parent's primary concerns and the current status of the handshake. Tone: Executive and Brief.\n\nConversation:\n${conversationText}`;
-            
+
             const response = await ai.models.generateContent({
                 model: 'gemini-3-flash-preview',
                 contents: prompt
             });
-            
+
             setAiSummary(response.text || "Summary unavailable.");
         } catch (err) {
             console.error("AI Context Failure:", err);
+            setAiSummary("AI summary failed - please try again.");
         } finally {
             setLoading(prev => ({ ...prev, ai: false }));
         }
@@ -275,24 +283,27 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
                                 <div className="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.8)] animate-pulse"></div>
                             </div>
                             <div className="space-y-4">
-                                {ORDERED_STATUSES.map(s => (
-                                    <button 
-                                        key={s} 
-                                        onClick={() => handleSaveStatus(s)}
-                                        disabled={loading.saving || enquiry.status === 'CONVERTED'}
-                                        className={`w-full flex items-center justify-between p-6 rounded-[2rem] border transition-all duration-700 group/btn relative overflow-hidden ${enquiry.status === s ? 'bg-primary/10 border-primary text-white shadow-2xl' : 'bg-black/20 border-white/5 text-white/30 hover:bg-white/5 hover:border-white/20'}`}
-                                    >
-                                        <div className="flex items-center gap-5 relative z-10">
-                                            <div className={`p-3 rounded-xl transition-all duration-700 ${enquiry.status === s ? 'bg-primary text-white shadow-lg rotate-3' : 'bg-white/5 text-white/20 group-hover/btn:scale-110'}`}>
-                                                {STATUS_CONFIG[s]?.icon}
+                                {ORDERED_STATUSES.map(s => {
+                                    const config = STATUS_CONFIG[s] || { icon: <div className="w-4 h-4 bg-gray-500 rounded" />, label: s.replace(/_/g, ' ') };
+                                    return (
+                                        <button
+                                            key={s}
+                                            onClick={() => handleSaveStatus(s)}
+                                            disabled={loading.saving || enquiry.status === 'CONVERTED'}
+                                            className={`w-full flex items-center justify-between p-6 rounded-[2rem] border transition-all duration-700 group/btn relative overflow-hidden ${enquiry.status === s ? 'bg-primary/10 border-primary text-white shadow-2xl' : 'bg-black/20 border-white/5 text-white/30 hover:bg-white/5 hover:border-white/20'}`}
+                                        >
+                                            <div className="flex items-center gap-5 relative z-10">
+                                                <div className={`p-3 rounded-xl transition-all duration-700 ${enquiry.status === s ? 'bg-primary text-white shadow-lg rotate-3' : 'bg-white/5 text-white/20 group-hover/btn:scale-110'}`}>
+                                                    {config.icon}
+                                                </div>
+                                                <span className={`text-sm font-black uppercase tracking-[0.2em] transition-colors duration-700 ${enquiry.status === s ? 'text-primary' : 'group-hover/btn:text-white'}`}>
+                                                    {config.label}
+                                                </span>
                                             </div>
-                                            <span className={`text-sm font-black uppercase tracking-[0.2em] transition-colors duration-700 ${enquiry.status === s ? 'text-primary' : 'group-hover/btn:text-white'}`}>
-                                                {STATUS_CONFIG[s]?.label}
-                                            </span>
-                                        </div>
-                                        {enquiry.status === s && <CheckCircleIcon className="w-5 h-5 text-primary animate-in zoom-in duration-500 relative z-10" />}
-                                    </button>
-                                ))}
+                                            {enquiry.status === s && <CheckCircleIcon className="w-5 h-5 text-primary animate-in zoom-in duration-500 relative z-10" />}
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </section>
 

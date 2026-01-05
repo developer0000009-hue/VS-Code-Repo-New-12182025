@@ -210,7 +210,7 @@ export interface Communication {
     target_criteria?: any;
 }
 
-export type EnquiryStatus = 'New' | 'Contacted' | 'Verified' | 'ENQUIRY_NODE_VERIFIED' | 'In Review' | 'ENQUIRY_NODE_IN_PROGRESS' | 'ENQUIRY_NODE_ACTIVE' | 'Completed' | 'CONVERTED';
+export type EnquiryStatus = 'New' | 'Contacted' | 'Verified' | 'ENQUIRY_VERIFIED' | 'In Review' | 'ENQUIRY_IN_PROGRESS' | 'ENQUIRY_ACTIVE' | 'Completed' | 'CONVERTED';
 
 export interface MyEnquiry {
     id: string;
