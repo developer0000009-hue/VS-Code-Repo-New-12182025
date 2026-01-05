@@ -505,9 +505,9 @@ CREATE TABLE IF NOT EXISTS public.share_codes (
     purpose text,
     expires_at timestamptz DEFAULT now() + interval '1 day',
     created_at timestamptz DEFAULT now(),
-    -- Ensure only one of admission_id or enquiry_id is set based on code_type
+    -- Ensure proper reference based on code_type, allowing enquiry_id for converted admissions
     CONSTRAINT check_share_code_reference CHECK (
-        (code_type = 'Admission' AND admission_id IS NOT NULL AND enquiry_id IS NULL) OR
+        (code_type = 'Admission' AND admission_id IS NOT NULL) OR
         (code_type = 'Enquiry' AND enquiry_id IS NOT NULL AND admission_id IS NULL)
     )
 );
@@ -1111,7 +1111,17 @@ CREATE OR REPLACE FUNCTION public.get_communications_history() RETURNS SETOF pub
 CREATE OR REPLACE FUNCTION public.send_enquiry_message(p_enquiry_id bigint, p_message text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN INSERT INTO public.enquiry_messages (enquiry_id, sender_id, message, is_admin_message) VALUES (p_enquiry_id, auth.uid(), p_message, EXISTS(SELECT 1 FROM public.school_admin_profiles WHERE user_id = auth.uid())); END; $$;
 CREATE OR REPLACE FUNCTION public.get_enquiry_timeline(p_enquiry_id bigint) RETURNS TABLE (id bigint, item_type text, created_at timestamptz, created_by_name text, is_admin boolean, details jsonb) LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN RETURN QUERY SELECT m.id, 'MESSAGE' as item_type, m.created_at, p.display_name, m.is_admin_message, jsonb_build_object('message', m.message) FROM public.enquiry_messages m LEFT JOIN public.profiles p ON m.sender_id = p.id WHERE m.enquiry_id = p_enquiry_id ORDER BY m.created_at ASC; END; $$;
 CREATE OR REPLACE FUNCTION public.update_enquiry_status(p_enquiry_id bigint, p_new_status text, p_notes text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN UPDATE public.enquiries SET status = p_new_status, notes = p_notes WHERE id = p_enquiry_id; END; $$;
-CREATE OR REPLACE FUNCTION public.convert_enquiry_to_admission(p_enquiry_id bigint) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$ DECLARE v_adm_id bigint; BEGIN SELECT admission_id INTO v_adm_id FROM public.enquiries WHERE id = p_enquiry_id; UPDATE public.admissions SET status = 'Pending Review', has_enquiry = true, submitted_by = auth.uid() WHERE id = v_adm_id; UPDATE public.enquiries SET status = 'Completed' WHERE id = p_enquiry_id; END; $$;
+CREATE OR REPLACE FUNCTION public.convert_enquiry_to_admission(p_enquiry_id bigint) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    v_adm_id bigint;
+BEGIN
+    SELECT admission_id INTO v_adm_id FROM public.enquiries WHERE id = p_enquiry_id;
+    UPDATE public.admissions SET status = 'Pending Review', has_enquiry = true, submitted_by = auth.uid() WHERE id = v_adm_id;
+    UPDATE public.enquiries SET status = 'Completed' WHERE id = p_enquiry_id;
+    -- Migrate share codes from enquiry to admission
+    UPDATE public.share_codes SET admission_id = v_adm_id, code_type = 'Admission' WHERE enquiry_id = p_enquiry_id;
+END;
+$$;
 CREATE OR REPLACE FUNCTION public.admin_verify_share_code(p_code text) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER AS $$ DECLARE v_share record; v_admission record; v_enquiry record; v_main_id bigint; BEGIN SELECT * INTO v_share FROM public.share_codes WHERE code = p_code AND status = 'Active' AND expires_at > now(); IF v_share IS NULL THEN RETURN jsonb_build_object('found', false, 'error', 'Invalid or expired code'); END IF; SELECT * INTO v_admission FROM public.admissions WHERE id = v_share.admission_id; IF v_share.code_type = 'Enquiry' THEN SELECT * INTO v_enquiry FROM public.enquiries WHERE admission_id = v_share.admission_id; END IF; v_main_id := v_admission.id; RETURN jsonb_build_object( 'found', true, 'id', v_main_id, 'admission_id', v_admission.id, 'enquiry_id', v_enquiry.id, 'code_type', v_share.code_type, 'applicant_name', v_admission.applicant_name, 'grade', v_admission.grade, 'date_of_birth', v_admission.date_of_birth, 'gender', v_admission.gender, 'parent_name', v_admission.parent_name, 'parent_email', v_admission.parent_email, 'parent_phone', v_admission.parent_phone, 'already_imported', FALSE ); END; $$;
 CREATE OR REPLACE FUNCTION public.admin_import_record_from_share_code( p_admission_id bigint, p_code_type text, p_branch_id bigint ) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN IF p_code_type = 'Enquiry' THEN UPDATE public.admissions SET branch_id = p_branch_id, status = 'Enquiry Node' WHERE id = p_admission_id; INSERT INTO public.enquiries (admission_id, applicant_name, grade, branch_id, parent_name, parent_email, parent_phone) SELECT id, applicant_name, grade, p_branch_id, parent_name, parent_email, parent_phone FROM public.admissions WHERE id = p_admission_id ON CONFLICT DO NOTHING; ELSE UPDATE public.admissions SET branch_id = p_branch_id, status = 'Pending Review' WHERE id = p_admission_id; END IF; UPDATE public.share_codes SET status = 'Redeemed' WHERE admission_id = p_admission_id; END; $$;
 CREATE OR REPLACE FUNCTION public.get_my_share_codes() RETURNS TABLE (
@@ -1142,8 +1152,8 @@ BEGIN
     FROM public.share_codes sc
     LEFT JOIN public.admissions a ON sc.admission_id = a.id AND sc.code_type = 'Admission'
     LEFT JOIN public.enquiries e ON sc.enquiry_id = e.id AND sc.code_type = 'Enquiry'
-    WHERE (a.parent_id = auth.uid() AND sc.code_type = 'Admission')
-       OR (e.admission_id IN (SELECT id FROM public.admissions WHERE parent_id = auth.uid()) AND sc.code_type = 'Enquiry');
+    WHERE (sc.code_type = 'Admission' AND EXISTS (SELECT 1 FROM public.admissions a2 WHERE a2.id = sc.admission_id AND a2.parent_id = auth.uid()))
+       OR (sc.code_type = 'Enquiry' AND EXISTS (SELECT 1 FROM public.enquiries e2 JOIN public.admissions a2 ON e2.admission_id = a2.id WHERE e2.id = sc.enquiry_id AND a2.parent_id = auth.uid()));
 END;
 $$;
 CREATE OR REPLACE FUNCTION public.generate_enquiry_share_code(p_admission_id bigint, p_purpose text) RETURNS text

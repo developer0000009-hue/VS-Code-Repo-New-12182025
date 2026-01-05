@@ -16,7 +16,6 @@ import CustomSelect from '../common/CustomSelect';
 import { SparklesIcon } from '../icons/SparklesIcon';
 import { PlusIcon } from '../icons/PlusIcon';
 import { TrashIcon } from '../icons/TrashIcon';
-import { GoogleGenAI } from '@google/genai';
 import { LayersIcon } from '../icons/LayersIcon';
 import { ChartBarIcon } from '../icons/ChartBarIcon';
 import { UsersIcon } from '../icons/UsersIcon';
@@ -75,39 +74,11 @@ export const CourseCreationWizard: React.FC<WizardProps> = ({ onClose, onSuccess
     const handleBack = () => setCurrentStep(prev => Math.max(prev - 1, 0));
 
     const generateDescription = async () => {
-        if (!formData.title) return alert("Please enter a course title first.");
-        setAiGenerating(true);
-        try {
-             if (!process.env.API_KEY) throw new Error("AI Key Missing");
-             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-             const prompt = `Act as an expert academic curriculum designer. Write a comprehensive course description for a subject titled "${formData.title}" for Grade ${formData.grade_level}. Include a Curriculum Overview, 3-5 Learning Objectives, and Target Audience. Tone: Professional and engaging.`;
-             const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-             if (response.text) handleChange('description', response.text);
-        } catch (err: any) {
-            alert("AI Generation failed: " + err.message);
-        } finally {
-            setAiGenerating(false);
-        }
+        alert("AI description generation is currently unavailable. Please enter the course description manually.");
     };
 
     const generateSyllabus = async () => {
-        if (!formData.title) return alert("Please enter a course title first.");
-        setAiSyllabusGenerating(true);
-        try {
-             if (!process.env.API_KEY) throw new Error("AI Key Missing");
-             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-             const prompt = `Generate a structured syllabus for a high school course titled "${formData.title}" (Grade ${formData.grade_level}). Return ONLY a JSON array of objects, where each object has "title" (string), "objectives" (string summary), and "hours" (integer estimate). Limit to 5 units.`;
-             const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: 'application/json' } });
-             if (response.text) {
-                 const generatedUnits = JSON.parse(response.text.replace(/```json|```/g, '').trim());
-                 const mappedUnits = generatedUnits.map((u: any) => ({ title: u.title, objectives: u.objectives, hours: u.hours || 5, files: [] }));
-                 setCurriculum(mappedUnits);
-             }
-        } catch (err: any) {
-            alert("AI Syllabus Generation failed: " + err.message);
-        } finally {
-            setAiSyllabusGenerating(false);
-        }
+        alert("AI syllabus generation is currently unavailable. Please build the curriculum manually.");
     };
 
     const addSection = () => { if (sectionInput.trim() && !formData.sections.includes(sectionInput.trim())) { handleChange('sections', [...formData.sections, sectionInput.trim()]); setSectionInput(''); } };
