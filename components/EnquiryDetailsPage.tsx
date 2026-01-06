@@ -50,7 +50,7 @@ const STATUS_CONFIG: Record<string, { icon: React.ReactNode, label: string, colo
     'Completed': { icon: <CheckCircleIcon className="w-4 h-4"/>, label: 'Completed', color: 'text-emerald-700', ring: 'ring-emerald-500', bg: 'bg-emerald-50' },
 };
 
-const ORDERED_STATUSES: EnquiryStatus[] = ['ENQUIRY_ACTIVE', 'ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'];
+const ORDERED_STATUSES: EnquiryStatus[] = ['ENQUIRY_VERIFIED', 'In Review'];
 
 const TimelineEntry: React.FC<{ item: TimelineItem }> = ({ item }) => {
     if (item.item_type === 'MESSAGE') {
@@ -679,16 +679,11 @@ const EnquiryDetailsPage: React.FC<EnquiryDetailsPageProps> = ({ onNavigate }) =
                     <div className="flex-1 overflow-y-auto p-8 space-y-8">
                         {/* Student Identity Card */}
                         <div className="group bg-gradient-to-br from-slate-800/40 via-slate-900/60 to-slate-800/40 backdrop-blur-2xl border border-slate-700/50 rounded-3xl p-8 hover:border-slate-600/60 hover:shadow-2xl hover:shadow-indigo-500/5 transition-all duration-500 hover:-translate-y-1">
-                            <div className="flex items-center justify-between mb-6">
-                                <div className="flex items-center gap-4">
-                                    <div className="p-3 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 text-indigo-300 border border-indigo-500/20">
-                                        <UserIcon className="w-6 h-6" />
-                                    </div>
-                                    <h3 className="text-xl font-bold text-white tracking-tight">Student Identity</h3>
+                            <div className="flex items-center gap-4 mb-6">
+                                <div className="p-3 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 text-indigo-300 border border-indigo-500/20">
+                                    <UserIcon className="w-6 h-6" />
                                 </div>
-                                <button className="p-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-700/60 text-slate-400 hover:text-white transition-all duration-300 border border-slate-600/30 hover:border-slate-500/40 opacity-0 group-hover:opacity-100">
-                                    <EditIcon className="w-4 h-4" />
-                                </button>
+                                <h3 className="text-xl font-bold text-white tracking-tight">Student Identity</h3>
                             </div>
                             <div className="grid grid-cols-2 gap-8">
                                 <div className="space-y-2">
@@ -696,28 +691,36 @@ const EnquiryDetailsPage: React.FC<EnquiryDetailsPageProps> = ({ onNavigate }) =
                                     <p className="text-white font-semibold text-lg tracking-wide">{enquiry.applicant_name}</p>
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-[0.15em] letter-spacing-1">Grade Level</label>
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-[0.15em] letter-spacing-1">Grade Applied</label>
                                     <p className="text-white font-semibold text-lg tracking-wide">Grade {enquiry.grade}</p>
                                 </div>
-                                <div className="col-span-2 space-y-2">
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-[0.15em] letter-spacing-1">Date of Birth</label>
-                                    <p className="text-slate-300 font-medium text-lg tracking-wide">Not specified</p>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-[0.15em] letter-spacing-1">Enquiry ID</label>
+                                    <p className="text-slate-300 font-medium text-lg tracking-wide">#{enquiry.id.toString().slice(-6)}</p>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-[0.15em] letter-spacing-1">Verification Status</label>
+                                    <div className="flex items-center gap-2">
+                                        <div className={`px-3 py-1 rounded-full text-sm font-bold ${
+                                            enquiry.status === 'ENQUIRY_VERIFIED' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                                            enquiry.status === 'VERIFIED' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                                            enquiry.status === 'IN_REVIEW' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                                            'bg-slate-500/20 text-slate-400 border border-slate-500/30'
+                                        }`}>
+                                            {STATUS_CONFIG[enquiry.status]?.label || enquiry.status}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Parent Intelligence Card */}
+                        {/* Parent Contact Card (Read-Only) */}
                         <div className="group bg-gradient-to-br from-slate-800/40 via-slate-900/60 to-slate-800/40 backdrop-blur-2xl border border-slate-700/50 rounded-3xl p-8 hover:border-emerald-500/30 hover:shadow-2xl hover:shadow-emerald-500/5 transition-all duration-500 hover:-translate-y-1">
-                            <div className="flex items-center justify-between mb-6">
-                                <div className="flex items-center gap-4">
-                                    <div className="p-3 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 text-emerald-300 border border-emerald-500/20">
-                                        <UsersIcon className="w-6 h-6" />
-                                    </div>
-                                    <h3 className="text-xl font-bold text-white tracking-tight">Parent Intelligence</h3>
+                            <div className="flex items-center gap-4 mb-6">
+                                <div className="p-3 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 text-emerald-300 border border-emerald-500/20">
+                                    <UsersIcon className="w-6 h-6" />
                                 </div>
-                                <button className="p-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-700/60 text-slate-400 hover:text-white transition-all duration-300 border border-slate-600/30 hover:border-slate-500/40 opacity-0 group-hover:opacity-100">
-                                    <EditIcon className="w-4 h-4" />
-                                </button>
+                                <h3 className="text-xl font-bold text-white tracking-tight">Parent Contact</h3>
                             </div>
                             <div className="grid grid-cols-2 gap-8">
                                 <div className="space-y-2">
@@ -725,76 +728,87 @@ const EnquiryDetailsPage: React.FC<EnquiryDetailsPageProps> = ({ onNavigate }) =
                                     <p className="text-white font-semibold text-lg tracking-wide">{enquiry.parent_name || 'Not provided'}</p>
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-[0.15em] letter-spacing-1">Relationship</label>
-                                    <p className="text-white font-semibold text-lg tracking-wide">Parent</p>
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-[0.15em] letter-spacing-1">Phone Number</label>
+                                    <p className="text-slate-300 font-medium text-lg tracking-wide">{enquiry.parent_phone || 'Not provided'}</p>
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-400 uppercase tracking-[0.15em] letter-spacing-1">Email Address</label>
                                     <p className="text-slate-300 font-medium text-lg tracking-wide">{enquiry.parent_email || 'Not provided'}</p>
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-[0.15em] letter-spacing-1">Phone Number</label>
-                                    <p className="text-slate-300 font-medium text-lg tracking-wide">{enquiry.parent_phone || 'Not provided'}</p>
-                                </div>
                             </div>
                         </div>
 
-                        {/* Academic Intent Card */}
-                        <div className="group bg-gradient-to-br from-slate-800/40 via-slate-900/60 to-slate-800/40 backdrop-blur-2xl border border-slate-700/50 rounded-3xl p-8 hover:border-purple-500/30 hover:shadow-2xl hover:shadow-purple-500/5 transition-all duration-500 hover:-translate-y-1">
-                            <div className="flex items-center justify-between mb-6">
-                                <div className="flex items-center gap-4">
-                                    <div className="p-3 rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 text-purple-300 border border-purple-500/20">
-                                        <AcademicCapIcon className="w-6 h-6" />
-                                    </div>
-                                    <h3 className="text-xl font-bold text-white tracking-tight">Academic Intent</h3>
-                                </div>
-                                <button className="p-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-700/60 text-slate-400 hover:text-white transition-all duration-300 border border-slate-600/30 hover:border-slate-500/40 opacity-0 group-hover:opacity-100">
-                                    <EditIcon className="w-4 h-4" />
-                                </button>
-                            </div>
-                            <div className="space-y-6">
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-[0.15em] letter-spacing-1">Target Grade</label>
-                                    <p className="text-white font-semibold text-xl tracking-wide">Grade {enquiry.grade}</p>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-[0.15em] letter-spacing-1">Admission Timeline</label>
-                                    <p className="text-slate-300 font-medium text-lg tracking-wide">Immediate (Current Session)</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Enquiry Source Card */}
+                        {/* Enquiry Progress Timeline */}
                         <div className="group bg-gradient-to-br from-slate-800/40 via-slate-900/60 to-slate-800/40 backdrop-blur-2xl border border-slate-700/50 rounded-3xl p-8 hover:border-amber-500/30 hover:shadow-2xl hover:shadow-amber-500/5 transition-all duration-500 hover:-translate-y-1">
-                            <div className="flex items-center justify-between mb-6">
-                                <div className="flex items-center gap-4">
-                                    <div className="p-3 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 text-amber-300 border border-amber-500/20">
-                                        <DocumentTextIcon className="w-6 h-6" />
-                                    </div>
-                                    <h3 className="text-xl font-bold text-white tracking-tight">Enquiry Source</h3>
+                            <div className="flex items-center gap-4 mb-6">
+                                <div className="p-3 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 text-amber-300 border border-amber-500/20">
+                                    <ClockIcon className="w-6 h-6" />
                                 </div>
-                                <button className="p-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-700/60 text-slate-400 hover:text-white transition-all duration-300 border border-slate-600/30 hover:border-slate-500/40 opacity-0 group-hover:opacity-100">
-                                    <EyeIcon className="w-4 h-4" />
-                                </button>
+                                <h3 className="text-xl font-bold text-white tracking-tight">Enquiry Progress</h3>
                             </div>
-                            <div className="space-y-6">
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-[0.15em] letter-spacing-1">Source Type</label>
-                                    <p className="text-white font-semibold text-lg tracking-wide">
-                                        {enquiry.admission_id ? 'Parent Portal Registration' : 'Direct School Enquiry'}
-                                    </p>
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-800/30 border border-slate-700/30">
+                                    <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
+                                        <CheckIcon className="w-4 h-4 text-emerald-400" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="text-sm font-semibold text-white">Enquiry Created</div>
+                                        <div className="text-xs text-slate-400">
+                                            {new Date(enquiry.received_at).toLocaleDateString(undefined, {
+                                                month: 'short',
+                                                day: 'numeric',
+                                                year: 'numeric'
+                                            })}
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-[0.15em] letter-spacing-1">Created Date</label>
-                                    <p className="text-slate-300 font-medium text-lg tracking-wide">
-                                        {new Date(enquiry.received_at).toLocaleDateString(undefined, {
-                                            year: 'numeric',
-                                            month: 'long',
-                                            day: 'numeric',
-                                            hour: '2-digit',
-                                            minute: '2-digit'
-                                        })}
-                                    </p>
+                                <div className={`flex items-center gap-4 p-4 rounded-2xl bg-slate-800/30 border ${
+                                    enquiry.status !== 'New' ? 'border-emerald-500/30' : 'border-slate-700/30'
+                                }`}>
+                                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${
+                                        enquiry.status !== 'New'
+                                            ? 'bg-emerald-500/20 border-emerald-500/30'
+                                            : 'bg-slate-800/50 border-slate-600'
+                                    }`}>
+                                        {enquiry.status !== 'New' ? (
+                                            <CheckIcon className="w-4 h-4 text-emerald-400" />
+                                        ) : (
+                                            <div className="w-2 h-2 rounded-full bg-slate-500 animate-pulse" />
+                                        )}
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className={`text-sm font-semibold ${enquiry.status !== 'New' ? 'text-white' : 'text-slate-400'}`}>
+                                            Documents Requested
+                                        </div>
+                                        <div className="text-xs text-slate-500">Status only</div>
+                                    </div>
+                                </div>
+                                <div className={`flex items-center gap-4 p-4 rounded-2xl bg-slate-800/30 border ${
+                                    ['ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'].includes(enquiry.status)
+                                        ? 'border-emerald-500/30'
+                                        : 'border-slate-700/30'
+                                }`}>
+                                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${
+                                        ['ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'].includes(enquiry.status)
+                                            ? 'bg-emerald-500/20 border-emerald-500/30'
+                                            : 'bg-slate-800/50 border-slate-600'
+                                    }`}>
+                                        {['ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'].includes(enquiry.status) ? (
+                                            <CheckIcon className="w-4 h-4 text-emerald-400" />
+                                        ) : (
+                                            <div className="w-2 h-2 rounded-full bg-slate-500 animate-pulse" />
+                                        )}
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className={`text-sm font-semibold ${
+                                            ['ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'].includes(enquiry.status)
+                                                ? 'text-white'
+                                                : 'text-slate-400'
+                                        }`}>
+                                            Verification Completed
+                                        </div>
+                                        <div className="text-xs text-slate-500">Identity and documents verified</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -905,6 +919,16 @@ const EnquiryDetailsPage: React.FC<EnquiryDetailsPageProps> = ({ onNavigate }) =
                             >
                                 <div className="font-semibold text-base mb-1">Request Documents</div>
                                 <div className="text-xs opacity-70 font-medium">Document checklist</div>
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    setNewMessage("Dear Parent,\n\nWe wanted to follow up on your enquiry for admission. We're here to help you through the process.\n\nPlease let us know if you have any questions or need assistance with the required documents.\n\nBest regards,\nAdmissions Team");
+                                }}
+                                className="group w-full p-4 rounded-2xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 hover:from-purple-500/20 hover:to-pink-500/20 text-purple-300 hover:text-purple-200 transition-all duration-300 text-left border border-purple-500/20 hover:border-purple-500/30 backdrop-blur-sm hover:shadow-lg hover:shadow-purple-500/10"
+                            >
+                                <div className="font-semibold text-base mb-1">Follow-up Reminder</div>
+                                <div className="text-xs opacity-70 font-medium">Gentle nudge message</div>
                             </button>
                         </div>
 
