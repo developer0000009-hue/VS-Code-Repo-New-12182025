@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase, formatError } from './services/supabase';
 import { Enquiry, EnquiryStatus } from './types';
 import Spinner from './components/common/Spinner';
+import ErrorBoundary from './components/common/ErrorBoundary';
 import EnquiryDetailsModal from './EnquiryDetailsModal';
 import { SearchIcon } from './components/icons/SearchIcon';
 import { KeyIcon } from './components/icons/KeyIcon';
@@ -310,15 +311,17 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
             </div>
 
             {viewingEnquiry && (
-                <EnquiryDetailsModal 
-                    enquiry={viewingEnquiry} 
-                    currentBranchId={branchId}
-                    onClose={() => setViewingEnquiry(null)} 
-                    onUpdate={() => {
-                        fetchEnquiries(true);
-                    }}
-                    onNavigate={onNavigate}
-                />
+                <ErrorBoundary>
+                    <EnquiryDetailsModal
+                        enquiry={viewingEnquiry}
+                        currentBranchId={branchId}
+                        onClose={() => setViewingEnquiry(null)}
+                        onUpdate={() => {
+                            fetchEnquiries(true);
+                        }}
+                        onNavigate={onNavigate}
+                    />
+                </ErrorBoundary>
             )}
         </div>
     );

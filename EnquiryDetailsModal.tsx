@@ -3,6 +3,7 @@ import { supabase, formatError } from './services/supabase';
 import { EnquiryService } from './services/enquiry';
 import { Enquiry, TimelineItem, EnquiryStatus } from './types';
 import Spinner from './components/common/Spinner';
+import ErrorBoundary from './components/common/ErrorBoundary';
 import { XIcon } from './components/icons/XIcon';
 import { CheckCircleIcon } from './components/icons/CheckCircleIcon';
 import { GraduationCapIcon } from './components/icons/GraduationCapIcon';
@@ -17,7 +18,7 @@ import { UsersIcon } from './components/icons/UsersIcon';
 import { PhoneIcon } from './components/icons/PhoneIcon';
 import { SearchIcon } from './components/icons/SearchIcon';
 import { ChevronLeftIcon } from './components/icons/ChevronLeftIcon';
-import { GoogleGenAI } from '@google/genai';
+import { AlertTriangleIcon } from './components/icons/AlertTriangleIcon';
 
 const LocalSendIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" {...props}>
@@ -26,13 +27,13 @@ const LocalSendIcon = (props: React.SVGProps<SVGSVGElement>) => (
 );
 
 const STATUS_CONFIG: Record<string, { icon: React.ReactNode, label: string, color: string, ring: string, bg: string }> = {
-    'ENQUIRY_NODE_ACTIVE': { icon: <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"/>, label: 'Active', color: 'text-blue-700', ring: 'ring-blue-600', bg: 'bg-blue-50' },
-    'ENQUIRY_NODE_VERIFIED': { icon: <ShieldCheckIcon className="w-4 h-4"/>, label: 'Verified', color: 'text-teal-700', ring: 'ring-teal-500', bg: 'bg-teal-50' },
-    'ENQUIRY_NODE_IN_PROGRESS': { icon: <div className="w-2 h-2 rounded-full bg-purple-600"/>, label: 'In Progress', color: 'text-purple-700', ring: 'ring-purple-500', bg: 'bg-purple-50' },
+    'ENQUIRY_ACTIVE': { icon: <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"/>, label: 'Active', color: 'text-blue-700', ring: 'ring-blue-600', bg: 'bg-blue-50' },
+    'ENQUIRY_VERIFIED': { icon: <ShieldCheckIcon className="w-4 h-4"/>, label: 'Verified', color: 'text-teal-700', ring: 'ring-teal-500', bg: 'bg-teal-50' },
+    'ENQUIRY_IN_PROGRESS': { icon: <div className="w-2 h-2 rounded-full bg-purple-600"/>, label: 'In Progress', color: 'text-purple-700', ring: 'ring-purple-500', bg: 'bg-purple-50' },
     'CONVERTED': { icon: <CheckCircleIcon className="w-4 h-4"/>, label: 'Converted', color: 'text-emerald-700', ring: 'ring-emerald-500', bg: 'bg-emerald-50' },
 };
 
-const ORDERED_STATUSES: EnquiryStatus[] = ['ENQUIRY_NODE_ACTIVE', 'ENQUIRY_NODE_VERIFIED', 'ENQUIRY_NODE_IN_PROGRESS', 'CONVERTED'];
+const ORDERED_STATUSES: EnquiryStatus[] = ['ENQUIRY_ACTIVE', 'ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'];
 
 const TimelineEntry: React.FC<{ item: TimelineItem }> = ({ item }) => {
     if (item.item_type === 'MESSAGE') {
@@ -80,6 +81,26 @@ interface EnquiryDetailsModalProps {
 }
 
 const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onClose, onUpdate, onNavigate }) => {
+    // Data validation - ensure enquiry has required properties
+    if (!enquiry || !enquiry.id || !enquiry.applicant_name) {
+        console.error('Invalid enquiry data provided to EnquiryDetailsModal:', enquiry);
+        return (
+            <div className="fixed inset-0 bg-black/95 backdrop-blur-3xl flex items-center justify-center z-[150] p-4">
+                <div className="bg-red-500/10 border border-red-500/20 rounded-[2rem] p-8 max-w-md text-center">
+                    <AlertTriangleIcon className="w-12 h-12 text-red-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-bold text-red-400 mb-2">Invalid Enquiry Data</h3>
+                    <p className="text-red-300/70 text-sm mb-4">The enquiry information is incomplete or corrupted.</p>
+                    <button
+                        onClick={onClose}
+                        className="px-6 py-2 bg-red-500/20 text-red-400 rounded-lg border border-red-500/30 hover:bg-red-500/30 transition-colors"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     const [timeline, setTimeline] = useState<TimelineItem[]>([]);
     const [formData, setFormData] = useState({
         status: enquiry.status,
@@ -89,16 +110,24 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
     const [newMessage, setNewMessage] = useState('');
     const [loading, setLoading] = useState({ timeline: true, saving: false, converting: false, ai: false });
     const [aiSummary, setAiSummary] = useState<string | null>(null);
+    const [timelineError, setTimelineError] = useState<string | null>(null);
     const commsEndRef = useRef<HTMLDivElement>(null);
 
     const fetchTimeline = useCallback(async (isSilent = false) => {
         if (!isSilent) setLoading(prev => ({ ...prev, timeline: true }));
+        setTimelineError(null);
         try {
             const { data, error } = await supabase.rpc('get_enquiry_timeline', { p_node_id: enquiry.id });
             if (error) throw error;
             setTimeline(data || []);
         } catch (e) {
             console.error("Timeline Sync Error:", e);
+            const errorMessage = formatError(e);
+            setTimelineError(errorMessage);
+            if (!isSilent) {
+                // Only show error for initial load, not silent refreshes
+                console.warn("Timeline loading failed:", errorMessage);
+            }
         } finally {
             if (!isSilent) setLoading(prev => ({ ...prev, timeline: false }));
         }
@@ -115,27 +144,12 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
     }, [timeline]);
 
     const handleAIGenerateSummary = async () => {
+        // Temporarily disabled - requires API key configuration
         setLoading(prev => ({ ...prev, ai: true }));
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const conversationText = timeline
-                .filter(t => t.item_type === 'MESSAGE')
-                .map(t => `${t.is_admin ? 'Admin' : 'Parent'}: ${t.details.message}`)
-                .join('\n');
-                
-            const prompt = `Summarize the following school admission enquiry conversation for ${enquiry.applicant_name} (Grade ${enquiry.grade}). Provide a concise analysis of the parent's primary concerns and the current status of the handshake. Tone: Executive and Brief.\n\nConversation:\n${conversationText}`;
-            
-            const response = await ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
-                contents: prompt
-            });
-            
-            setAiSummary(response.text || "Summary unavailable.");
-        } catch (err) {
-            console.error("AI Context Failure:", err);
-        } finally {
+        setTimeout(() => {
+            setAiSummary("AI summary feature is currently unavailable. Please check back later.");
             setLoading(prev => ({ ...prev, ai: false }));
-        }
+        }, 1000);
     };
 
     const handleSaveStatus = async (newStatus: EnquiryStatus) => {
@@ -206,7 +220,7 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
                         <div>
                             <div className="flex flex-wrap items-center gap-6 mb-3">
                                 <h2 className="text-4xl md:text-6xl font-serif font-black text-white tracking-tighter uppercase leading-none drop-shadow-2xl">{enquiry.applicant_name}</h2>
-                                <span className="px-4 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em] shadow-inner backdrop-blur-md">Node 0x{enquiry.id.substring(0,6).toUpperCase()}</span>
+                                <span className="px-4 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em] shadow-inner backdrop-blur-md">Node 0x{String(enquiry.id).substring(0,6).toUpperCase()}</span>
                             </div>
                             <p className="text-[11px] font-black text-white/20 uppercase tracking-[0.5em] flex items-center gap-3">
                                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
@@ -228,9 +242,23 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
                                     <Spinner size="lg" className="text-primary" />
                                     <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white/20 animate-pulse">Recalling Conversation Ledger</p>
                                 </div>
+                            ) : timelineError ? (
+                                <div className="m-auto flex flex-col items-center text-center gap-6 max-w-md">
+                                    <AlertTriangleIcon className="w-16 h-16 text-amber-400" />
+                                    <div className="space-y-2">
+                                        <h3 className="text-lg font-bold text-amber-400">Timeline Unavailable</h3>
+                                        <p className="text-amber-300/70 text-sm">{timelineError}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => fetchTimeline(false)}
+                                        className="px-6 py-2 bg-amber-500/20 text-amber-400 rounded-lg border border-amber-500/30 hover:bg-amber-500/30 transition-colors text-sm font-medium"
+                                    >
+                                        Retry Loading
+                                    </button>
+                                </div>
                             ) : (
                                 <>
-                                    {timeline.length === 0 && (
+                                    {timeline.length === 0 && !timelineError && (
                                         <div className="m-auto flex flex-col items-center text-center opacity-10 space-y-10">
                                             <CommunicationIcon className="w-48 h-48" />
                                             <p className="text-4xl font-serif italic text-white max-w-lg leading-relaxed">No encrypted messages exchanged on this channel.</p>
@@ -324,7 +352,7 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
                                 <div className="space-y-5">
                                     <div className="flex flex-col gap-2 p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 shadow-inner">
                                         <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.3em]">Parent Contact</span>
-                                        <p className="text-base text-white/80 font-medium font-serif italic">{enquiry.parent_email}</p>
+                                        <p className="text-base text-white/80 font-medium font-serif italic">{enquiry.parent_email || 'Not provided'}</p>
                                     </div>
                                     <div className="flex flex-col gap-2 p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 shadow-inner">
                                         <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.3em]">Institutional Grade</span>
@@ -336,19 +364,19 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
 
                         {enquiry.status !== 'CONVERTED' && (
                             <section className="pt-10 border-t border-white/5 space-y-8">
-                                <button 
+                                <button
                                     onClick={handleConvert}
-                                    disabled={loading.converting || enquiry.status === 'ENQUIRY_NODE_ACTIVE'}
-                                    className={`w-full py-7 md:py-8 rounded-[2.8rem] flex items-center justify-center gap-6 font-black text-xs uppercase tracking-[0.5em] transition-all duration-700 shadow-2xl active:scale-95 ${enquiry.status !== 'ENQUIRY_NODE_ACTIVE' ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-500/20' : 'bg-white/5 text-white/5 cursor-not-allowed border border-white/5 grayscale'}`}
+                                    disabled={loading.converting || enquiry.status === 'ENQUIRY_ACTIVE'}
+                                    className={`w-full py-7 md:py-8 rounded-[2.8rem] flex items-center justify-center gap-6 font-black text-xs uppercase tracking-[0.5em] transition-all duration-700 shadow-2xl active:scale-95 ${enquiry.status !== 'ENQUIRY_ACTIVE' ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-500/20' : 'bg-white/5 text-white/5 cursor-not-allowed border border-white/5 grayscale'}`}
                                 >
                                     {loading.converting ? <Spinner size="sm" className="text-white"/> : <><GraduationCapIcon className="w-7 h-7 opacity-60" /> PROMOTE TO ADMISSION</>}
                                 </button>
-                                {enquiry.status === 'ENQUIRY_NODE_ACTIVE' && <p className="text-[9px] text-amber-500/60 font-black uppercase tracking-[0.2em] text-center leading-relaxed">Identity verification protocol required <br/> prior to Promotion.</p>}
+                                {enquiry.status === 'ENQUIRY_ACTIVE' && <p className="text-[9px] text-amber-500/60 font-black uppercase tracking-[0.2em] text-center leading-relaxed">Identity verification protocol required <br/> prior to Promotion.</p>}
                             </section>
                         )}
 
                         <div className="mt-auto opacity-5 hover:opacity-100 transition-opacity duration-1000">
-                            <p className="text-[8px] font-mono text-white break-all text-center">HASH: {btoa(enquiry.id).substring(0, 32)}</p>
+                            <p className="text-[8px] font-mono text-white break-all text-center">HASH: {btoa(String(enquiry.id)).substring(0, 32)}</p>
                         </div>
                     </div>
                 </div>

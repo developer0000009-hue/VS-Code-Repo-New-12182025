@@ -17,7 +17,17 @@ import { UsersIcon } from './icons/UsersIcon';
 import { PhoneIcon } from './icons/PhoneIcon';
 import { SearchIcon } from './icons/SearchIcon';
 import { ChevronLeftIcon } from './icons/ChevronLeftIcon';
-import { GoogleGenAI } from '@google/genai';
+
+// Type declaration for dynamic import
+declare module '@google/genai' {
+    export class GoogleGenAI {
+        constructor(options: { apiKey: string });
+        get models(): {
+            generateContent(options: { model: string; contents: string }): Promise<{ text: string }>;
+        };
+    }
+}
+
 
 const LocalSendIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" {...props}>
@@ -26,10 +36,14 @@ const LocalSendIcon = (props: React.SVGProps<SVGSVGElement>) => (
 );
 
 const STATUS_CONFIG: Record<string, { icon: React.ReactNode, label: string, color: string, ring: string, bg: string }> = {
+    'New': { icon: <div className="w-2 h-2 rounded-full bg-gray-500 animate-pulse"/>, label: 'New', color: 'text-gray-700', ring: 'ring-gray-600', bg: 'bg-gray-50' },
     'ENQUIRY_ACTIVE': { icon: <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"/>, label: 'Active', color: 'text-blue-700', ring: 'ring-blue-600', bg: 'bg-blue-50' },
     'ENQUIRY_VERIFIED': { icon: <ShieldCheckIcon className="w-4 h-4"/>, label: 'Verified', color: 'text-teal-700', ring: 'ring-teal-500', bg: 'bg-teal-50' },
+    'VERIFIED': { icon: <ShieldCheckIcon className="w-4 h-4"/>, label: 'Verified', color: 'text-teal-700', ring: 'ring-teal-500', bg: 'bg-teal-50' },
     'ENQUIRY_IN_PROGRESS': { icon: <div className="w-2 h-2 rounded-full bg-purple-600"/>, label: 'In Progress', color: 'text-purple-700', ring: 'ring-purple-500', bg: 'bg-purple-50' },
+    'IN_REVIEW': { icon: <div className="w-2 h-2 rounded-full bg-purple-600"/>, label: 'In Review', color: 'text-purple-700', ring: 'ring-purple-500', bg: 'bg-purple-50' },
     'CONVERTED': { icon: <CheckCircleIcon className="w-4 h-4"/>, label: 'Converted', color: 'text-emerald-700', ring: 'ring-emerald-500', bg: 'bg-emerald-50' },
+    'Completed': { icon: <CheckCircleIcon className="w-4 h-4"/>, label: 'Completed', color: 'text-emerald-700', ring: 'ring-emerald-500', bg: 'bg-emerald-50' },
 };
 
 const ORDERED_STATUSES: EnquiryStatus[] = ['ENQUIRY_ACTIVE', 'ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'];
@@ -91,6 +105,12 @@ const validateEnquiry = (enquiry: Enquiry): { isValid: boolean; error?: string }
     if (!enquiry.applicant_name) {
         return { isValid: false, error: 'Applicant name is required' };
     }
+    if (!enquiry.parent_name) {
+        return { isValid: false, error: 'Parent name is required' };
+    }
+    if (!enquiry.grade) {
+        return { isValid: false, error: 'Grade information is required' };
+    }
     return { isValid: true };
 };
 
@@ -151,6 +171,11 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
 
         setLoading(prev => ({ ...prev, ai: true }));
         try {
+            // Dynamic import to avoid static import errors if package not installed
+            const { GoogleGenAI } = await import('@google/genai').catch(() => {
+                throw new Error("Google AI package not available");
+            });
+
             const ai = new GoogleGenAI({ apiKey });
             const conversationText = timeline
                 .filter(t => t.item_type === 'MESSAGE')
@@ -170,9 +195,9 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
             });
 
             setAiSummary(response?.text || "Summary unavailable.");
-        } catch (err) {
+        } catch (err: any) {
             console.error("AI Context Failure:", err);
-            setAiSummary("AI summary failed - please try again.");
+            setAiSummary("AI summary unavailable - " + (err.message || "package not installed or API error"));
         } finally {
             setLoading(prev => ({ ...prev, ai: false }));
         }

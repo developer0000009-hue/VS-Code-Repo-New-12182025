@@ -18,17 +18,25 @@ import { SparklesIcon } from './icons/SparklesIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 
 const statusColors: Record<string, string> = {
+  'New': 'bg-gray-500/10 text-gray-400 border-gray-500/20',
   'ENQUIRY_ACTIVE': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   'ENQUIRY_VERIFIED': 'bg-teal-500/20 text-teal-400 border-teal-500/30 font-black shadow-[0_0_15px_rgba(45,212,191,0.1)]',
+  'VERIFIED': 'bg-teal-500/20 text-teal-400 border-teal-500/30 font-black shadow-[0_0_15px_rgba(45,212,191,0.1)]',
   'ENQUIRY_IN_PROGRESS': 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+  'IN_REVIEW': 'bg-purple-500/10 text-purple-400 border-purple-500/20',
   'CONVERTED': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+  'Completed': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
 };
 
 const statusLabels: Record<string, string> = {
+  'New': 'New',
   'ENQUIRY_ACTIVE': 'Active',
   'ENQUIRY_VERIFIED': 'Verified',
+  'VERIFIED': 'Verified',
   'ENQUIRY_IN_PROGRESS': 'In Review',
+  'IN_REVIEW': 'In Review',
   'CONVERTED': 'Converted',
+  'Completed': 'Completed',
 };
 
 type SortableKeys = 'applicant_name' | 'grade' | 'status' | 'updated_at';
