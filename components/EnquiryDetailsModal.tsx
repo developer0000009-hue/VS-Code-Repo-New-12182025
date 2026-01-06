@@ -8,18 +8,21 @@ import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { GraduationCapIcon } from './icons/GraduationCapIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { ClipboardListIcon } from './icons/ClipboardListIcon';
-import { SettingsIcon } from './icons/SettingsIcon';
 import { ClockIcon } from './icons/ClockIcon';
 import { CommunicationIcon } from './icons/CommunicationIcon';
 import { SparklesIcon } from './icons/SparklesIcon';
-import { MegaphoneIcon } from './icons/MegaphoneIcon';
 import { UsersIcon } from './icons/UsersIcon';
 import { PhoneIcon } from './icons/PhoneIcon';
-import { SearchIcon } from './icons/SearchIcon';
+import { MailIcon } from './icons/MailIcon';
+import { AcademicCapIcon } from './icons/AcademicCapIcon';
+import { DocumentTextIcon } from './icons/DocumentTextIcon';
+import { CalendarIcon } from './icons/CalendarIcon';
+import { EyeIcon } from './icons/EyeIcon';
+import { EditIcon } from './icons/EditIcon';
+import { CheckIcon } from './icons/CheckIcon';
 import { ChevronLeftIcon } from './icons/ChevronLeftIcon';
-
-
-
+import { ArrowRightIcon } from './icons/ArrowRightIcon';
+import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 
 const LocalSendIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" {...props}>
@@ -27,57 +30,78 @@ const LocalSendIcon = (props: React.SVGProps<SVGSVGElement>) => (
     </svg>
 );
 
-const STATUS_CONFIG: Record<string, { icon: React.ReactNode, label: string, color: string, ring: string, bg: string }> = {
-    'New': { icon: <div className="w-2 h-2 rounded-full bg-gray-500 animate-pulse"/>, label: 'New', color: 'text-gray-700', ring: 'ring-gray-600', bg: 'bg-gray-50' },
-    'ENQUIRY_ACTIVE': { icon: <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"/>, label: 'Active', color: 'text-blue-700', ring: 'ring-blue-600', bg: 'bg-blue-50' },
-    'ENQUIRY_VERIFIED': { icon: <ShieldCheckIcon className="w-4 h-4"/>, label: 'Verified', color: 'text-teal-700', ring: 'ring-teal-500', bg: 'bg-teal-50' },
-    'VERIFIED': { icon: <ShieldCheckIcon className="w-4 h-4"/>, label: 'Verified', color: 'text-teal-700', ring: 'ring-teal-500', bg: 'bg-teal-50' },
-    'ENQUIRY_IN_PROGRESS': { icon: <div className="w-2 h-2 rounded-full bg-purple-600"/>, label: 'In Progress', color: 'text-purple-700', ring: 'ring-purple-500', bg: 'bg-purple-50' },
-    'IN_REVIEW': { icon: <div className="w-2 h-2 rounded-full bg-purple-600"/>, label: 'In Review', color: 'text-purple-700', ring: 'ring-purple-500', bg: 'bg-purple-50' },
-    'CONVERTED': { icon: <CheckCircleIcon className="w-4 h-4"/>, label: 'Converted', color: 'text-emerald-700', ring: 'ring-emerald-500', bg: 'bg-emerald-50' },
-    'Completed': { icon: <CheckCircleIcon className="w-4 h-4"/>, label: 'Completed', color: 'text-emerald-700', ring: 'ring-emerald-500', bg: 'bg-emerald-50' },
+const STATUS_CONFIG: Record<string, {
+    label: string;
+    color: string;
+    bg: string;
+    progress: number;
+    nextAction: string;
+}> = {
+    'New': {
+        label: 'New Enquiry',
+        color: 'text-blue-700',
+        bg: 'bg-blue-50 border-blue-200',
+        progress: 10,
+        nextAction: 'Contact parent and verify details'
+    },
+    'ENQUIRY_ACTIVE': {
+        label: 'Active',
+        color: 'text-blue-700',
+        bg: 'bg-blue-50 border-blue-200',
+        progress: 25,
+        nextAction: 'Verify parent contact information'
+    },
+    'ENQUIRY_VERIFIED': {
+        label: 'Verified',
+        color: 'text-emerald-700',
+        bg: 'bg-emerald-50 border-emerald-200',
+        progress: 60,
+        nextAction: 'Request required documents'
+    },
+    'VERIFIED': {
+        label: 'Verified',
+        color: 'text-emerald-700',
+        bg: 'bg-emerald-50 border-emerald-200',
+        progress: 60,
+        nextAction: 'Request required documents'
+    },
+    'ENQUIRY_IN_PROGRESS': {
+        label: 'In Progress',
+        color: 'text-amber-700',
+        bg: 'bg-amber-50 border-amber-200',
+        progress: 80,
+        nextAction: 'Review submitted documents'
+    },
+    'IN_REVIEW': {
+        label: 'In Review',
+        color: 'text-amber-700',
+        bg: 'bg-amber-50 border-amber-200',
+        progress: 80,
+        nextAction: 'Review submitted documents'
+    },
+    'CONVERTED': {
+        label: 'Converted',
+        color: 'text-emerald-700',
+        bg: 'bg-emerald-50 border-emerald-200',
+        progress: 100,
+        nextAction: 'Admission process complete'
+    },
+    'Completed': {
+        label: 'Completed',
+        color: 'text-emerald-700',
+        bg: 'bg-emerald-50 border-emerald-200',
+        progress: 100,
+        nextAction: 'Admission process complete'
+    },
 };
 
-const ORDERED_STATUSES: EnquiryStatus[] = ['ENQUIRY_ACTIVE', 'ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'];
-
-const TimelineEntry: React.FC<{ item: TimelineItem }> = ({ item }) => {
-    if (item.item_type === 'MESSAGE') {
-        const isParent = !item.is_admin;
-        const message = item.details?.message || '[Message content unavailable]';
-        const createdByName = item.created_by_name || 'Unknown';
-
-        return (
-             <div className={`flex items-end gap-6 animate-in fade-in slide-in-from-bottom-4 duration-700 w-full ${isParent ? 'justify-end' : 'justify-start'}`}>
-                <div className={`flex items-end gap-5 max-w-[85%] sm:max-w-[75%] ${isParent ? 'flex-row-reverse' : 'flex-row'}`}>
-                    <div className={`w-11 h-11 rounded-[1.1rem] flex items-center justify-center font-black text-sm shadow-2xl text-white flex-shrink-0 border border-white/5 ${isParent ? 'bg-indigo-600' : 'bg-[#252833]'}`}>
-                        {createdByName.charAt(0)}
-                    </div>
-                    <div className={`p-6 md:p-8 rounded-[2.5rem] shadow-2xl ring-1 ring-white/5 overflow-hidden relative ${isParent ? 'bg-[#1a1d23] rounded-br-none' : 'bg-[#221f30] rounded-bl-none text-white/90'}`}>
-                         <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
-                         <p className="text-[15px] md:text-[17px] leading-relaxed relative z-10 whitespace-pre-wrap font-medium">{message}</p>
-                         <div className={`flex items-center gap-3 mt-6 relative z-10 opacity-30 ${isParent ? 'justify-end' : 'justify-start'}`}>
-                            <span className="text-[9px] font-black uppercase tracking-widest">{createdByName}</span>
-                            <span className="w-1 h-1 rounded-full bg-white"></span>
-                            <span className="text-[9px] font-mono">{new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                         </div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    return (
-        <div className="flex justify-center my-10 animate-in fade-in zoom-in-95 duration-1000">
-            <div className="flex items-center gap-4 px-6 py-2.5 rounded-full bg-white/[0.02] border border-white/5 shadow-inner backdrop-blur-sm">
-                <div className="w-1 h-1 rounded-full bg-primary/40 animate-pulse"></div>
-                <span className="text-[9px] font-black uppercase tracking-[0.4em] text-white/20">
-                    {item.item_type?.replace(/_/g, ' ') || 'Unknown Event'} / {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-                <div className="w-1 h-1 rounded-full bg-primary/40 animate-pulse"></div>
-            </div>
-        </div>
-    );
-};
+const PROGRESS_STEPS = [
+    { label: 'Enquiry Created', status: 'completed' },
+    { label: 'Contact Verified', status: 'pending' },
+    { label: 'Documents Requested', status: 'pending' },
+    { label: 'Review Complete', status: 'pending' },
+    { label: 'Ready for Admission', status: 'pending' }
+];
 
 interface EnquiryDetailsModalProps {
     enquiry: Enquiry;
@@ -87,48 +111,155 @@ interface EnquiryDetailsModalProps {
     onNavigate?: (component: string) => void;
 }
 
-const validateEnquiry = (enquiry: Enquiry): { isValid: boolean; error?: string } => {
-    if (!enquiry) {
-        return { isValid: false, error: 'Enquiry data is missing' };
-    }
-    if (!enquiry.id) {
-        return { isValid: false, error: 'Enquiry ID is required' };
-    }
-    if (!enquiry.applicant_name) {
-        return { isValid: false, error: 'Applicant name is required' };
-    }
-    if (!enquiry.parent_name) {
-        return { isValid: false, error: 'Parent name is required' };
-    }
-    if (!enquiry.grade) {
-        return { isValid: false, error: 'Grade information is required' };
-    }
-    return { isValid: true };
+// Helper Components
+const SkeletonLoader: React.FC<{ className?: string }> = ({ className = "h-4 w-32" }) => (
+    <div className={`animate-pulse bg-gray-200 rounded ${className}`} />
+);
+
+const EditableField: React.FC<{
+    label: string;
+    value: string;
+    onSave: (value: string) => void;
+    icon?: React.ReactNode;
+    required?: boolean;
+}> = ({ label, value, onSave, icon, required }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editValue, setEditValue] = useState(value);
+
+    const handleSave = () => {
+        onSave(editValue);
+        setIsEditing(false);
+    };
+
+    const handleCancel = () => {
+        setEditValue(value);
+        setIsEditing(false);
+    };
+
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center gap-2">
+                {icon}
+                <span className="text-sm font-medium text-gray-600">{label}</span>
+                {required && <span className="text-red-500">*</span>}
+            </div>
+            {isEditing ? (
+                <div className="flex items-center gap-2">
+                    <input
+                        type="text"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                        autoFocus
+                    />
+                    <button
+                        onClick={handleSave}
+                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                    >
+                        <CheckIcon className="w-4 h-4" />
+                    </button>
+                    <button
+                        onClick={handleCancel}
+                        className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                    >
+                        <XIcon className="w-4 h-4" />
+                    </button>
+                </div>
+            ) : (
+                <div
+                    className="group flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
+                    onClick={() => setIsEditing(true)}
+                >
+                    <span className={`text-sm ${!value ? 'text-gray-400 italic' : 'text-gray-900'}`}>
+                        {value || 'Not provided'}
+                    </span>
+                    <EditIcon className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+            )}
+        </div>
+    );
 };
 
-const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onClose, onUpdate, onNavigate }) => {
+const TimelineEntry: React.FC<{ item: TimelineItem; isLast?: boolean }> = ({ item, isLast }) => {
+    if (item.item_type === 'MESSAGE') {
+        const isParent = !item.is_admin;
+        const message = item.details?.message || '[Message content unavailable]';
+        const createdByName = item.created_by_name || 'Unknown';
+
+        return (
+            <div className={`flex gap-4 ${isParent ? 'justify-start' : 'justify-end'} mb-6`}>
+                <div className={`flex gap-3 max-w-[70%] ${isParent ? 'flex-row' : 'flex-row-reverse'}`}>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0 ${
+                        isParent ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
+                    }`}>
+                        {createdByName.charAt(0)}
+                    </div>
+                    <div className={`p-4 rounded-2xl shadow-sm border ${
+                        isParent ? 'bg-white border-gray-200' : 'bg-blue-50 border-blue-200'
+                    }`}>
+                        <p className="text-sm text-gray-900 leading-relaxed">{message}</p>
+                        <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+                            <span className="font-medium">{createdByName}</span>
+                            <span>•</span>
+                            <span>{new Date(item.created_at).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            })}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex justify-center my-8">
+            <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 rounded-full border border-gray-200">
+                <div className="w-2 h-2 rounded-full bg-gray-400"></div>
+                <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">
+                    {item.item_type?.replace(/_/g, ' ') || 'Unknown Event'}
+                </span>
+                <span className="text-xs text-gray-500">
+                    {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+            </div>
+        </div>
+    );
+};
+
+const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({
+    enquiry,
+    onClose,
+    onUpdate,
+    onNavigate
+}) => {
     const [timeline, setTimeline] = useState<TimelineItem[]>([]);
     const [formData, setFormData] = useState({
-        status: enquiry.status,
-        notes: enquiry.notes || '',
         applicant_name: enquiry.applicant_name || '',
+        parent_name: enquiry.parent_name || '',
+        parent_email: enquiry.parent_email || '',
+        parent_phone: enquiry.parent_phone || '',
+        notes: enquiry.notes || '',
     });
     const [newMessage, setNewMessage] = useState('');
-    const [loading, setLoading] = useState({ timeline: true, saving: false, converting: false, ai: false });
-    const [aiSummary, setAiSummary] = useState<string | null>(null);
+    const [loading, setLoading] = useState({
+        timeline: true,
+        saving: false,
+        converting: false,
+        sending: false
+    });
     const [error, setError] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<'overview' | 'communication'>('overview');
     const commsEndRef = useRef<HTMLDivElement>(null);
 
-    // Validate enquiry data on mount
-    useEffect(() => {
-        const validation = validateEnquiry(enquiry);
-        if (!validation.isValid) {
-            setError(validation.error || 'Invalid enquiry data');
-            setLoading(prev => ({ ...prev, timeline: false }));
-            return;
-        }
-        setError(null);
-    }, [enquiry]);
+    // Calculate derived data
+    const daysActive = Math.floor((new Date().getTime() - new Date(enquiry.received_at || enquiry.updated_at).getTime()) / (1000 * 3600 * 24));
+    const priorityLevel = daysActive > 7 ? 'High' : daysActive > 3 ? 'Medium' : 'Low';
+    const priorityColor = priorityLevel === 'High' ? 'text-red-700 bg-red-50 border-red-200' :
+                         priorityLevel === 'Medium' ? 'text-amber-700 bg-amber-50 border-amber-200' :
+                         'text-green-700 bg-green-50 border-green-200';
+
+    const currentStatus = STATUS_CONFIG[enquiry.status] || STATUS_CONFIG['New'];
 
     const fetchTimeline = useCallback(async (isSilent = false) => {
         if (!isSilent) setLoading(prev => ({ ...prev, timeline: true }));
@@ -138,68 +269,33 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
             setTimeline(data || []);
         } catch (err) {
             console.error("Timeline Sync Error:", err);
+            setError("Failed to load conversation history");
         } finally {
             if (!isSilent) setLoading(prev => ({ ...prev, timeline: false }));
         }
     }, [enquiry.id]);
 
-    useEffect(() => { 
-        fetchTimeline(); 
+    useEffect(() => {
+        fetchTimeline();
     }, [fetchTimeline]);
 
     useEffect(() => {
-        if (commsEndRef.current) {
+        if (commsEndRef.current && activeTab === 'communication') {
             commsEndRef.current.scrollIntoView({ behavior: 'smooth' });
         }
-    }, [timeline]);
+    }, [timeline, activeTab]);
 
-    const handleAIGenerateSummary = async () => {
-        const apiKey = (import.meta as any).env?.VITE_GOOGLE_AI_API_KEY;
-        if (!apiKey) {
-            console.error("Google AI API key not configured");
-            setAiSummary("AI summary unavailable - API key not configured.");
-            return;
-        }
-
-        setLoading(prev => ({ ...prev, ai: true }));
-        try {
-            // AI functionality disabled - package not available
-            throw new Error("AI functionality is currently unavailable");
-
-            // AI functionality disabled
-            const conversationText = timeline
-                .filter(t => t.item_type === 'MESSAGE')
-                .map(t => `${t.is_admin ? 'Admin' : 'Parent'}: ${t.details?.message || '[Message not available]'}`)
-                .join('\n');
-
-            if (!conversationText.trim()) {
-                setAiSummary("No conversation data available to summarize.");
-                return;
-            }
-
-            const prompt = `Summarize the following school admission enquiry conversation for ${enquiry.applicant_name || 'Student'} (Grade ${enquiry.grade || 'Unknown'}). Provide a concise analysis of the parent's primary concerns and the current status of the handshake. Tone: Executive and Brief.\n\nConversation:\n${conversationText}`;
-
-            // AI response would go here - disabled
-        } catch (err: any) {
-            console.error("AI Context Failure:", err);
-            setAiSummary("AI summary unavailable - " + (err.message || "package not installed or API error"));
-        } finally {
-            setLoading(prev => ({ ...prev, ai: false }));
-        }
-    };
-
-    const handleSaveStatus = async (newStatus: EnquiryStatus) => {
+    const handleSaveField = async (field: string, value: string) => {
         setLoading(prev => ({ ...prev, saving: true }));
         try {
             const { error } = await supabase
                 .from('enquiries')
-                .update({ status: newStatus, updated_at: new Date().toISOString() })
+                .update({ [field]: value, updated_at: new Date().toISOString() })
                 .eq('id', enquiry.id);
-            
+
             if (error) throw error;
-            setFormData(prev => ({ ...prev, status: newStatus }));
+            setFormData(prev => ({ ...prev, [field]: value }));
             onUpdate();
-            await fetchTimeline(true);
         } catch (err) {
             alert(`Save failed: ${formatError(err)}`);
         } finally {
@@ -227,7 +323,8 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
         e.preventDefault();
         const msg = newMessage.trim();
         if (!msg) return;
-        
+
+        setLoading(prev => ({ ...prev, sending: true }));
         try {
             const { error } = await supabase.rpc('send_enquiry_message', {
                 p_enquiry_id: enquiry.id,
@@ -237,189 +334,418 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
             setNewMessage('');
             await fetchTimeline(true);
         } catch (err) {
-            alert("Transmit Failure: " + formatError(err));
+            alert("Failed to send message: " + formatError(err));
+        } finally {
+            setLoading(prev => ({ ...prev, sending: false }));
         }
     };
 
+    const handleQuickAction = (action: string) => {
+        let message = '';
+        switch (action) {
+            case 'welcome':
+                message = `Dear ${formData.parent_name || 'Parent'},
+
+Thank you for your interest in our school! We've received your enquiry for ${formData.applicant_name} in Grade ${enquiry.grade}.
+
+Our admissions team will contact you shortly to discuss next steps. In the meantime, please feel free to reach out with any questions.
+
+Best regards,
+Admissions Team`;
+                break;
+            case 'documents':
+                message = `Dear ${formData.parent_name || 'Parent'},
+
+To proceed with ${formData.applicant_name}'s admission process, please provide the following documents:
+
+• Birth Certificate
+• Address Proof
+• Previous School Records
+• Medical Certificate (if applicable)
+
+You can upload these documents securely through your Parent Portal.
+
+Best regards,
+Admissions Team`;
+                break;
+        }
+        setNewMessage(message);
+        setActiveTab('communication');
+    };
+
     return (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-3xl flex items-center justify-center z-[150] p-0 sm:p-4 md:p-6" onClick={onClose}>
-            <div className="bg-[#09090b] rounded-t-[3.5rem] sm:rounded-[4.5rem] shadow-[0_64px_128px_-32px_rgba(0,0,0,1)] w-full max-w-[1700px] h-full sm:h-[94vh] flex flex-col border border-white/5 overflow-hidden ring-1 ring-white/10 animate-in zoom-in-95 duration-500" onClick={e => e.stopPropagation()}>
-                
-                <header className="px-10 md:px-16 py-10 border-b border-white/5 bg-[#0f1115]/95 backdrop-blur-2xl flex flex-wrap justify-between items-center z-40 relative shadow-2xl">
-                    <div className="flex items-center gap-10">
-                        <div className="relative group shrink-0">
-                            <div className="absolute inset-0 bg-indigo-500/20 blur-2xl opacity-40 group-hover:opacity-100 transition-opacity duration-1000"></div>
-                            <div className="w-20 h-20 bg-indigo-600 rounded-[2.2rem] text-white flex items-center justify-center shadow-2xl border border-white/10 relative z-10 transform group-hover:rotate-6 transition-transform duration-700">
-                                <ClipboardListIcon className="w-10 h-10" />
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden">
+                {/* Sticky Header */}
+                <div className="sticky top-0 bg-white border-b border-gray-200 px-8 py-6 z-10">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={onClose}
+                                className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                            >
+                                <ChevronLeftIcon className="w-5 h-5 text-gray-600" />
+                            </button>
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center text-white font-bold text-lg">
+                                    {formData.applicant_name.charAt(0)}
+                                </div>
+                                <div>
+                                    <h1 className="text-2xl font-bold text-gray-900">{formData.applicant_name}</h1>
+                                    <p className="text-sm text-gray-600">Grade {enquiry.grade} • Enquiry #{enquiry.id.toString().slice(-6)}</p>
+                                </div>
                             </div>
                         </div>
-                        <div>
-                            <div className="flex flex-wrap items-center gap-6 mb-3">
-                                <h2 className="text-4xl md:text-6xl font-serif font-black text-white tracking-tighter uppercase leading-none drop-shadow-2xl">{enquiry.applicant_name}</h2>
-                                <span className="px-4 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em] shadow-inner backdrop-blur-md">Node 0x{enquiry.id.substring(0,6).toUpperCase()}</span>
-                            </div>
-                            <p className="text-[11px] font-black text-white/20 uppercase tracking-[0.5em] flex items-center gap-3">
-                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
-                                Domain Sync Active • Grade {enquiry.grade} Context
-                            </p>
-                        </div>
-                    </div>
-                    <button onClick={onClose} className="p-4 rounded-[1.5rem] bg-white/5 text-white/20 hover:text-white hover:bg-white/10 transition-all transform active:scale-90 border border-white/5"><XIcon className="w-8 h-8"/></button>
-                </header>
-                
-                <div className="flex-grow flex-col lg:flex-row overflow-hidden relative">
-                    <div className="absolute inset-0 opacity-[0.02] pointer-events-none z-0" style={{ backgroundImage: `radial-gradient(circle at 2px 2px, rgba(255,255,255,0.2) 1px, transparent 0)`, backgroundSize: '40px 40px' }}></div>
 
-                    <div className="flex-1 flex flex-col bg-transparent relative z-10">
-                        <div className="flex-grow overflow-y-auto p-10 md:p-20 space-y-16 custom-scrollbar flex flex-col scroll-smooth">
-                            {error ? (
-                                <div className="m-auto flex flex-col items-center gap-6 text-center">
-                                    <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center border border-red-500/30">
-                                        <XIcon className="w-8 h-8 text-red-400" />
-                                    </div>
-                                    <div className="space-y-4">
-                                        <h3 className="text-2xl font-serif font-black text-white uppercase tracking-tight">System Error</h3>
-                                        <p className="text-white/60 max-w-md font-serif italic">{error}</p>
-                                        <button
-                                            onClick={() => {
-                                                setError(null);
-                                                fetchTimeline();
-                                            }}
-                                            className="px-6 py-3 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white rounded-xl text-sm font-bold uppercase tracking-wide transition-all border border-white/10"
-                                        >
-                                            Retry Loading
-                                        </button>
-                                    </div>
-                                </div>
-                            ) : loading.timeline && timeline.length === 0 ? (
-                                <div className="m-auto flex flex-col items-center gap-6">
-                                    <Spinner size="lg" className="text-primary" />
-                                    <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white/20 animate-pulse">Recalling Conversation Ledger</p>
-                                </div>
-                            ) : (
-                                <>
-                                    {timeline.length === 0 && (
-                                        <div className="m-auto flex flex-col items-center text-center opacity-10 space-y-10">
-                                            <CommunicationIcon className="w-48 h-48" />
-                                            <p className="text-4xl font-serif italic text-white max-w-lg leading-relaxed">No encrypted messages exchanged on this channel.</p>
-                                        </div>
-                                    )}
-                                    <div className="space-y-16">
-                                        {timeline.map((item, idx) => <TimelineEntry key={idx} item={item} />)}
-                                        <div ref={commsEndRef} className="h-4" />
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                        
-                        <div className="p-10 md:p-14 border-t border-white/5 bg-[#0a0a0c]/98 backdrop-blur-3xl">
-                            <form onSubmit={handleSendMessage} className="flex gap-8 items-end max-w-5xl mx-auto group">
-                                <div className="flex-grow relative">
-                                    <textarea 
-                                        value={newMessage} 
-                                        onChange={(e) => setNewMessage(e.target.value)} 
-                                        placeholder="TYPE PAYLOAD TO PARENT NODE..." 
-                                        className="w-full p-8 md:p-10 rounded-[3.5rem] bg-white/[0.02] border border-white/10 text-white placeholder:text-white/5 outline-none resize-none font-serif text-xl md:text-2xl shadow-inner focus:bg-white/[0.04] focus:border-primary/40 transition-all duration-500 custom-scrollbar"
-                                        rows={1}
-                                        onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e as any); } }}
+                        <div className="flex items-center gap-4">
+                            {/* Status Badge */}
+                            <div className={`px-4 py-2 rounded-full border text-sm font-semibold ${currentStatus.bg} ${currentStatus.color}`}>
+                                {currentStatus.label}
+                            </div>
+
+                            {/* Progress */}
+                            <div className="flex items-center gap-3">
+                                <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-500"
+                                        style={{ width: `${currentStatus.progress}%` }}
                                     />
-                                    <div className="absolute right-10 top-1/2 -translate-y-1/2 opacity-0 group-focus-within:opacity-100 transition-opacity duration-700 pointer-events-none">
-                                        <span className="text-[9px] font-black text-primary/40 uppercase tracking-[0.4em]">Secure Uplink Terminal</span>
-                                    </div>
                                 </div>
-                                <button 
-                                    type="submit" 
-                                    disabled={!newMessage.trim()}
-                                    className="w-24 h-24 md:w-32 md:h-32 bg-primary text-white rounded-[3rem] md:rounded-[4rem] flex items-center justify-center shadow-[0_32px_64px_-12px_rgba(var(--primary),0.5)] transform active:scale-90 transition-all duration-500 disabled:opacity-5 disabled:grayscale"
-                                >
-                                    <LocalSendIcon className="w-10 h-10 md:w-14 md:h-14" />
-                                </button>
-                            </form>
+                                <span className="text-sm font-medium text-gray-600">{currentStatus.progress}%</span>
+                            </div>
+
+                            {/* Last Updated */}
+                            <div className="text-right">
+                                <p className="text-xs text-gray-500">Last updated</p>
+                                <p className="text-sm font-medium text-gray-900">
+                                    {new Date(enquiry.updated_at).toLocaleDateString()}
+                                </p>
+                            </div>
+
+                            <button
+                                onClick={onClose}
+                                className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                            >
+                                <XIcon className="w-5 h-5 text-gray-600" />
+                            </button>
                         </div>
                     </div>
+                </div>
 
-                    <div className="w-full lg:w-[480px] bg-[#0c0d12]/90 backdrop-blur-3xl border-l border-white/10 p-12 md:p-16 space-y-16 overflow-y-auto custom-scrollbar relative z-20">
-                        <section className="space-y-10">
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-[11px] font-black uppercase text-white/30 tracking-[0.5em]">Lifecycle Management</h3>
-                                <div className="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.8)] animate-pulse"></div>
+                {/* Main Content */}
+                <div className="flex-1 overflow-hidden">
+                    <div className="h-full flex">
+                        {/* Left Sidebar - Overview */}
+                        <div className="w-80 bg-gray-50 border-r border-gray-200 flex flex-col">
+                            {/* Overview Section */}
+                            <div className="p-6 space-y-6">
+                                <h2 className="text-lg font-semibold text-gray-900">Overview</h2>
+
+                                {/* Verification State */}
+                                <div className="bg-white rounded-xl p-4 border border-gray-200">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <ShieldCheckIcon className="w-5 h-5 text-emerald-600" />
+                                        <span className="font-medium text-gray-900">Verification Status</span>
+                                    </div>
+                                    <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${currentStatus.bg} ${currentStatus.color}`}>
+                                        {currentStatus.label}
+                                    </div>
+                                </div>
+
+                                {/* Priority */}
+                                <div className="bg-white rounded-xl p-4 border border-gray-200">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <AlertTriangleIcon className="w-5 h-5 text-amber-600" />
+                                        <span className="font-medium text-gray-900">Priority Level</span>
+                                    </div>
+                                    <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${priorityColor}`}>
+                                        {priorityLevel} Priority
+                                    </div>
+                                    <p className="text-xs text-gray-600 mt-2">{daysActive} days active</p>
+                                </div>
+
+                                {/* Next Action */}
+                                <div className="bg-white rounded-xl p-4 border border-gray-200">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <ArrowRightIcon className="w-5 h-5 text-blue-600" />
+                                        <span className="font-medium text-gray-900">Next Action</span>
+                                    </div>
+                                    <p className="text-sm text-gray-700">{currentStatus.nextAction}</p>
+                                </div>
                             </div>
-                            <div className="space-y-4">
-                                {ORDERED_STATUSES.map(s => {
-                                    const config = STATUS_CONFIG[s] || { icon: <div className="w-4 h-4 bg-gray-500 rounded" />, label: s.replace(/_/g, ' ') };
-                                    return (
-                                        <button
-                                            key={s}
-                                            onClick={() => handleSaveStatus(s)}
-                                            disabled={loading.saving || enquiry.status === 'CONVERTED'}
-                                            className={`w-full flex items-center justify-between p-6 rounded-[2rem] border transition-all duration-700 group/btn relative overflow-hidden ${enquiry.status === s ? 'bg-primary/10 border-primary text-white shadow-2xl' : 'bg-black/20 border-white/5 text-white/30 hover:bg-white/5 hover:border-white/20'}`}
-                                        >
-                                            <div className="flex items-center gap-5 relative z-10">
-                                                <div className={`p-3 rounded-xl transition-all duration-700 ${enquiry.status === s ? 'bg-primary text-white shadow-lg rotate-3' : 'bg-white/5 text-white/20 group-hover/btn:scale-110'}`}>
-                                                    {config.icon}
+
+                            {/* Timeline Progress */}
+                            <div className="px-6 pb-6">
+                                <h3 className="text-sm font-semibold text-gray-900 mb-4">Progress Timeline</h3>
+                                <div className="space-y-3">
+                                    {PROGRESS_STEPS.map((step, index) => {
+                                        const isCompleted = index < Math.floor(currentStatus.progress / 20);
+                                        const isCurrent = index === Math.floor(currentStatus.progress / 20);
+
+                                        return (
+                                            <div key={index} className="flex items-center gap-3">
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                                                    isCompleted ? 'bg-emerald-500 text-white' :
+                                                    isCurrent ? 'bg-blue-500 text-white' :
+                                                    'bg-gray-200 text-gray-400'
+                                                }`}>
+                                                    {isCompleted ? <CheckIcon className="w-3 h-3" /> : index + 1}
                                                 </div>
-                                                <span className={`text-sm font-black uppercase tracking-[0.2em] transition-colors duration-700 ${enquiry.status === s ? 'text-primary' : 'group-hover/btn:text-white'}`}>
-                                                    {config.label}
+                                                <span className={`text-sm ${
+                                                    isCompleted ? 'text-emerald-700 font-medium' :
+                                                    isCurrent ? 'text-blue-700 font-medium' :
+                                                    'text-gray-500'
+                                                }`}>
+                                                    {step.label}
                                                 </span>
                                             </div>
-                                            {enquiry.status === s && <CheckCircleIcon className="w-5 h-5 text-primary animate-in zoom-in duration-500 relative z-10" />}
-                                        </button>
-                                    );
-                                })}
+                                        );
+                                    })}
+                                </div>
                             </div>
-                        </section>
+                        </div>
 
-                        <section className="space-y-10">
-                             <div className="flex items-center justify-between">
-                                <h3 className="text-[11px] font-black uppercase text-white/30 tracking-[0.5em]">Identity Intel</h3>
-                                <button 
-                                    onClick={handleAIGenerateSummary} 
-                                    disabled={loading.ai}
-                                    className="p-3 rounded-2xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition-all active:scale-90"
-                                    title="AI Summarize Conversation"
-                                >
-                                    {loading.ai ? <Spinner size="sm" /> : <SparklesIcon className="w-5 h-5" />}
-                                </button>
-                             </div>
-                             
-                             {aiSummary ? (
-                                <div className="bg-primary/5 border border-primary/20 p-8 rounded-[2.5rem] relative group overflow-hidden animate-in fade-in slide-in-from-right-8 duration-1000">
-                                     <div className="absolute -top-10 -right-10 w-32 h-32 bg-primary/10 rounded-full blur-3xl group-hover:opacity-40 transition-opacity"></div>
-                                     <p className="text-[9px] font-black uppercase tracking-[0.4em] text-primary mb-4 flex items-center gap-2">
-                                         <SparklesIcon className="w-3.5 h-3.5" /> AI Synthesis
-                                     </p>
-                                     <p className="text-sm font-serif italic text-white/70 leading-loose">"{aiSummary}"</p>
-                                     <button onClick={() => setAiSummary(null)} className="mt-6 text-[9px] font-black uppercase tracking-[0.2em] text-white/20 hover:text-white transition-colors">Clear Insight</button>
+                        {/* Main Content Area */}
+                        <div className="flex-1 flex flex-col">
+                            {/* Tab Navigation */}
+                            <div className="bg-white border-b border-gray-200 px-6">
+                                <div className="flex gap-8">
+                                    <button
+                                        onClick={() => setActiveTab('overview')}
+                                        className={`py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
+                                            activeTab === 'overview'
+                                                ? 'border-blue-500 text-blue-600'
+                                                : 'border-transparent text-gray-600 hover:text-gray-900'
+                                        }`}
+                                    >
+                                        Details & Information
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('communication')}
+                                        className={`py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
+                                            activeTab === 'communication'
+                                                ? 'border-blue-500 text-blue-600'
+                                                : 'border-transparent text-gray-600 hover:text-gray-900'
+                                        }`}
+                                    >
+                                        Communication
+                                    </button>
                                 </div>
-                             ) : (
-                                <div className="space-y-5">
-                                    <div className="flex flex-col gap-2 p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 shadow-inner">
-                                        <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.3em]">Parent Contact</span>
-                                        <p className="text-base text-white/80 font-medium font-serif italic">{enquiry.parent_email}</p>
-                                    </div>
-                                    <div className="flex flex-col gap-2 p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 shadow-inner">
-                                        <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.3em]">Institutional Grade</span>
-                                        <p className="text-base text-white/80 font-black font-serif italic tracking-wider">GRADE {enquiry.grade}</p>
-                                    </div>
-                                </div>
-                             )}
-                        </section>
+                            </div>
 
-                        {enquiry.status !== 'CONVERTED' && (
-                            <section className="pt-10 border-t border-white/5 space-y-8">
-                                <button 
+                            {/* Tab Content */}
+                            <div className="flex-1 overflow-y-auto">
+                                {activeTab === 'overview' ? (
+                                    <div className="p-6 space-y-6">
+                                        {/* Student Details Card */}
+                                        <div className="bg-white rounded-xl border border-gray-200 p-6">
+                                            <div className="flex items-center justify-between mb-6">
+                                                <div className="flex items-center gap-3">
+                                                    <AcademicCapIcon className="w-6 h-6 text-blue-600" />
+                                                    <h3 className="text-lg font-semibold text-gray-900">Student Information</h3>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-6">
+                                                <EditableField
+                                                    label="Full Name"
+                                                    value={formData.applicant_name}
+                                                    onSave={(value) => handleSaveField('applicant_name', value)}
+                                                    required
+                                                />
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <AcademicCapIcon className="w-4 h-4 text-gray-400" />
+                                                        <span className="text-sm font-medium text-gray-600">Grade Level</span>
+                                                    </div>
+                                                    <div className="p-3 bg-gray-50 rounded-lg">
+                                                        <span className="text-sm text-gray-900 font-medium">Grade {enquiry.grade}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Parent/Guardian Details */}
+                                        <div className="bg-white rounded-xl border border-gray-200 p-6">
+                                            <div className="flex items-center justify-between mb-6">
+                                                <div className="flex items-center gap-3">
+                                                    <UsersIcon className="w-6 h-6 text-emerald-600" />
+                                                    <h3 className="text-lg font-semibold text-gray-900">Parent/Guardian Information</h3>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-6">
+                                                <EditableField
+                                                    label="Full Name"
+                                                    value={formData.parent_name}
+                                                    onSave={(value) => handleSaveField('parent_name', value)}
+                                                    icon={<UsersIcon className="w-4 h-4 text-gray-400" />}
+                                                    required
+                                                />
+                                                <EditableField
+                                                    label="Email Address"
+                                                    value={formData.parent_email}
+                                                    onSave={(value) => handleSaveField('parent_email', value)}
+                                                    icon={<MailIcon className="w-4 h-4 text-gray-400" />}
+                                                />
+                                                <EditableField
+                                                    label="Phone Number"
+                                                    value={formData.parent_phone || ''}
+                                                    onSave={(value) => handleSaveField('parent_phone', value)}
+                                                    icon={<PhoneIcon className="w-4 h-4 text-gray-400" />}
+                                                />
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <UsersIcon className="w-4 h-4 text-gray-400" />
+                                                        <span className="text-sm font-medium text-gray-600">Relationship</span>
+                                                    </div>
+                                                    <div className="p-3 bg-gray-50 rounded-lg">
+                                                        <span className="text-sm text-gray-900 font-medium">Parent</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Quick Communication Actions */}
+                                            <div className="mt-6 pt-6 border-t border-gray-200">
+                                                <h4 className="text-sm font-medium text-gray-900 mb-4">Quick Actions</h4>
+                                                <div className="flex gap-3">
+                                                    <button
+                                                        onClick={() => window.open(`mailto:${formData.parent_email}`, '_blank')}
+                                                        className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
+                                                    >
+                                                        <MailIcon className="w-4 h-4" />
+                                                        Email
+                                                    </button>
+                                                    <button
+                                                        onClick={() => window.open(`tel:${formData.parent_phone}`, '_blank')}
+                                                        className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors text-sm font-medium"
+                                                    >
+                                                        <PhoneIcon className="w-4 h-4" />
+                                                        Call
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleQuickAction('welcome')}
+                                                        className="flex items-center gap-2 px-4 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors text-sm font-medium"
+                                                    >
+                                                        <CommunicationIcon className="w-4 h-4" />
+                                                        Message
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    /* Communication Tab */
+                                    <div className="flex flex-col h-full">
+                                        {/* Messages Area */}
+                                        <div className="flex-1 overflow-y-auto p-6">
+                                            {loading.timeline ? (
+                                                <div className="space-y-4">
+                                                    {[...Array(3)].map((_, i) => (
+                                                        <div key={i} className="flex gap-4">
+                                                            <SkeletonLoader className="w-10 h-10 rounded-full" />
+                                                            <div className="space-y-2 flex-1">
+                                                                <SkeletonLoader className="h-4 w-24" />
+                                                                <SkeletonLoader className="h-16 w-full" />
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : timeline.length === 0 ? (
+                                                <div className="flex flex-col items-center justify-center h-full text-center">
+                                                    <CommunicationIcon className="w-16 h-16 text-gray-300 mb-4" />
+                                                    <h3 className="text-lg font-medium text-gray-900 mb-2">No messages yet</h3>
+                                                    <p className="text-gray-600">Start the conversation with the parent</p>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    {timeline.map((item, idx) => (
+                                                        <TimelineEntry
+                                                            key={idx}
+                                                            item={item}
+                                                            isLast={idx === timeline.length - 1}
+                                                        />
+                                                    ))}
+                                                    <div ref={commsEndRef} />
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Message Input */}
+                                        <div className="border-t border-gray-200 bg-white p-6">
+                                            <form onSubmit={handleSendMessage} className="flex gap-4">
+                                                <div className="flex-1">
+                                                    <textarea
+                                                        value={newMessage}
+                                                        onChange={(e) => setNewMessage(e.target.value)}
+                                                        placeholder="Type your message to the parent..."
+                                                        className="w-full p-4 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none text-sm"
+                                                        rows={3}
+                                                        onKeyDown={(e) => {
+                                                            if(e.key === 'Enter' && !e.shiftKey) {
+                                                                e.preventDefault();
+                                                                handleSendMessage(e);
+                                                            }
+                                                        }}
+                                                    />
+                                                </div>
+                                                <button
+                                                    type="submit"
+                                                    disabled={!newMessage.trim() || loading.sending}
+                                                    className="px-6 py-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 font-medium"
+                                                >
+                                                    {loading.sending ? <Spinner size="sm" /> : <LocalSendIcon className="w-5 h-5" />}
+                                                    Send
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Primary Action Zone */}
+                <div className="bg-gray-50 border-t border-gray-200 px-8 py-6">
+                    <div className="flex items-center justify-between">
+                        <div className="flex gap-4">
+                            <button
+                                onClick={() => handleQuickAction('welcome')}
+                                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+                            >
+                                Send Welcome
+                            </button>
+                            <button
+                                onClick={() => handleQuickAction('documents')}
+                                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+                            >
+                                Request Documents
+                            </button>
+                        </div>
+
+                        <div className="flex gap-4">
+                            {enquiry.status !== 'CONVERTED' && (
+                                <button
                                     onClick={handleConvert}
                                     disabled={loading.converting || enquiry.status === 'ENQUIRY_ACTIVE'}
-                                    className={`w-full py-7 md:py-8 rounded-[2.8rem] flex items-center justify-center gap-6 font-black text-xs uppercase tracking-[0.5em] transition-all duration-700 shadow-2xl active:scale-95 ${enquiry.status !== 'ENQUIRY_ACTIVE' ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-500/20' : 'bg-white/5 text-white/5 cursor-not-allowed border border-white/5 grayscale'}`}
+                                    className={`px-6 py-3 rounded-xl font-semibold text-sm transition-all ${
+                                        enquiry.status !== 'ENQUIRY_ACTIVE'
+                                            ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg hover:shadow-xl'
+                                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                    }`}
                                 >
-                                    {loading.converting ? <Spinner size="sm" className="text-white"/> : <><GraduationCapIcon className="w-7 h-7 opacity-60" /> PROMOTE TO ADMISSION</>}
+                                    {loading.converting ? (
+                                        <div className="flex items-center gap-2">
+                                            <Spinner size="sm" />
+                                            Converting...
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-2">
+                                            <GraduationCapIcon className="w-4 h-4" />
+                                            Convert to Admission
+                                        </div>
+                                    )}
                                 </button>
-                                {enquiry.status === 'ENQUIRY_ACTIVE' && <p className="text-[9px] text-amber-500/60 font-black uppercase tracking-[0.2em] text-center leading-relaxed">Identity verification protocol required <br/> prior to Promotion.</p>}
-                            </section>
-                        )}
-
-                        <div className="mt-auto opacity-5 hover:opacity-100 transition-opacity duration-1000">
-                            <p className="text-[8px] font-mono text-white break-all text-center">HASH: {btoa(enquiry.id).substring(0, 32)}</p>
+                            )}
                         </div>
                     </div>
                 </div>
