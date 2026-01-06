@@ -1118,6 +1118,73 @@ CREATE OR REPLACE FUNCTION public.get_communications_history() RETURNS SETOF pub
 CREATE OR REPLACE FUNCTION public.send_enquiry_message(p_enquiry_id bigint, p_message text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN INSERT INTO public.enquiry_messages (enquiry_id, sender_id, message, is_admin_message) VALUES (p_enquiry_id, auth.uid(), p_message, EXISTS(SELECT 1 FROM public.school_admin_profiles WHERE user_id = auth.uid())); END; $$;
 CREATE OR REPLACE FUNCTION public.get_enquiry_timeline(p_enquiry_id bigint) RETURNS TABLE (id bigint, item_type text, created_at timestamptz, created_by_name text, is_admin boolean, details jsonb) LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN RETURN QUERY SELECT m.id, 'MESSAGE' as item_type, m.created_at, p.display_name as created_by_name, m.is_admin_message as is_admin, jsonb_build_object('message', m.message) as details FROM public.enquiry_messages m LEFT JOIN public.profiles p ON m.sender_id = p.id WHERE m.enquiry_id = p_enquiry_id ORDER BY m.created_at ASC; END; $$;
 CREATE OR REPLACE FUNCTION public.update_enquiry_status(p_enquiry_id bigint, p_new_status text, p_notes text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN UPDATE public.enquiries SET status = p_new_status, notes = p_notes WHERE id = p_enquiry_id; END; $$;
+
+-- Critical function to fix portal crash - provides enquiry details with proper error handling
+CREATE OR REPLACE FUNCTION public.get_enquiry_details(p_enquiry_id bigint)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    v_enquiry record;
+    v_parent record;
+    v_verification record;
+BEGIN
+    -- Get enquiry with access validation
+    SELECT * INTO v_enquiry FROM public.enquiries WHERE id = p_enquiry_id;
+
+    IF v_enquiry IS NULL THEN
+        RETURN jsonb_build_object(
+            'error', 'ENQUIRY_NOT_FOUND',
+            'message', 'Enquiry does not exist or access denied',
+            'context', jsonb_build_object('enquiry_id', p_enquiry_id)
+        );
+    END IF;
+
+    -- Verify branch access (RLS check)
+    IF v_enquiry.branch_id NOT IN (SELECT get_my_branch_ids()) THEN
+        RETURN jsonb_build_object(
+            'error', 'ACCESS_DENIED',
+            'message', 'You do not have permission to view this enquiry',
+            'context', jsonb_build_object('enquiry_id', p_enquiry_id)
+        );
+    END IF;
+
+    -- Get parent details
+    SELECT display_name, phone INTO v_parent
+    FROM public.profiles WHERE id = v_enquiry.parent_id;
+
+    -- Get verification details (if applicable)
+    SELECT code, created_at INTO v_verification
+    FROM public.share_codes
+    WHERE enquiry_id = p_enquiry_id AND code_type = 'Enquiry'
+    ORDER BY created_at DESC LIMIT 1;
+
+    -- Return structured enquiry details
+    RETURN jsonb_build_object(
+        'enquiry_id', v_enquiry.id,
+        'applicant', jsonb_build_object(
+            'name', v_enquiry.applicant_name,
+            'grade', v_enquiry.grade
+        ),
+        'parent', jsonb_build_object(
+            'id', v_enquiry.parent_id,
+            'name', COALESCE(v_parent.display_name, 'Unknown'),
+            'phone', v_parent.phone
+        ),
+        'status', v_enquiry.status,
+        'branch_id', v_enquiry.branch_id,
+        'created_at', v_enquiry.created_at,
+        'updated_at', v_enquiry.updated_at,
+        'verification', CASE
+            WHEN v_verification.code IS NOT NULL THEN
+                jsonb_build_object(
+                    'code', v_verification.code,
+                    'verified_at', v_verification.created_at
+                )
+            ELSE NULL
+        END
+    );
+END;
+$$;
 CREATE OR REPLACE FUNCTION public.convert_enquiry_to_admission(p_enquiry_id bigint) RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
     v_adm_id bigint;
