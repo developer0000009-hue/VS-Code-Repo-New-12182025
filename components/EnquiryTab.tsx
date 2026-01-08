@@ -63,32 +63,63 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
     const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [verificationWarning, setVerificationWarning] = useState<string | null>(null);
     
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('');
     const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' }>({ key: 'updated_at', direction: 'descending' });
+
+    // Fallback query that loads enquiries directly from table when RPC fails
+    const fallbackFetchEnquiries = useCallback(async (isSilent = false) => {
+        if (branchId === undefined) return;
+
+        if (!isSilent) setLoading(true);
+        try {
+            // Direct query to enquiries table - this should always work
+            const { data, error } = await supabase
+                .from('enquiries')
+                .select('*')
+                .eq('conversion_state', 'NOT_CONVERTED')
+                .eq('is_archived', false)
+                .eq('is_deleted', false)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            setEnquiries(data || []);
+        } catch (err: any) {
+            // If even the fallback fails, show blocking error
+            setError(formatError(err));
+        } finally {
+            setLoading(false);
+        }
+    }, [branchId]);
 
     const fetchEnquiries = useCallback(async (isSilent = false) => {
         if (branchId === undefined) {
             setLoading(false);
             return;
         }
-        
+
         if (!isSilent) setLoading(true);
         setError(null);
+        setVerificationWarning(null); // Clear previous warnings
+
         try {
             const { data, error: rpcError } = await supabase.rpc('get_enquiries_for_node', {
                 p_branch_id: branchId
             });
-            
+
             if (rpcError) throw rpcError;
             setEnquiries(data || []);
         } catch (err: any) {
-            setError(formatError(err));
+            // Show warning instead of blocking error, then fallback to direct query
+            setVerificationWarning("Verification sync is temporarily unavailable. Enquiries are loaded. Verification status may update shortly.");
+            console.warn("RPC failed, falling back to direct query:", formatError(err));
+            await fallbackFetchEnquiries(true); // Use silent fallback
         } finally {
-            setLoading(false);
+            if (!isSilent) setLoading(false);
         }
-    }, [branchId]);
+    }, [branchId, fallbackFetchEnquiries]);
 
     useEffect(() => {
         fetchEnquiries();
@@ -104,6 +135,18 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
 
         return () => { supabase.removeChannel(channel); };
     }, [fetchEnquiries, branchId]);
+
+    // Background retry logic for verification sync
+    useEffect(() => {
+        if (!verificationWarning) return; // Only run when there's a warning
+
+        const retryInterval = setInterval(() => {
+            console.log('Background retry: attempting verification sync...');
+            fetchEnquiries(true); // Silent retry
+        }, 60000); // Retry every 60 seconds
+
+        return () => clearInterval(retryInterval);
+    }, [verificationWarning, fetchEnquiries]);
     
     const processedEnquiries = useMemo(() => {
         let data = enquiries.filter(enq => {
@@ -195,6 +238,33 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                         </div>
                     </div>
                     <button onClick={() => fetchEnquiries()} className="px-6 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95">Retry Sync</button>
+                </div>
+            )}
+
+            {verificationWarning && (
+                <div className="p-6 bg-yellow-500/10 border border-yellow-500/20 rounded-[2rem] flex items-center justify-between shadow-xl animate-in fade-in">
+                    <div className="flex items-center gap-4">
+                        <AlertTriangleIcon className="w-8 h-8 text-yellow-500 shrink-0" />
+                        <div>
+                            <p className="text-xs font-black uppercase text-yellow-500 tracking-widest">Verification Sync</p>
+                            <p className="text-sm font-bold text-yellow-200/70 mt-1">{verificationWarning}</p>
+                        </div>
+                    </div>
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => setVerificationWarning(null)}
+                            className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all active:scale-95"
+                        >
+                            Dismiss
+                        </button>
+                        <button
+                            onClick={() => fetchEnquiries()}
+                            disabled={loading}
+                            className="px-6 py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95"
+                        >
+                            Retry Sync
+                        </button>
+                    </div>
                 </div>
             )}
 

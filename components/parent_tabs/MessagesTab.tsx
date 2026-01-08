@@ -14,16 +14,13 @@ import { ShieldCheckIcon } from '../icons/ShieldCheckIcon';
 
 type Tab = 'inbox' | 'enquiries';
 
-// Updated to include all EnquiryStatus values used in the UI
+// Status colors for EnquiryStatus enum values
 const statusColors: { [key in EnquiryStatus]: string } = {
-  'New': 'bg-blue-400/10 text-blue-400 border-blue-400/20',
-  'Contacted': 'bg-amber-400/10 text-amber-400 border-amber-400/20',
-  'Verified': 'bg-indigo-400/10 text-indigo-400 border-indigo-400/20',
-  'ENQUIRY_VERIFIED': 'bg-indigo-400/10 text-indigo-400 border-indigo-400/20',
-  'In Review': 'bg-purple-400/10 text-purple-400 border-purple-400/20',
-  'ENQUIRY_IN_PROGRESS': 'bg-purple-400/10 text-purple-400 border-purple-400/20',
-  'ENQUIRY_ACTIVE': 'bg-indigo-400/10 text-indigo-400 border-indigo-400/20',
-  'Completed': 'bg-emerald-400/10 text-emerald-400 border-emerald-400/20',
+  'NEW': 'bg-blue-400/10 text-blue-400 border-blue-400/20',
+  'CONTACTED': 'bg-amber-400/10 text-amber-400 border-amber-400/20',
+  'VERIFIED': 'bg-indigo-400/10 text-indigo-400 border-indigo-400/20',
+  'APPROVED': 'bg-purple-400/10 text-purple-400 border-purple-400/20',
+  'REJECTED': 'bg-red-400/10 text-red-400 border-red-400/20',
   'CONVERTED': 'bg-emerald-400/10 text-emerald-400 border-emerald-400/20',
 };
 
@@ -348,3 +345,4 @@ const ConversationView = ({ enquiry, onBack, refreshEnquiries }: any) => {
 };
 
 export default MessagesTab;
+

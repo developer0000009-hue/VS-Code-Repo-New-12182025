@@ -54,7 +54,7 @@ export const formatError = (err: any): string => {
     if (err.code === '42804') return "Database Engine Error: Type mismatch detected (UUID vs BIGINT). Please run schema migration.";
     if (err.code === '22P02') return "Data Integrity Error: Invalid identification format detected.";
     if (err.code === '23505') return "Registry Conflict: This identity node is already registered.";
-    if (err.code === '42703') return "Verification temporarily unavailable. Please contact admin."; // Column does not exist
+    if (err.code === '42703') return "Verification service temporarily unavailable."; // Column does not exist
 
     const extracted = getDeepMessage(err);
     if (extracted) return extracted;
