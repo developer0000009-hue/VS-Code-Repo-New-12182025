@@ -72,12 +72,3 @@ const EnquiryMessageComposer: React.FC<EnquiryMessageComposerProps> = ({ onSendM
                     {loading ? (
                         <div className="w-6 h-6 md:w-10 md:h-10 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     ) : (
-                        <LocalSendIcon className="w-6 h-6 md:w-10 md:h-10 lg:w-14 lg:h-14" />
-                    )}
-                </button>
-            </form>
-        </div>
-    );
-};
-
-export default EnquiryMessageComposer;
