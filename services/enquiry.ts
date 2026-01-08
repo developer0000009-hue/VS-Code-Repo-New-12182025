@@ -1,4 +1,3 @@
-
 import { supabase, formatError } from './supabase';
 
 /**
@@ -10,42 +9,27 @@ export const EnquiryService = {
      * Processes an enquiry identity verification.
      * Strictly updates Enquiry state only.
      */
-    async processEnquiryVerification(admissionId: string) {
+    async processEnquiryVerification(enquiryId: string) {
         try {
-            if (!admissionId) throw new Error("Reference ID required for processing.");
+            if (!enquiryId) throw new Error("Reference ID required for processing.");
 
-            // First get the enquiry ID from admission_id
-            const { data: enquiryData, error: fetchError } = await supabase
+            const { data, error } = await supabase
                 .from('enquiries')
-                .select('id')
-                .eq('admission_id', admissionId)
+                .update({ 
+                    status: 'ENQUIRY_VERIFIED',
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', enquiryId)
+                .select()
                 .maybeSingle();
 
-            if (fetchError) throw fetchError;
-            if (!enquiryData) throw new Error("Enquiry node not found in registry.");
-
-            // Use RPC to update status (bypasses RLS issues)
-            const { error: updateError } = await supabase.rpc('update_enquiry_status', {
-                p_enquiry_id: enquiryData.id,
-                p_new_status: 'ENQUIRY_VERIFIED',
-                p_notes: 'Verified via access code'
-            });
-
-            if (updateError) throw updateError;
-
-            // Fetch updated enquiry
-            const { data: updatedEnquiry, error: fetchUpdatedError } = await supabase
-                .from('enquiries')
-                .select('*')
-                .eq('id', enquiryData.id)
-                .single();
-
-            if (fetchUpdatedError) throw fetchUpdatedError;
+            if (error) throw error;
+            if (!data) throw new Error("Enquiry node not found in registry.");
 
             return {
                 success: true,
                 message: "Enquiry identity verified successfully.",
-                enquiry: updatedEnquiry,
+                enquiry: data,
                 targetModule: 'Enquiries'
             };
         } catch (err) {
@@ -71,7 +55,7 @@ export const EnquiryService = {
             return {
                 success: true,
                 message: data.message,
-                admissionId: data.admission_id
+                admissionId: String(data.admission_id)
             };
         } catch (err) {
             const formatted = formatError(err);
