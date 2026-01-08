@@ -24,6 +24,7 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
     const [error, setError] = useState<string | null>(null);
     const [verificationResult, setVerificationResult] = useState<VerifiedShareCodeData & { id?: string } | null>(null);
     const [syncSuccess, setSyncSuccess] = useState(false);
+    const [retryCount, setRetryCount] = useState(0);
 
     const resetState = () => {
         setError(null);
@@ -31,6 +32,7 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
         setSyncSuccess(false);
         setVerifying(false);
         setProcessing(false);
+        setRetryCount(0);
     };
 
     const handleVerify = async (e: React.FormEvent) => {
@@ -143,12 +145,25 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
                                 </div>
                                 <div className="space-y-2 py-1 text-left">
                                     <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-60">Verification Failed</p>
-                                    <p className="leading-relaxed text-red-200/90 font-serif italic text-base">"{error}"</p>
+                                    <p className="leading-relaxed text-red-200/90 font-serif italic text-base">{error}</p>
+                                    {error.includes("Verification temporarily unavailable") && (
+                                        <p className="text-[9px] font-bold text-red-300/70 mt-2">Please contact your system administrator to resolve this issue.</p>
+                                    )}
                                 </div>
                             </div>
-                            <button onClick={resetState} className="self-end flex items-center gap-2 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all">
-                                <RotateCcwIcon className="w-3.5 h-3.5"/> Retry Verification
-                            </button>
+                            {retryCount < 3 && !error.includes("Verification temporarily unavailable") ? (
+                                <button
+                                    onClick={() => {
+                                        setRetryCount(prev => prev + 1);
+                                        resetState();
+                                    }}
+                                    className="self-end flex items-center gap-2 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all"
+                                >
+                                    <RotateCcwIcon className="w-3.5 h-3.5"/> Retry Verification ({3 - retryCount} attempts left)
+                                </button>
+                            ) : retryCount >= 3 && !error.includes("Verification temporarily unavailable") ? (
+                                <p className="text-[9px] font-bold text-red-300/70 self-end">Maximum retry attempts reached. Please try again later or contact support.</p>
+                            ) : null}
                         </div>
                     )}
                     {syncSuccess && (

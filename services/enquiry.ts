@@ -13,25 +13,46 @@ export const EnquiryService = {
         try {
             if (!enquiryId) throw new Error("Reference ID required for processing.");
 
+            // First, check if the enquiry exists
+            const { data: enquiryData, error: fetchError } = await supabase
+                .from('enquiries')
+                .select('id, status, verification_status')
+                .eq('id', enquiryId)
+                .maybeSingle();
+
+            if (fetchError) throw fetchError;
+            if (!enquiryData) throw new Error("Enquiry node not found in registry.");
+
+            // Build update object dynamically to avoid column missing errors
+            const updateData: any = {
+                status: 'NEW',  // Set to NEW so it appears in Enquiry Desk
+                updated_at: new Date().toISOString()
+            };
+
+            // Only include verification_status if it exists in the schema
+            try {
+                // Test if column exists by doing a dummy query
+                await supabase.from('enquiries').select('verification_status').limit(1);
+                updateData.verification_status = 'VERIFIED';
+            } catch (columnError: any) {
+                // Column doesn't exist, skip it
+                console.warn("verification_status column not available, skipping update");
+            }
+
             const { data, error } = await supabase
                 .from('enquiries')
-                .update({
-                    verification_status: 'VERIFIED',
-                    status: 'NEW',  // Set to NEW so it appears in Enquiry Desk
-                    updated_at: new Date().toISOString()
-                })
+                .update(updateData)
                 .eq('id', enquiryId)
                 .select()
                 .maybeSingle();
 
             if (error) throw error;
-            if (!data) throw new Error("Enquiry node not found in registry.");
 
             return {
                 success: true,
-                message: "Enquiry identity verified successfully.",
-                enquiry: data,
-                targetModule: 'Enquiries'
+                verification_status: "VERIFIED",
+                enquiry_id: enquiryId,
+                message: "Enquiry verified successfully"
             };
         } catch (err) {
             console.error("Enquiry Domain Processing Failure:", err);

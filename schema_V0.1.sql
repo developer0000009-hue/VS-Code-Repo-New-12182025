@@ -470,6 +470,7 @@ CREATE TABLE IF NOT EXISTS public.enquiries (
     applicant_name text NOT NULL,
     grade text,
     status text DEFAULT 'New',
+    verification_status text DEFAULT 'PENDING' CHECK (verification_status IN ('PENDING', 'VERIFIED', 'FAILED')),
     received_at timestamptz DEFAULT now() NOT NULL,
     parent_name text,
     parent_email text,
