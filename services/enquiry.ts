@@ -23,21 +23,15 @@ export const EnquiryService = {
             if (fetchError) throw fetchError;
             if (!enquiryData) throw new Error("Enquiry node not found in registry.");
 
-            // Build update object dynamically to avoid column missing errors
+            // Build update object with all required fields for enquiry visibility
             const updateData: any = {
                 status: 'NEW',  // Set to NEW so it appears in Enquiry Desk
+                verification_status: 'VERIFIED',
+                conversion_state: 'NOT_CONVERTED',
+                is_archived: false,
+                is_deleted: false,
                 updated_at: new Date().toISOString()
             };
-
-            // Only include verification_status if it exists in the schema
-            try {
-                // Test if column exists by doing a dummy query
-                await supabase.from('enquiries').select('verification_status').limit(1);
-                updateData.verification_status = 'VERIFIED';
-            } catch (columnError: any) {
-                // Column doesn't exist, skip it
-                console.warn("verification_status column not available, skipping update");
-            }
 
             const { data, error } = await supabase
                 .from('enquiries')

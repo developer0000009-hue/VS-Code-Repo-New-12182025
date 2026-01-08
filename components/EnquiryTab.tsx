@@ -77,8 +77,8 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
         if (!isSilent) setLoading(true);
         setError(null);
         try {
-            const { data, error: rpcError } = await supabase.rpc('get_all_enquiries', { 
-                p_branch_id: branchId 
+            const { data, error: rpcError } = await supabase.rpc('get_enquiries_for_node', {
+                p_branch_id: branchId
             });
             
             if (rpcError) throw rpcError;
