@@ -224,6 +224,7 @@ export interface MyEnquiry {
 export interface Enquiry extends MyEnquiry {
     parent_name: string;
     notes?: string;
+    conversion_state?: 'NOT_CONVERTED' | 'CONVERTED';
 }
 
 export interface TimelineItem {

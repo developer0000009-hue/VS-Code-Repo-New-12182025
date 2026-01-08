@@ -111,12 +111,14 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
     
     const processedEnquiries = useMemo(() => {
         let data = enquiries.filter(enq => {
+            // Only show enquiries that haven't been converted to admissions
+            const isNotConverted = enq.conversion_state === 'NOT_CONVERTED' || !enq.conversion_state;
             const matchesStatus = !filterStatus || enq.status === filterStatus;
             const searchLower = searchTerm.toLowerCase();
-            const matchesSearch = !searchTerm || 
+            const matchesSearch = !searchTerm ||
                 enq.applicant_name.toLowerCase().includes(searchLower) ||
                 (enq.parent_name || '').toLowerCase().includes(searchLower);
-            return matchesStatus && matchesSearch;
+            return isNotConverted && matchesStatus && matchesSearch;
         });
 
         data.sort((a, b) => {
@@ -221,13 +223,13 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                 </div>
                 
                 <div className="flex bg-black/60 p-2 rounded-[1.8rem] border border-white/5 overflow-x-auto no-scrollbar w-full xl:w-auto shadow-inner">
-                    {['All', 'ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'].map(f => (
-                        <button 
+                    {['All', 'ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS'].map(f => (
+                        <button
                             key={f}
                             onClick={() => setFilterStatus(f === 'All' ? '' : f)}
                             className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.25em] transition-all duration-700 whitespace-nowrap ${
-                                (filterStatus === f || (f === 'All' && !filterStatus)) 
-                                ? 'bg-[#1a1d24] text-primary shadow-2xl ring-1 ring-white/10 scale-[1.05] z-10' 
+                                (filterStatus === f || (f === 'All' && !filterStatus))
+                                ? 'bg-[#1a1d24] text-primary shadow-2xl ring-1 ring-white/10 scale-[1.05] z-10'
                                 : 'text-white/20 hover:text-white/40'
                             }`}
                         >

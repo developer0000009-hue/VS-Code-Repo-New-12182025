@@ -477,7 +477,9 @@ CREATE TABLE IF NOT EXISTS public.enquiries (
     notes text,
     updated_at timestamptz DEFAULT now(),
     admission_id bigint UNIQUE REFERENCES public.admissions(id) ON DELETE SET NULL,
-    branch_id bigint REFERENCES public.school_branches(id) ON DELETE CASCADE
+    branch_id bigint REFERENCES public.school_branches(id) ON DELETE CASCADE,
+    conversion_state text DEFAULT 'NOT_CONVERTED' CHECK (conversion_state IN ('NOT_CONVERTED', 'CONVERTED')),
+    converted_at timestamptz
 );
 
 CREATE TABLE IF NOT EXISTS public.document_requirements (
@@ -1191,7 +1193,7 @@ DECLARE
 BEGIN
     SELECT admission_id INTO v_adm_id FROM public.enquiries WHERE id = p_enquiry_id;
     UPDATE public.admissions SET status = 'Pending Review', has_enquiry = true, submitted_by = auth.uid() WHERE id = v_adm_id;
-    UPDATE public.enquiries SET status = 'Completed' WHERE id = p_enquiry_id;
+    UPDATE public.enquiries SET status = 'Completed', conversion_state = 'CONVERTED', converted_at = now() WHERE id = p_enquiry_id;
     -- Migrate share codes from enquiry to admission
     UPDATE public.share_codes SET admission_id = v_adm_id, code_type = 'Admission' WHERE enquiry_id = p_enquiry_id;
 END;
