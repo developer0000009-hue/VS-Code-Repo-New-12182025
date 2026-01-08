@@ -225,6 +225,7 @@ export interface Enquiry extends MyEnquiry {
     parent_name: string;
     notes?: string;
     conversion_state?: 'NOT_CONVERTED' | 'CONVERTED';
+    verification_status?: 'PENDING' | 'VERIFIED';
 }
 
 export interface TimelineItem {

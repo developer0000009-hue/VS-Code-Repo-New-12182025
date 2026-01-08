@@ -219,7 +219,7 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                 </div>
                 
                 <div className="flex bg-black/60 p-2 rounded-[1.8rem] border border-white/5 overflow-x-auto no-scrollbar w-full xl:w-auto shadow-inner">
-                    {['All', 'APPROVED', 'CONTACTED', 'VERIFIED'].map(f => (
+                    {['All', 'NEW', 'APPROVED', 'CONTACTED', 'VERIFIED'].map(f => (
                         <button
                             key={f}
                             onClick={() => setFilterStatus(f === 'All' ? '' : f)}

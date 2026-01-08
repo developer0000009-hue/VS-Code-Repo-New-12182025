@@ -16,7 +16,8 @@ export const EnquiryService = {
             const { data, error } = await supabase
                 .from('enquiries')
                 .update({
-                    status: 'CONTACTED',  // Set to CONTACTED so it appears in Enquiry Desk
+                    verification_status: 'VERIFIED',
+                    status: 'NEW',  // Set to NEW so it appears in Enquiry Desk
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', enquiryId)

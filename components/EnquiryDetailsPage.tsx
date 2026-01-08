@@ -588,6 +588,23 @@ const EnquiryDetailsPage: React.FC<EnquiryDetailsPageProps> = ({ onNavigate }) =
                 </div>
             </div>
 
+            {/* Verification Banner - Show when enquiry is verified */}
+            {enquiry.verification_status === 'VERIFIED' && (
+                <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-green-500/10 border-b border-emerald-500/20 backdrop-blur-xl">
+                    <div className="max-w-7xl mx-auto px-8 py-4">
+                        <div className="flex items-center justify-center gap-3">
+                            <div className="p-2 rounded-full bg-emerald-500/20 border border-emerald-500/30">
+                                <ShieldCheckIcon className="w-5 h-5 text-emerald-400" />
+                            </div>
+                            <div className="text-center">
+                                <p className="text-sm font-bold text-emerald-400 uppercase tracking-[0.2em]">Verified – Ready for follow-up</p>
+                                <p className="text-xs text-emerald-300/70 mt-1">This enquiry has been successfully verified and is ready for contact</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Premium 3-Zone Layout */}
             <div className="flex h-[calc(100vh-320px)] bg-slate-950">
                 {/* Left: Intelligence Timeline */}
