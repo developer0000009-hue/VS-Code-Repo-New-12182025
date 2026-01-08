@@ -18,25 +18,21 @@ import { SparklesIcon } from './icons/SparklesIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 
 const statusColors: Record<string, string> = {
-  'New': 'bg-gray-500/10 text-gray-400 border-gray-500/20',
-  'ENQUIRY_ACTIVE': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-  'ENQUIRY_VERIFIED': 'bg-teal-500/20 text-teal-400 border-teal-500/30 font-black shadow-[0_0_15px_rgba(45,212,191,0.1)]',
+  'NEW': 'bg-gray-500/10 text-gray-400 border-gray-500/20',
+  'CONTACTED': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   'VERIFIED': 'bg-teal-500/20 text-teal-400 border-teal-500/30 font-black shadow-[0_0_15px_rgba(45,212,191,0.1)]',
-  'ENQUIRY_IN_PROGRESS': 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-  'IN_REVIEW': 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+  'APPROVED': 'bg-teal-500/20 text-teal-400 border-teal-500/30 font-black shadow-[0_0_15px_rgba(45,212,191,0.1)]',
+  'REJECTED': 'bg-red-500/10 text-red-400 border-red-500/20',
   'CONVERTED': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  'Completed': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
 };
 
 const statusLabels: Record<string, string> = {
-  'New': 'New',
-  'ENQUIRY_ACTIVE': 'Active',
-  'ENQUIRY_VERIFIED': 'Verified',
+  'NEW': 'New',
+  'CONTACTED': 'Contacted',
   'VERIFIED': 'Verified',
-  'ENQUIRY_IN_PROGRESS': 'In Review',
-  'IN_REVIEW': 'In Review',
+  'APPROVED': 'Approved',
+  'REJECTED': 'Rejected',
   'CONVERTED': 'Converted',
-  'Completed': 'Completed',
 };
 
 type SortableKeys = 'applicant_name' | 'grade' | 'status' | 'updated_at';
@@ -135,7 +131,7 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
 
     const stats = useMemo(() => ({
         total: enquiries.length,
-        verified: enquiries.filter(e => e.status === 'ENQUIRY_VERIFIED').length,
+        approved: enquiries.filter(e => e.status === 'APPROVED').length,
         converted: enquiries.filter(e => e.status === 'CONVERTED').length
     }), [enquiries]);
 
@@ -205,7 +201,7 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
             {/* Stats Deck */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <StatBox title="Total Ledger" value={stats.total} icon={<MailIcon className="w-7 h-7"/>} color="bg-blue-500" desc="Total Nodes" />
-                <StatBox title="Verified Stream" value={stats.verified} icon={<ShieldCheckIcon className="h-7 w-7"/>} color="bg-teal-500" desc="Clearance Active" />
+                <StatBox title="Approved Stream" value={stats.approved} icon={<ShieldCheckIcon className="h-7 w-7"/>} color="bg-teal-500" desc="Ready for Conversion" />
                 <StatBox title="PROMOTED" value={stats.converted} icon={<CheckCircleIcon className="h-7 w-7"/>} color="bg-emerald-500" desc="Converted nodes" />
             </div>
             
@@ -223,7 +219,7 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                 </div>
                 
                 <div className="flex bg-black/60 p-2 rounded-[1.8rem] border border-white/5 overflow-x-auto no-scrollbar w-full xl:w-auto shadow-inner">
-                    {['All', 'ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS'].map(f => (
+                    {['All', 'APPROVED', 'CONTACTED', 'VERIFIED'].map(f => (
                         <button
                             key={f}
                             onClick={() => setFilterStatus(f === 'All' ? '' : f)}
@@ -248,7 +244,7 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                         <Spinner size="lg" className="text-primary" />
                         <p className="text-[11px] font-black uppercase text-white/20 tracking-[0.5em] animate-pulse">Syncing Lifecycle Protocol</p>
                     </div>
-                ) : stats.verified === 0 ? (
+                ) : stats.approved === 0 ? (
                     <div className="flex flex-col items-center justify-center py-48 text-center px-12 animate-in fade-in duration-1000">
                         <div className="w-32 h-32 bg-white/[0.01] rounded-[3rem] flex items-center justify-center mb-10 border border-white/5 shadow-inner">
                             <KeyIcon className="h-14 w-14 text-white/10" />

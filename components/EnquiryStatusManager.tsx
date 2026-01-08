@@ -2,6 +2,7 @@ import React from 'react';
 import { EnquiryStatus } from '../types';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { GraduationCapIcon } from './icons/GraduationCapIcon';
+import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 
 interface EnquiryStatusManagerProps {
     currentStatus: EnquiryStatus;
@@ -11,13 +12,15 @@ interface EnquiryStatusManagerProps {
 }
 
 const STATUS_CONFIG: Record<string, { icon: React.ReactNode, label: string, color: string, ring: string, bg: string }> = {
-    'ENQUIRY_ACTIVE': { icon: <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"/>, label: 'Active', color: 'text-blue-700', ring: 'ring-blue-600', bg: 'bg-blue-50' },
-    'ENQUIRY_VERIFIED': { icon: <div className="w-4 h-4 rounded-full bg-teal-500"/>, label: 'Verified', color: 'text-teal-700', ring: 'ring-teal-500', bg: 'bg-teal-50' },
-    'ENQUIRY_IN_PROGRESS': { icon: <div className="w-4 h-4 rounded-full bg-purple-500"/>, label: 'In Progress', color: 'text-purple-700', ring: 'ring-purple-500', bg: 'bg-purple-50' },
+    'NEW': { icon: <div className="w-2 h-2 rounded-full bg-gray-500 animate-pulse"/>, label: 'New', color: 'text-gray-700', ring: 'ring-gray-600', bg: 'bg-gray-50' },
+    'CONTACTED': { icon: <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"/>, label: 'Contacted', color: 'text-blue-700', ring: 'ring-blue-600', bg: 'bg-blue-50' },
+    'VERIFIED': { icon: <ShieldCheckIcon className="w-4 h-4"/>, label: 'Verified', color: 'text-teal-700', ring: 'ring-teal-500', bg: 'bg-teal-50' },
+    'APPROVED': { icon: <ShieldCheckIcon className="w-4 h-4"/>, label: 'Approved', color: 'text-teal-700', ring: 'ring-teal-500', bg: 'bg-teal-50' },
+    'REJECTED': { icon: <div className="w-4 h-4 rounded-full bg-red-500"/>, label: 'Rejected', color: 'text-red-700', ring: 'ring-red-500', bg: 'bg-red-50' },
     'CONVERTED': { icon: <CheckCircleIcon className="w-4 h-4"/>, label: 'Converted', color: 'text-emerald-700', ring: 'ring-emerald-500', bg: 'bg-emerald-50' },
 };
 
-const ORDERED_STATUSES: EnquiryStatus[] = ['ENQUIRY_ACTIVE', 'ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'];
+const ORDERED_STATUSES: EnquiryStatus[] = ['NEW', 'CONTACTED', 'VERIFIED', 'APPROVED', 'REJECTED'];
 
 const EnquiryStatusManager: React.FC<EnquiryStatusManagerProps> = ({
     currentStatus,
@@ -31,7 +34,7 @@ const EnquiryStatusManager: React.FC<EnquiryStatusManagerProps> = ({
     };
 
     const handleConvert = async () => {
-        if (loading || currentStatus === 'ENQUIRY_ACTIVE') return;
+        if (loading || currentStatus !== 'APPROVED') return;
         await onConvert();
     };
 
@@ -79,9 +82,9 @@ const EnquiryStatusManager: React.FC<EnquiryStatusManagerProps> = ({
                 <section className="pt-8 md:pt-10 border-t border-white/5 space-y-6 md:space-y-8 pb-10">
                     <button
                         onClick={handleConvert}
-                        disabled={loading || currentStatus === 'ENQUIRY_ACTIVE'}
+                        disabled={loading || currentStatus !== 'APPROVED'}
                         className={`w-full py-6 md:py-8 rounded-2xl md:rounded-[2.8rem] flex items-center justify-center gap-4 md:gap-6 font-black text-[10px] md:text-xs uppercase tracking-[0.5em] transition-all duration-700 shadow-2xl active:scale-95 ${
-                            currentStatus !== 'ENQUIRY_ACTIVE'
+                            currentStatus === 'APPROVED'
                                 ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-500/20'
                                 : 'bg-white/5 text-white/5 cursor-not-allowed border border-white/5 grayscale'
                         }`}
@@ -97,9 +100,9 @@ const EnquiryStatusManager: React.FC<EnquiryStatusManagerProps> = ({
                         )}
                     </button>
 
-                    {currentStatus === 'ENQUIRY_ACTIVE' && (
+                    {currentStatus !== 'APPROVED' && (
                         <p className="text-[8px] md:text-[9px] text-amber-500/60 font-black uppercase tracking-[0.2em] text-center leading-relaxed px-4">
-                            Identity verification protocol required prior to promotion.
+                            Enquiry must be approved before conversion.
                         </p>
                     )}
                 </section>

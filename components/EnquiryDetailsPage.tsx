@@ -40,17 +40,15 @@ const LocalSendIcon = (props: React.SVGProps<SVGSVGElement>) => (
 );
 
 const STATUS_CONFIG: Record<string, { icon: React.ReactNode, label: string, color: string, ring: string, bg: string }> = {
-    'New': { icon: <div className="w-2 h-2 rounded-full bg-gray-500 animate-pulse"/>, label: 'New', color: 'text-gray-700', ring: 'ring-gray-600', bg: 'bg-gray-50' },
-    'ENQUIRY_ACTIVE': { icon: <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"/>, label: 'Active', color: 'text-blue-700', ring: 'ring-blue-600', bg: 'bg-blue-50' },
-    'ENQUIRY_VERIFIED': { icon: <ShieldCheckIcon className="w-4 h-4"/>, label: 'Verified', color: 'text-teal-700', ring: 'ring-teal-500', bg: 'bg-teal-50' },
+    'NEW': { icon: <div className="w-2 h-2 rounded-full bg-gray-500 animate-pulse"/>, label: 'New', color: 'text-gray-700', ring: 'ring-gray-600', bg: 'bg-gray-50' },
+    'CONTACTED': { icon: <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"/>, label: 'Contacted', color: 'text-blue-700', ring: 'ring-blue-600', bg: 'bg-blue-50' },
     'VERIFIED': { icon: <ShieldCheckIcon className="w-4 h-4"/>, label: 'Verified', color: 'text-teal-700', ring: 'ring-teal-500', bg: 'bg-teal-50' },
-    'ENQUIRY_IN_PROGRESS': { icon: <div className="w-2 h-2 rounded-full bg-purple-600"/>, label: 'In Progress', color: 'text-purple-700', ring: 'ring-purple-500', bg: 'bg-purple-50' },
-    'IN_REVIEW': { icon: <div className="w-2 h-2 rounded-full bg-purple-600"/>, label: 'In Review', color: 'text-purple-700', ring: 'ring-purple-500', bg: 'bg-purple-50' },
+    'APPROVED': { icon: <ShieldCheckIcon className="w-4 h-4"/>, label: 'Approved', color: 'text-teal-700', ring: 'ring-teal-500', bg: 'bg-teal-50' },
+    'REJECTED': { icon: <div className="w-4 h-4 rounded-full bg-red-500"/>, label: 'Rejected', color: 'text-red-700', ring: 'ring-red-500', bg: 'bg-red-50' },
     'CONVERTED': { icon: <CheckCircleIcon className="w-4 h-4"/>, label: 'Converted', color: 'text-emerald-700', ring: 'ring-emerald-500', bg: 'bg-emerald-50' },
-    'Completed': { icon: <CheckCircleIcon className="w-4 h-4"/>, label: 'Completed', color: 'text-emerald-700', ring: 'ring-emerald-500', bg: 'bg-emerald-50' },
 };
 
-const ORDERED_STATUSES: EnquiryStatus[] = ['ENQUIRY_VERIFIED', 'In Review'];
+const ORDERED_STATUSES: EnquiryStatus[] = ['NEW', 'CONTACTED', 'VERIFIED', 'APPROVED', 'REJECTED'];
 
 const TimelineEntry: React.FC<{ item: TimelineItem }> = ({ item }) => {
     if (item.item_type === 'MESSAGE') {
@@ -763,37 +761,16 @@ const EnquiryDetailsPage: React.FC<EnquiryDetailsPageProps> = ({ onNavigate }) =
                                     </div>
                                 </div>
                                 <div className={`flex items-center gap-4 p-4 rounded-2xl bg-slate-800/30 border ${
-                                    enquiry.status !== 'New' ? 'border-emerald-500/30' : 'border-slate-700/30'
-                                }`}>
-                                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${
-                                        enquiry.status !== 'New'
-                                            ? 'bg-emerald-500/20 border-emerald-500/30'
-                                            : 'bg-slate-800/50 border-slate-600'
-                                    }`}>
-                                        {enquiry.status !== 'New' ? (
-                                            <CheckIcon className="w-4 h-4 text-emerald-400" />
-                                        ) : (
-                                            <div className="w-2 h-2 rounded-full bg-slate-500 animate-pulse" />
-                                        )}
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className={`text-sm font-semibold ${enquiry.status !== 'New' ? 'text-white' : 'text-slate-400'}`}>
-                                            Documents Requested
-                                        </div>
-                                        <div className="text-xs text-slate-500">Status only</div>
-                                    </div>
-                                </div>
-                                <div className={`flex items-center gap-4 p-4 rounded-2xl bg-slate-800/30 border ${
-                                    ['ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'].includes(enquiry.status)
+                                    ['CONTACTED', 'APPROVED', 'REJECTED', 'CONVERTED'].includes(enquiry.status)
                                         ? 'border-emerald-500/30'
                                         : 'border-slate-700/30'
                                 }`}>
                                     <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${
-                                        ['ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'].includes(enquiry.status)
+                                        ['CONTACTED', 'APPROVED', 'REJECTED', 'CONVERTED'].includes(enquiry.status)
                                             ? 'bg-emerald-500/20 border-emerald-500/30'
                                             : 'bg-slate-800/50 border-slate-600'
                                     }`}>
-                                        {['ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'].includes(enquiry.status) ? (
+                                        {['CONTACTED', 'APPROVED', 'REJECTED', 'CONVERTED'].includes(enquiry.status) ? (
                                             <CheckIcon className="w-4 h-4 text-emerald-400" />
                                         ) : (
                                             <div className="w-2 h-2 rounded-full bg-slate-500 animate-pulse" />
@@ -801,13 +778,40 @@ const EnquiryDetailsPage: React.FC<EnquiryDetailsPageProps> = ({ onNavigate }) =
                                     </div>
                                     <div className="flex-1">
                                         <div className={`text-sm font-semibold ${
-                                            ['ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'].includes(enquiry.status)
+                                            ['CONTACTED', 'APPROVED', 'REJECTED', 'CONVERTED'].includes(enquiry.status)
                                                 ? 'text-white'
                                                 : 'text-slate-400'
                                         }`}>
-                                            Verification Completed
+                                            Contacted Parent
                                         </div>
-                                        <div className="text-xs text-slate-500">Identity and documents verified</div>
+                                        <div className="text-xs text-slate-500">Initial outreach completed</div>
+                                    </div>
+                                </div>
+                                <div className={`flex items-center gap-4 p-4 rounded-2xl bg-slate-800/30 border ${
+                                    ['APPROVED', 'CONVERTED'].includes(enquiry.status)
+                                        ? 'border-emerald-500/30'
+                                        : 'border-slate-700/30'
+                                }`}>
+                                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${
+                                        ['APPROVED', 'CONVERTED'].includes(enquiry.status)
+                                            ? 'bg-emerald-500/20 border-emerald-500/30'
+                                            : 'bg-slate-800/50 border-slate-600'
+                                    }`}>
+                                        {['APPROVED', 'CONVERTED'].includes(enquiry.status) ? (
+                                            <CheckIcon className="w-4 h-4 text-emerald-400" />
+                                        ) : (
+                                            <div className="w-2 h-2 rounded-full bg-slate-500 animate-pulse" />
+                                        )}
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className={`text-sm font-semibold ${
+                                            ['APPROVED', 'CONVERTED'].includes(enquiry.status)
+                                                ? 'text-white'
+                                                : 'text-slate-400'
+                                        }`}>
+                                            Approved for Admission
+                                        </div>
+                                        <div className="text-xs text-slate-500">Ready for conversion</div>
                                     </div>
                                 </div>
                             </div>
@@ -867,9 +871,9 @@ const EnquiryDetailsPage: React.FC<EnquiryDetailsPageProps> = ({ onNavigate }) =
                             {enquiry.status !== 'CONVERTED' && (
                                 <button
                                     onClick={handleConvert}
-                                    disabled={loading.converting || enquiry.status === 'ENQUIRY_ACTIVE'}
+                                    disabled={loading.converting || enquiry.status !== 'APPROVED'}
                                     className={`group w-full p-6 rounded-3xl font-bold text-base transition-all duration-500 flex items-center justify-center gap-4 border ${
-                                        enquiry.status !== 'ENQUIRY_ACTIVE'
+                                        enquiry.status === 'APPROVED'
                                             ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-2xl shadow-emerald-500/20 hover:shadow-emerald-500/30 hover:scale-105 border-emerald-500/20'
                                             : 'bg-slate-800/60 text-slate-500 cursor-not-allowed border-slate-600/30'
                                     }`}
@@ -980,3 +984,4 @@ const EnquiryDetailsPage: React.FC<EnquiryDetailsPageProps> = ({ onNavigate }) =
 };
 
 export default EnquiryDetailsPage;
+

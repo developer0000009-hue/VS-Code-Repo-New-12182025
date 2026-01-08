@@ -15,8 +15,8 @@ export const EnquiryService = {
 
             const { data, error } = await supabase
                 .from('enquiries')
-                .update({ 
-                    status: 'ENQUIRY_VERIFIED',
+                .update({
+                    status: 'CONTACTED',  // Set to CONTACTED so it appears in Enquiry Desk
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', enquiryId)
@@ -58,8 +58,8 @@ export const EnquiryService = {
                 throw new Error("This enquiry has already been converted to an admission.");
             }
 
-            if (enquiryData?.status !== 'ENQUIRY_VERIFIED' && enquiryData?.status !== 'ENQUIRY_IN_PROGRESS') {
-                throw new Error("Only verified or in-progress enquiries can be converted to admissions.");
+            if (enquiryData?.status !== 'APPROVED') {
+                throw new Error("Only approved enquiries can be converted to admissions.");
             }
 
             const { data, error } = await supabase.rpc('convert_enquiry_to_admission', {
@@ -67,7 +67,15 @@ export const EnquiryService = {
             });
 
             if (error) throw error;
-            if (!data.success) throw new Error(data.message);
+
+            // FIX: Guard against null/undefined response
+            if (!data) {
+                throw new Error("Conversion failed: No response from server");
+            }
+
+            if (data.success !== true) {
+                throw new Error(data.message || "Conversion failed");
+            }
 
             // Log the conversion for audit trail
             console.log(`Enquiry ${enquiryId} converted to admission ${data.admission_id}`);
