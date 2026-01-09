@@ -81,12 +81,16 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
         // Separate enquiry status tracking
         enquiryStatus,
         enquiryLastChecked,
-        enquiryMessage
+        enquiryMessage,
+        enquiryHealthDetails,
+        checkEnquiryHealth
     } = useServiceStatus();
 
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('');
     const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' }>({ key: 'updated_at', direction: 'descending' });
+    const [retryCount, setRetryCount] = useState(0);
+    const [nextRetryAt, setNextRetryAt] = useState<Date | null>(null);
 
     // Fallback query that loads enquiries directly from table when RPC fails
     const fallbackFetchEnquiries = useCallback(async (isSilent = false) => {
@@ -263,6 +267,9 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
     useEffect(() => {
         fetchEnquiries();
 
+        // Initialize enquiry database health check
+        checkEnquiryHealth();
+
         const channel = supabase.channel(`enquiries-desk-sync-${branchId || 'master'}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'enquiries' }, (payload) => {
                 const record = payload.new as any || payload.old as any;
@@ -273,7 +280,7 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, [fetchEnquiries, branchId]);
+    }, [fetchEnquiries, branchId, checkEnquiryHealth]);
 
     // Background retry logic for verification sync when offline
     useEffect(() => {
@@ -286,6 +293,39 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
 
         return () => clearInterval(retryInterval);
     }, [serviceStatus, fetchEnquiries]);
+
+    // Auto-retry with exponential backoff for enquiry loading failures
+    useEffect(() => {
+        if (!error || enquiries.length > 0) {
+            // Reset retry state when we have data or no error
+            setRetryCount(0);
+            setNextRetryAt(null);
+            return;
+        }
+
+        const maxRetries = 5;
+        if (retryCount >= maxRetries) {
+            console.log('Max retries reached, stopping auto-retry');
+            return;
+        }
+
+        // Exponential backoff: 5s, 15s, 45s, 135s, 405s (about 7 minutes)
+        const baseDelay = 5000; // 5 seconds
+        const delayMs = baseDelay * Math.pow(3, retryCount);
+
+        console.log(`Scheduling auto-retry ${retryCount + 1}/${maxRetries} in ${Math.round(delayMs / 1000)} seconds`);
+
+        const retryAt = new Date(Date.now() + delayMs);
+        setNextRetryAt(retryAt);
+
+        const timeoutId = setTimeout(async () => {
+            console.log(`Auto-retry ${retryCount + 1}/${maxRetries}: attempting to load enquiries...`);
+            setRetryCount(prev => prev + 1);
+            await fetchEnquiries(true, true); // Silent retry
+        }, delayMs);
+
+        return () => clearTimeout(timeoutId);
+    }, [error, enquiries.length, retryCount, fetchEnquiries]);
 
     // Keyboard shortcut for debug panel (Ctrl+Shift+D)
     useEffect(() => {
@@ -354,7 +394,8 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                     <p className="text-white/40 text-[18px] leading-relaxed font-serif italic border-l border-white/5 pl-8">
                         Centralized workspace for managing inbound identity handshakes and verified institutional leads.
                     </p>
-                    <div className="flex items-center gap-3 mt-4">
+                    <div className="flex flex-wrap items-center gap-3 mt-4">
+                        {/* Verification Service Status */}
                         <VerificationStatusWidget
                             status={serviceStatus}
                             lastSync={lastSyncTime}
@@ -364,6 +405,54 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                                 checkServiceHealth();
                             }}
                         />
+
+                        {/* Enquiry Database Status */}
+                        <div className="flex items-center gap-2">
+                            <div className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-[0.1em] flex items-center gap-2 ${
+                                enquiryStatus === 'online'
+                                    ? 'bg-green-500/10 border-green-500/20 text-green-400'
+                                    : enquiryStatus === 'offline'
+                                    ? 'bg-red-500/10 border-red-500/20 text-red-400'
+                                    : enquiryStatus === 'degraded'
+                                    ? 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400'
+                                    : 'bg-gray-500/10 border-gray-500/20 text-gray-400'
+                            }`}>
+                                <div className={`w-2 h-2 rounded-full ${
+                                    enquiryStatus === 'online'
+                                        ? 'bg-green-400'
+                                        : enquiryStatus === 'offline'
+                                        ? 'bg-red-400'
+                                        : enquiryStatus === 'degraded'
+                                        ? 'bg-yellow-400 animate-pulse'
+                                        : 'bg-gray-400'
+                                }`}></div>
+                                <span>Enquiry DB</span>
+                            </div>
+
+                            {/* Detailed Error Info */}
+                            {enquiryHealthDetails?.errorDetails && enquiryStatus === 'offline' && (
+                                <div className="px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-[8px] font-mono max-w-xs truncate" title={enquiryHealthDetails.errorDetails}>
+                                    {enquiryHealthDetails.errorType}: {enquiryHealthDetails.errorDetails.substring(0, 30)}...
+                                </div>
+                            )}
+
+                            {/* Connection Details */}
+                            {enquiryHealthDetails && enquiryStatus === 'online' && (
+                                <div className="flex items-center gap-1">
+                                    {enquiryHealthDetails.rpcAvailable && (
+                                        <div className="px-2 py-1 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-[8px] font-black uppercase tracking-[0.05em]">
+                                            RPC
+                                        </div>
+                                    )}
+                                    {enquiryHealthDetails.tableQueryAvailable && (
+                                        <div className="px-2 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[8px] font-black uppercase tracking-[0.05em]">
+                                            TABLE
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
                         {/* Cached Data Indicator */}
                         {serviceStatus !== 'online' && enquiries.length > 0 && (
                             <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[9px] font-black uppercase tracking-[0.1em] flex items-center gap-2">

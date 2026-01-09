@@ -26,6 +26,13 @@ interface UseServiceStatusReturn {
     enquiryStatus: 'online' | 'offline' | 'degraded' | 'unknown';
     enquiryLastChecked: Date | null;
     enquiryMessage: string;
+    enquiryHealthDetails?: {
+        rpcAvailable: boolean;
+        tableQueryAvailable: boolean;
+        errorType?: 'auth' | 'permission' | 'connection' | 'timeout' | 'unknown';
+        errorDetails?: string;
+    };
+    checkEnquiryHealth: () => Promise<void>;
 }
 
 export function useServiceStatus(): UseServiceStatusReturn {
@@ -42,6 +49,12 @@ export function useServiceStatus(): UseServiceStatusReturn {
     const [enquiryStatus, setEnquiryStatus] = useState<'online' | 'offline' | 'degraded' | 'unknown'>('unknown');
     const [enquiryLastChecked, setEnquiryLastChecked] = useState<Date | null>(null);
     const [enquiryMessage, setEnquiryMessage] = useState<string>('Checking enquiry service...');
+    const [enquiryHealthDetails, setEnquiryHealthDetails] = useState<{
+        rpcAvailable: boolean;
+        tableQueryAvailable: boolean;
+        errorType?: 'auth' | 'permission' | 'connection' | 'timeout' | 'unknown';
+        errorDetails?: string;
+    } | undefined>();
 
     const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -104,6 +117,28 @@ export function useServiceStatus(): UseServiceStatusReturn {
         const diff = retryTime - now;
         return Math.max(0, Math.floor(diff / 1000));
     }, [nextRetry]);
+
+    // Independent enquiry database health check
+    const checkEnquiryHealth = useCallback(async () => {
+        try {
+            const healthStatus = await verificationService.checkEnquiryDatabaseHealth();
+            setEnquiryStatus(healthStatus.status);
+            setEnquiryLastChecked(healthStatus.lastChecked);
+            setEnquiryMessage(healthStatus.message);
+            setEnquiryHealthDetails(healthStatus.details);
+        } catch (err: any) {
+            console.error('Failed to check enquiry health:', err);
+            setEnquiryStatus('offline');
+            setEnquiryLastChecked(new Date());
+            setEnquiryMessage('Enquiry health check failed');
+            setEnquiryHealthDetails({
+                rpcAvailable: false,
+                tableQueryAvailable: false,
+                errorType: 'connection',
+                errorDetails: err.message || 'Unknown error'
+            });
+        }
+    }, []);
 
     // Handle service status updates from monitoring
     const handleServiceStatusUpdate = useCallback((healthStatus: ServiceHealthStatus) => {
@@ -178,6 +213,8 @@ export function useServiceStatus(): UseServiceStatusReturn {
         // Separate enquiry status tracking
         enquiryStatus,
         enquiryLastChecked,
-        enquiryMessage
+        enquiryMessage,
+        enquiryHealthDetails,
+        checkEnquiryHealth
     };
 }

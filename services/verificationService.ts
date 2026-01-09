@@ -97,6 +97,134 @@ class VerificationService {
         }
     }
 
+    /**
+     * Independent health check specifically for enquiry database connectivity.
+     * This does NOT depend on verification service availability.
+     */
+    async checkEnquiryDatabaseHealth(): Promise<{
+        status: 'online' | 'offline' | 'degraded';
+        lastChecked: Date;
+        message: string;
+        details: {
+            rpcAvailable: boolean;
+            tableQueryAvailable: boolean;
+            errorType?: 'auth' | 'permission' | 'connection' | 'timeout' | 'unknown';
+            errorDetails?: string;
+        }
+    }> {
+        const lastChecked = new Date();
+        let rpcAvailable = false;
+        let tableQueryAvailable = false;
+        let errorType: 'auth' | 'permission' | 'connection' | 'timeout' | 'unknown' = 'unknown';
+        let errorDetails = '';
+
+        try {
+            // First, test RPC function availability
+            try {
+                const { data: rpcData, error: rpcError } = await supabase.rpc('get_enquiries_for_node', {
+                    p_branch_id: null
+                });
+
+                if (!rpcError) {
+                    rpcAvailable = true;
+                } else {
+                    // RPC failed, but continue to check table query
+                    console.warn('RPC enquiry function failed:', formatError(rpcError));
+                    if (rpcError.code === '42501') errorType = 'permission';
+                    else if (rpcError.code === '42703') errorType = 'auth';
+                    else if (rpcError.message?.includes('timeout')) errorType = 'timeout';
+                    else if (rpcError.message?.includes('connection')) errorType = 'connection';
+                    errorDetails = formatError(rpcError);
+                }
+            } catch (rpcException) {
+                console.warn('RPC enquiry function exception:', rpcException);
+                errorType = 'connection';
+                errorDetails = 'RPC function unavailable';
+            }
+
+            // Second, test direct table query
+            try {
+                const { data: tableData, error: tableError } = await supabase
+                    .from('enquiries')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('conversion_state', 'NOT_CONVERTED')
+                    .eq('is_archived', false)
+                    .eq('is_deleted', false)
+                    .limit(1);
+
+                if (!tableError) {
+                    tableQueryAvailable = true;
+                } else {
+                    console.warn('Table enquiry query failed:', formatError(tableError));
+                    if (tableError.code === '42501') errorType = 'permission';
+                    else if (tableError.code === '42703') errorType = 'auth';
+                    else if (tableError.message?.includes('timeout')) errorType = 'timeout';
+                    else if (tableError.message?.includes('connection')) errorType = 'connection';
+                    errorDetails = formatError(tableError);
+                }
+            } catch (tableException) {
+                console.warn('Table enquiry query exception:', tableException);
+                errorType = 'connection';
+                errorDetails = 'Direct table query unavailable';
+            }
+
+            // Determine overall status
+            if (rpcAvailable || tableQueryAvailable) {
+                return {
+                    status: 'online',
+                    lastChecked,
+                    message: 'Enquiry database is accessible',
+                    details: {
+                        rpcAvailable,
+                        tableQueryAvailable,
+                        errorType,
+                        errorDetails
+                    }
+                };
+            } else {
+                // Neither RPC nor table query worked
+                return {
+                    status: 'offline',
+                    lastChecked,
+                    message: `Enquiry database unavailable: ${errorDetails}`,
+                    details: {
+                        rpcAvailable,
+                        tableQueryAvailable,
+                        errorType,
+                        errorDetails
+                    }
+                };
+            }
+
+        } catch (error: any) {
+            const errorMessage = formatError(error);
+            console.error('Enquiry database health check failed:', errorMessage);
+
+            // Categorize the error
+            if (errorMessage.includes('JWT') || errorMessage.includes('authentication')) {
+                errorType = 'auth';
+            } else if (errorMessage.includes('permission') || errorMessage.includes('RLS')) {
+                errorType = 'permission';
+            } else if (errorMessage.includes('timeout')) {
+                errorType = 'timeout';
+            } else if (errorMessage.includes('connection') || errorMessage.includes('network')) {
+                errorType = 'connection';
+            }
+
+            return {
+                status: 'offline',
+                lastChecked,
+                message: `Enquiry database check failed: ${errorMessage}`,
+                details: {
+                    rpcAvailable,
+                    tableQueryAvailable,
+                    errorType,
+                    errorDetails: errorMessage
+                }
+            };
+        }
+    }
+
     async queueVerification(verificationData: {
         code: string;
         code_type: 'Enquiry' | 'Admission';
