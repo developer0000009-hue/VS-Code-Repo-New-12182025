@@ -95,16 +95,27 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({
 
     const loadTimeline = async () => {
         try {
-            const { data, error } = await supabase
-                .from('enquiry_timeline')
-                .select('*')
-                .eq('enquiry_id', enquiry.id)
-                .order('created_at', { ascending: true });
-            
+            const { data, error } = await supabase.rpc('get_enquiry_timeline', {
+                p_enquiry_id: enquiry.id
+            });
+
             if (error) throw error;
-            setTimeline(data || []);
+
+            // Transform the data to match TimelineItem interface
+            const transformedTimeline: TimelineItem[] = (data || []).map((item: any) => ({
+                id: item.id,
+                item_type: item.item_type,
+                is_admin: item.is_admin,
+                created_by_name: item.created_by_name,
+                created_at: item.created_at,
+                details: item.details
+            }));
+
+            setTimeline(transformedTimeline);
         } catch (err) {
             console.error('Failed to load timeline:', err);
+            // Set empty timeline on error instead of failing silently
+            setTimeline([]);
         }
     };
 

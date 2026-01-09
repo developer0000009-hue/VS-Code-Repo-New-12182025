@@ -239,6 +239,7 @@ export interface Enquiry extends MyEnquiry {
 }
 
 export interface TimelineItem {
+    id: string; // Added id property to match database schema
     item_type: 'MESSAGE' | 'STATUS_CHANGE' | 'DOCUMENT_UPLOAD' | 'ARTIFACT_VERIFICATION' | 'ENQUIRY_CREATED';
     is_admin: boolean;
     created_by_name: string;
