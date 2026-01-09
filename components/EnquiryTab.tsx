@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, formatError } from '../services/supabase';
 import { Enquiry, EnquiryStatus, ServiceStatus, VerificationStatus } from '../types';
+import { useServiceStatus } from '../hooks/useServiceStatus';
 import Spinner from './common/Spinner';
 import VerificationStatusWidget from './VerificationStatusWidget';
 import SystemStatusBanner from './SystemStatusBanner';
@@ -66,11 +67,15 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Service status tracking
-    const [serviceStatus, setServiceStatus] = useState<ServiceStatus>('unknown');
-    const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
-    const [isRetrying, setIsRetrying] = useState(false);
-    const [pendingVerificationsCount, setPendingVerificationsCount] = useState(0);
+    // Use centralized service status management
+    const {
+        serviceStatus,
+        lastChecked: lastSyncTime,
+        pendingCount: pendingVerificationsCount,
+        isChecking: isRetrying,
+        message: serviceMessage,
+        checkServiceHealth
+    } = useServiceStatus();
 
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('');
@@ -104,11 +109,7 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
     const fetchEnquiries = useCallback(async (isSilent = false, isRetry = false) => {
         // Always fetch enquiries - if branchId is null/undefined, fetch from all accessible branches
         if (!isSilent) {
-            if (isRetry) {
-                setServiceStatus('syncing');
-            } else {
-                setLoading(true);
-            }
+            setLoading(true);
         }
         setError(null);
 
@@ -120,40 +121,16 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
 
             if (rpcError) throw rpcError;
             setEnquiries(data || []);
-            setServiceStatus('online');
-            setLastSyncTime(new Date());
             rpcSuccess = true;
         } catch (err: any) {
-            // RPC failed - set status to offline and load from cache
-            setServiceStatus('offline');
+            // RPC failed - load from cache
             console.warn("RPC failed, falling back to direct query:", formatError(err));
             await fallbackFetchEnquiries(true); // Use silent fallback
             rpcSuccess = false;
         } finally {
             if (!isSilent) {
                 setLoading(false);
-                setServiceStatus(prev => prev === 'syncing' ? 'online' : prev);
             }
-            if (isRetry) {
-                setIsRetrying(false);
-            }
-        }
-
-        // Calculate pending verifications count from current enquiries
-        const currentEnquiries = await supabase
-            .from('enquiries')
-            .select('verification_status')
-            .eq('conversion_state', 'NOT_CONVERTED')
-            .eq('is_archived', false)
-            .eq('is_deleted', false);
-
-        if (currentEnquiries.data) {
-            const pendingCount = currentEnquiries.data.filter(enq =>
-                enq.verification_status === 'PENDING' ||
-                enq.verification_status === 'QUEUED' ||
-                enq.verification_status === 'VERIFYING'
-            ).length;
-            setPendingVerificationsCount(pendingCount);
         }
 
         return rpcSuccess;
@@ -247,10 +224,16 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                             pendingCount={pendingVerificationsCount}
                             isRefreshing={isRetrying}
                             onRetry={() => {
-                                setIsRetrying(true);
-                                fetchEnquiries(false, true);
+                                checkServiceHealth();
                             }}
                         />
+                        {/* Cached Data Indicator */}
+                        {serviceStatus !== 'online' && enquiries.length > 0 && (
+                            <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[9px] font-black uppercase tracking-[0.1em] flex items-center gap-2">
+                                <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></div>
+                                Cached Data
+                            </div>
+                        )}
                     </div>
                 </div>
                 <div className="flex items-center gap-4">
@@ -301,8 +284,7 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                     lastSync={lastSyncTime || undefined}
                     pendingCount={pendingVerificationsCount}
                     onRetry={() => {
-                        setIsRetrying(true);
-                        fetchEnquiries(false, true);
+                        checkServiceHealth();
                     }}
                     isRetrying={isRetrying}
                 />

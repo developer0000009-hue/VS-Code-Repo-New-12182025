@@ -4,6 +4,8 @@ import { supabase, formatError } from '../services/supabase';
 import { EnquiryService } from '../services/enquiry';
 import { AdmissionService } from '../services/admission';
 import { VerifiedShareCodeData } from '../types';
+import { useServiceStatus } from '../hooks/useServiceStatus';
+import { verificationService } from '../services/verificationService';
 import Spinner from './common/Spinner';
 import { KeyIcon } from './icons/KeyIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
@@ -11,6 +13,7 @@ import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { UsersIcon } from './icons/UsersIcon';
 import { RotateCcwIcon } from './icons/RotateCcwIcon';
+import { ClockIcon } from './icons/ClockIcon';
 
 interface CodeVerificationTabProps {
     branchId?: string | null;
@@ -18,40 +21,73 @@ interface CodeVerificationTabProps {
 }
 
 const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onNavigate }) => {
+    // Service status management
+    const {
+        serviceStatus,
+        pendingCount,
+        getNextRetryCountdown,
+        checkServiceHealth,
+        isServiceOnline
+    } = useServiceStatus();
+
     const [code, setCode] = useState('');
     const [verifying, setVerifying] = useState(false);
     const [processing, setProcessing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [verificationResult, setVerificationResult] = useState<VerifiedShareCodeData & { id?: string } | null>(null);
     const [syncSuccess, setSyncSuccess] = useState(false);
+    const [queuedForOffline, setQueuedForOffline] = useState(false);
     const [retryCount, setRetryCount] = useState(0);
 
     const resetState = () => {
         setError(null);
         setVerificationResult(null);
         setSyncSuccess(false);
-        setVerifying(false);
-        setProcessing(false);
-        setRetryCount(0);
+        setQueuedForOffline(false);
     };
 
     const handleVerify = async (e: React.FormEvent) => {
         e.preventDefault();
         const cleanCode = code.replace(/\s+/g, '').toUpperCase();
         if (!cleanCode) return;
-        
+
+        // If service is offline, queue the verification instead
+        if (!isServiceOnline) {
+            try {
+                const queueResult = await verificationService.queueVerification({
+                    code: cleanCode,
+                    code_type: 'Enquiry', // Default to Enquiry, could be enhanced to detect type
+                    admission_id: '', // Will be filled when processed
+                    applicant_name: 'Unknown', // Will be filled when processed
+                    grade: 'Unknown' // Will be filled when processed
+                });
+
+                if (queueResult.success) {
+                    setQueuedForOffline(true);
+                    setCode('');
+                    return;
+                } else {
+                    setError(queueResult.error || 'Failed to queue verification');
+                    return;
+                }
+            } catch (err: any) {
+                setError(formatError(err));
+                return;
+            }
+        }
+
         setVerifying(true);
         setError(null);
         setVerificationResult(null);
 
         try {
             // Step 1: Pure Validation RPC
-            const { data, error: rpcError } = await supabase.rpc('admin_verify_share_code', { 
-                p_code: cleanCode 
+            const { data, error: rpcError } = await supabase.rpc('admin_verify_share_code', {
+                p_code: cleanCode
             });
 
             if (rpcError) throw rpcError;
-            
+
             if (data && data.found) {
                 setVerificationResult(data);
             } else {
@@ -121,22 +157,55 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
                     </div>
                     <input
                         type="text"
-                        placeholder="ENTER ACCESS KEY"
+                        placeholder={isServiceOnline ? "ENTER ACCESS KEY" : "SERVICE OFFLINE - VERIFICATION QUEUED"}
                         value={code}
                         onChange={(e) => setCode(e.target.value.toUpperCase())}
-                        disabled={verifying || syncSuccess}
-                        className="w-full bg-[#0d0f14]/80 backdrop-blur-3xl border-2 border-white/5 rounded-[3rem] pl-20 pr-44 py-8 text-3xl font-mono font-black tracking-[0.4em] focus:ring-[15px] focus:ring-primary/5 focus:border-primary/50 outline-none text-white transition-all shadow-2xl"
+                        disabled={verifying || syncSuccess || !isServiceOnline}
+                        className={`w-full bg-[#0d0f14]/80 backdrop-blur-3xl border-2 rounded-[3rem] pl-20 pr-44 py-8 text-3xl font-mono font-black tracking-[0.4em] outline-none transition-all shadow-2xl ${
+                            isServiceOnline
+                                ? 'border-white/5 focus:ring-[15px] focus:ring-primary/5 focus:border-primary/50 text-white'
+                                : 'border-slate-500/30 bg-slate-500/10 text-slate-400/60'
+                        }`}
                     />
-                    <button 
-                        type="submit" 
-                        disabled={verifying || !code.trim() || syncSuccess}
-                        className="absolute right-4 top-4 bottom-4 bg-primary text-white font-black px-10 rounded-[2.2rem] shadow-xl hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50"
+                    <button
+                        type="submit"
+                        disabled={verifying || !code.trim() || syncSuccess || !isServiceOnline}
+                        className={`absolute right-4 top-4 bottom-4 font-black px-10 rounded-[2.2rem] shadow-xl transition-all active:scale-95 disabled:opacity-50 ${
+                            isServiceOnline
+                                ? 'bg-primary text-white hover:bg-primary/90'
+                                : 'bg-slate-600/20 text-slate-400/50 cursor-not-allowed'
+                        }`}
                     >
-                        {verifying ? <Spinner size="sm" className="text-white" /> : 'Validate'}
+                        {verifying ? <Spinner size="sm" className="text-white" /> : (isServiceOnline ? 'Validate' : 'Offline')}
                     </button>
                 </form>
 
+                {/* Offline Status Indicator */}
+                {!isServiceOnline && (
+                    <div className="mt-6 p-6 bg-slate-500/5 border border-slate-500/20 rounded-[2rem] text-center">
+                        <div className="flex items-center justify-center gap-3 mb-3">
+                            <div className="w-3 h-3 bg-slate-400 rounded-full"></div>
+                            <span className="text-slate-400 text-sm font-black uppercase tracking-widest">Verification Service Offline</span>
+                        </div>
+                        <p className="text-slate-400/80 text-sm leading-relaxed">
+                            Codes entered now will be automatically queued and processed when the service returns online.
+                            {pendingCount > 0 && ` You have ${pendingCount} verification${pendingCount > 1 ? 's' : ''} queued.`}
+                        </p>
+                    </div>
+                )}
+
                 <div className="mt-8 min-h-[100px]">
+                    {queuedForOffline && (
+                        <div className="bg-blue-500/10 border border-blue-500/20 text-blue-400 px-8 py-6 rounded-[2rem] text-sm font-bold flex items-center gap-4 animate-in zoom-in-95 backdrop-blur-xl">
+                            <div className="p-3 bg-blue-500/10 rounded-xl border border-blue-500/20 shadow-inner">
+                                <ClockIcon className="w-6 h-6" />
+                            </div>
+                            <div className="space-y-1">
+                                <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Verification Queued</p>
+                                <p className="text-base font-serif italic">Code will be processed automatically when service returns online.</p>
+                            </div>
+                        </div>
+                    )}
                     {error && (
                         <div className="bg-red-500/10 border border-red-500/20 text-red-500 px-8 py-6 rounded-[2.5rem] text-sm font-bold flex flex-col gap-4 animate-in shake ring-1 ring-red-500/30 shadow-2xl backdrop-blur-xl">
                             <div className="flex items-start gap-6">

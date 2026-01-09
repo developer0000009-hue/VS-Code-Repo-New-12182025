@@ -223,11 +223,11 @@ export interface MyEnquiry {
 
 export type VerificationStatus =
   | 'PENDING'        // Awaiting verification
-  | 'QUEUED'         // Added to verification queue
+  | 'QUEUED'         // Added to verification queue (service offline)
   | 'VERIFYING'      // Currently being processed
   | 'VERIFIED'       // Successfully verified
   | 'FAILED'         // Verification failed (user can retry)
-  | 'SERVICE_OFFLINE'; // Service unavailable (auto-retry)
+  | 'SERVICE_OFFLINE'; // Service unavailable (auto-retry enabled)
 
 export type ServiceStatus = 'online' | 'degraded' | 'offline' | 'syncing' | 'unknown';
 

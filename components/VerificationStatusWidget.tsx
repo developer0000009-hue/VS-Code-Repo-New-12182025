@@ -34,29 +34,29 @@ const VerificationStatusWidget: React.FC<VerificationStatusWidgetProps> = ({
                 return {
                     dotColor: 'bg-teal-400',
                     textColor: 'text-teal-300',
-                    label: 'Online',
-                    description: pendingCount > 0 ? `${pendingCount} pending` : 'All verified'
+                    label: 'Service Online',
+                    description: pendingCount > 0 ? `${pendingCount} queued` : 'Ready'
                 };
             case 'degraded':
                 return {
                     dotColor: 'bg-yellow-400',
                     textColor: 'text-yellow-300',
-                    label: 'Degraded',
-                    description: 'Slow responses'
+                    label: 'Service Slow',
+                    description: 'Processing delays'
                 };
             case 'offline':
                 return {
                     dotColor: 'bg-gray-400',
                     textColor: 'text-gray-300',
-                    label: 'Offline',
-                    description: 'Service unavailable'
+                    label: 'Service Offline',
+                    description: pendingCount > 0 ? `${pendingCount} queued` : 'Unavailable'
                 };
             default:
                 return {
                     dotColor: 'bg-gray-400',
                     textColor: 'text-gray-300',
-                    label: 'Checking...',
-                    description: 'Status unknown'
+                    label: 'Checking Status',
+                    description: 'Please wait...'
                 };
         }
     };
@@ -97,6 +97,14 @@ const VerificationStatusWidget: React.FC<VerificationStatusWidgetProps> = ({
                     {status === 'degraded' && (
                         <AlertTriangleIcon className="w-3 h-3 text-yellow-400" />
                     )}
+                    {/* Queue Badge */}
+                    {pendingCount > 0 && (
+                        <div className="px-2 py-0.5 bg-primary/20 border border-primary/30 rounded-full">
+                            <span className="text-[8px] font-black text-primary uppercase tracking-widest">
+                                {pendingCount} queued
+                            </span>
+                        </div>
+                    )}
                 </div>
                 <div className="flex items-center gap-2 text-[9px] text-white/40 font-mono tracking-wider">
                     {lastSync && (
@@ -110,14 +118,22 @@ const VerificationStatusWidget: React.FC<VerificationStatusWidgetProps> = ({
                 </div>
             </div>
 
-            {/* Retry Button (only show when offline or degraded) */}
-            {(status === 'offline' || status === 'degraded') && onRetry && (
+            {/* Check Status Button */}
+            {onRetry && (
                 <button
                     onClick={onRetry}
                     disabled={isRefreshing}
-                    className="ml-2 px-3 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[9px] font-black uppercase tracking-[0.1em] text-white/60 hover:text-white transition-all duration-200 disabled:opacity-50"
+                    className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-[0.1em] transition-all duration-200 disabled:opacity-50 ${
+                        status === 'offline'
+                            ? 'bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-600/30'
+                            : 'bg-white/5 hover:bg-white/10 text-white/60 hover:text-white'
+                    }`}
                 >
-                    {isRefreshing ? '...' : 'Retry'}
+                    {isRefreshing ? (
+                        <RefreshIcon className="w-3 h-3 animate-spin" />
+                    ) : (
+                        'Check Status'
+                    )}
                 </button>
             )}
         </div>
