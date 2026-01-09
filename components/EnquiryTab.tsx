@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase, formatError } from '../services/supabase';
 import { Enquiry, EnquiryStatus, ServiceStatus, VerificationStatus } from '../types';
 import { useServiceStatus } from '../hooks/useServiceStatus';
+import { EnquiryService } from '../services/enquiry';
 import Spinner from './common/Spinner';
 import VerificationStatusWidget from './VerificationStatusWidget';
 import SystemStatusBanner from './SystemStatusBanner';
@@ -23,7 +24,7 @@ import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 const statusColors: Record<string, string> = {
   'NEW': 'bg-gray-500/10 text-gray-400 border-gray-500/20',
   'CONTACTED': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-  'VERIFIED': 'bg-teal-500/20 text-teal-400 border-teal-500/30 font-black shadow-[0_0_15px_rgba(45,212,191,0.1)]',
+  'VERIFIED': 'bg-green-500/10 text-green-400 border-green-500/20',
   'APPROVED': 'bg-teal-500/20 text-teal-400 border-teal-500/30 font-black shadow-[0_0_15px_rgba(45,212,191,0.1)]',
   'REJECTED': 'bg-red-500/10 text-red-400 border-red-500/20',
   'CONVERTED': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
@@ -336,23 +337,75 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                         <Spinner size="lg" className="text-primary" />
                         <p className="text-[11px] font-black uppercase text-white/20 tracking-[0.5em] animate-pulse">Syncing Lifecycle Protocol</p>
                     </div>
-                ) : stats.approved === 0 ? (
+                ) : error ? (
+                    <div className="flex flex-col items-center justify-center py-48 text-center px-12 animate-in fade-in duration-1000">
+                        <div className="w-32 h-32 bg-red-500/10 rounded-[3rem] flex items-center justify-center mb-10 border border-red-500/20 shadow-inner">
+                            <AlertTriangleIcon className="h-14 w-14 text-red-400" />
+                        </div>
+                        <h3 className="text-3xl font-serif font-black text-white uppercase tracking-tighter leading-none mb-6">Connection <span className="text-red-400 italic">Failed</span></h3>
+                        <p className="text-white/30 max-w-sm mx-auto font-serif italic text-lg leading-relaxed">
+                            Unable to load enquiry data. Please check your connection and try again.
+                        </p>
+                        <button
+                            onClick={() => fetchEnquiries()}
+                            className="mt-12 px-10 py-4 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded-xl text-[10px] font-black uppercase tracking-[0.3em] transition-all border border-red-500/20"
+                        >
+                            Retry Connection
+                        </button>
+                    </div>
+                ) : enquiries.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-48 text-center px-12 animate-in fade-in duration-1000">
                         <div className="w-32 h-32 bg-white/[0.01] rounded-[3rem] flex items-center justify-center mb-10 border border-white/5 shadow-inner">
-                            <KeyIcon className="h-14 w-14 text-white/10" />
+                            <MailIcon className="h-14 w-14 text-white/10" />
                         </div>
-                        <h3 className="text-3xl font-serif font-black text-white uppercase tracking-tighter leading-none mb-6">Desk <span className="text-white/20 italic">Standby.</span></h3>
+                        <h3 className="text-3xl font-serif font-black text-white uppercase tracking-tighter leading-none mb-6">No <span className="text-white/20 italic">Enquiries</span></h3>
                         <p className="text-white/30 max-w-sm mx-auto font-serif italic text-lg leading-relaxed">
-                            Verified enquiries from the <strong className="text-primary">Verification Center</strong> will appear here upon authorization.
+                            No enquiry records found. Create your first enquiry to get started.
                         </p>
-                        {onNavigate && (
+                        <div className="flex gap-4 mt-12">
                             <button
-                                onClick={() => onNavigate('Code Verification')}
-                                className="mt-12 px-10 py-4 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-[0.3em] transition-all border border-white/5"
+                                onClick={async () => {
+                                    try {
+                                        const result = await EnquiryService.createSampleEnquiry();
+                                        if (result.success) {
+                                            await fetchEnquiries(); // Refresh the data
+                                        } else {
+                                            console.error('Failed to create sample enquiry:', result.error);
+                                        }
+                                    } catch (error) {
+                                        console.error('Error creating sample enquiry:', error);
+                                    }
+                                }}
+                                className="px-8 py-4 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 rounded-xl text-[10px] font-black uppercase tracking-[0.3em] transition-all border border-blue-500/20"
                             >
-                                Enter Verification Center
+                                Create Sample Data
                             </button>
-                        )}
+                            <button
+                                onClick={() => navigate('/enquiry-entry')}
+                                className="px-8 py-4 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 rounded-xl text-[10px] font-black uppercase tracking-[0.3em] transition-all border border-emerald-500/20"
+                            >
+                                Create New Enquiry
+                            </button>
+                        </div>
+                    </div>
+                ) : processedEnquiries.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-48 text-center px-12 animate-in fade-in duration-1000">
+                        <div className="w-32 h-32 bg-white/[0.01] rounded-[3rem] flex items-center justify-center mb-10 border border-white/5 shadow-inner">
+                            <FilterIcon className="h-14 w-14 text-white/10" />
+                        </div>
+                        <h3 className="text-3xl font-serif font-black text-white uppercase tracking-tighter leading-none mb-6">No <span className="text-white/20 italic">Matches</span></h3>
+                        <p className="text-white/30 max-w-sm mx-auto font-serif italic text-lg leading-relaxed">
+                            No enquiries match your current search and filter criteria.
+                        </p>
+                        <button
+                            onClick={() => {
+                                setSearchTerm('');
+                                setFilterStatus('');
+                            }}
+                            className="mt-12 px-10 py-4 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-[0.3em] transition-all border border-white/5"
+                        >
+                            Clear Filters
+                        </button>
                     </div>
                 ) : (
                     <div className="overflow-x-auto custom-scrollbar">

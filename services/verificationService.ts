@@ -39,17 +39,35 @@ class VerificationService {
         const lastChecked = new Date();
 
         try {
-            // Lightweight health check - try a simple RPC that should always work
-            const { data, error } = await supabase.rpc('admin_verify_share_code', {
-                p_code: 'HEALTH_CHECK_DUMMY'
-            });
+            // Lightweight health check - test basic database connectivity
+            // First try the new RPC function if available
+            try {
+                const { data, error } = await supabase.rpc('check_service_health');
+                if (!error) {
+                    return {
+                        status: 'online',
+                        lastChecked,
+                        message: 'Enquiry service is online'
+                    };
+                }
+            } catch (rpcError) {
+                // RPC not available yet, fall back to basic connectivity test
+            }
 
-            // If we get here without timeout/error, service is online
-            // We don't care about the actual result, just that the call succeeded
+            // Fallback: Test basic database connectivity with a simple query
+            // Use a query that any authenticated user should be able to access
+            const { data, error } = await supabase
+                .from('enquiries')
+                .select('count', { count: 'exact', head: true })
+                .limit(1);
+
+            if (error) throw error;
+
+            // If we get here without error, database is accessible
             return {
                 status: 'online',
                 lastChecked,
-                message: 'Verification service is online'
+                message: 'Enquiry service is online'
             };
 
         } catch (error: any) {
@@ -65,7 +83,7 @@ class VerificationService {
                     status: 'offline',
                     lastChecked,
                     nextRetry: new Date(Date.now() + this.HEALTH_CHECK_INTERVAL),
-                    message: 'Verification service is temporarily unavailable'
+                    message: 'Enquiry service is temporarily unavailable'
                 };
             }
 
@@ -74,7 +92,7 @@ class VerificationService {
                 status: 'degraded',
                 lastChecked,
                 nextRetry: new Date(Date.now() + this.HEALTH_CHECK_INTERVAL),
-                message: 'Verification service experiencing issues'
+                message: 'Enquiry service experiencing issues'
             };
         }
     }

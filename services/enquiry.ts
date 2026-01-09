@@ -6,6 +6,37 @@ import { supabase, formatError } from './supabase';
  */
 export const EnquiryService = {
     /**
+     * Create sample enquiry data for testing (temporary function)
+     */
+    async createSampleEnquiry(): Promise<{ success: boolean; enquiryId?: string; error?: string }> {
+        try {
+            const { data, error } = await supabase
+                .from('enquiries')
+                .insert({
+                    applicant_name: 'Test Student',
+                    grade: '5',
+                    status: 'NEW',
+                    parent_name: 'Test Parent',
+                    parent_email: 'test@example.com',
+                    parent_phone: '+1234567890',
+                    branch_id: null, // Will be accessible to all branches
+                    verification_status: 'PENDING',
+                    conversion_state: 'NOT_CONVERTED',
+                    is_archived: false,
+                    is_deleted: false
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            return { success: true, enquiryId: data.id };
+        } catch (error: any) {
+            console.error('Failed to create sample enquiry:', error);
+            return { success: false, error: formatError(error) };
+        }
+    },
+    /**
      * Processes an enquiry identity verification.
      * Strictly updates Enquiry state only.
      */

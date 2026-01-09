@@ -1599,6 +1599,14 @@ CREATE OR REPLACE FUNCTION public.get_admissions(p_branch_id bigint DEFAULT NULL
 CREATE OR REPLACE FUNCTION public.get_all_enquiries(p_branch_id bigint DEFAULT NULL) RETURNS SETOF public.enquiries LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN RETURN QUERY SELECT * FROM public.enquiries WHERE branch_id IN (SELECT get_my_branch_ids()) AND (p_branch_id IS NULL OR branch_id = p_branch_id); END; $$;
 
 -- Critical function to get enquiries visible in Enquiry Node
+CREATE OR REPLACE FUNCTION public.check_service_health()
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+    RETURN jsonb_build_object('status', 'healthy', 'timestamp', now(), 'service', 'enquiry_node');
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.get_enquiries_for_node(p_branch_id bigint DEFAULT NULL)
 RETURNS SETOF public.enquiries
 LANGUAGE plpgsql SECURITY DEFINER AS $$
