@@ -22,6 +22,10 @@ interface UseServiceStatusReturn {
     }>;
     clearQueuedVerification: (queueId: string) => void;
     getNextRetryCountdown: () => number; // seconds until next retry
+    // Separate enquiry status tracking
+    enquiryStatus: 'online' | 'offline' | 'degraded' | 'unknown';
+    enquiryLastChecked: Date | null;
+    enquiryMessage: string;
 }
 
 export function useServiceStatus(): UseServiceStatusReturn {
@@ -33,6 +37,12 @@ export function useServiceStatus(): UseServiceStatusReturn {
     const [isChecking, setIsChecking] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [lastSuccessfulSync, setLastSuccessfulSync] = useState<Date | null>(null);
+
+    // Separate enquiry status tracking
+    const [enquiryStatus, setEnquiryStatus] = useState<'online' | 'offline' | 'degraded' | 'unknown'>('unknown');
+    const [enquiryLastChecked, setEnquiryLastChecked] = useState<Date | null>(null);
+    const [enquiryMessage, setEnquiryMessage] = useState<string>('Checking enquiry service...');
+
     const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
     // Computed values
@@ -164,6 +174,10 @@ export function useServiceStatus(): UseServiceStatusReturn {
         checkServiceHealth,
         processQueuedVerifications,
         clearQueuedVerification,
-        getNextRetryCountdown
+        getNextRetryCountdown,
+        // Separate enquiry status tracking
+        enquiryStatus,
+        enquiryLastChecked,
+        enquiryMessage
     };
 }

@@ -7,6 +7,57 @@ import { EnquiryDetails } from '../types';
  */
 export const EnquiryService = {
     /**
+     * Cache management for enquiry data
+     */
+    cache: {
+        set: (data: EnquiryDetails[], branchId?: string | null) => {
+            try {
+                localStorage.setItem('enquiries_cache', JSON.stringify({
+                    data,
+                    timestamp: new Date().toISOString(),
+                    branchId: branchId || null
+                }));
+                return true;
+            } catch (error) {
+                console.warn('Failed to cache enquiry data:', error);
+                return false;
+            }
+        },
+
+        get: (branchId?: string | null, maxAge: number = 24 * 60 * 60 * 1000) => {
+            try {
+                const cached = localStorage.getItem('enquiries_cache');
+                if (!cached) return null;
+
+                const parsed = JSON.parse(cached);
+                const cacheAge = Date.now() - new Date(parsed.timestamp).getTime();
+
+                // Check if cache is for the same branch and not too old
+                if ((!branchId || parsed.branchId === branchId) && cacheAge < maxAge) {
+                    return {
+                        data: parsed.data,
+                        timestamp: parsed.timestamp,
+                        age: cacheAge
+                    };
+                }
+                return null;
+            } catch (error) {
+                console.warn('Failed to retrieve cached enquiry data:', error);
+                return null;
+            }
+        },
+
+        clear: () => {
+            try {
+                localStorage.removeItem('enquiries_cache');
+                return true;
+            } catch (error) {
+                console.warn('Failed to clear enquiry cache:', error);
+                return false;
+            }
+        }
+    },
+    /**
      * Create sample enquiry data for testing (temporary function)
      */
     async createSampleEnquiry(): Promise<{ success: boolean; enquiryId?: string; error?: string }> {

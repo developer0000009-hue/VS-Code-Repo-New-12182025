@@ -20,6 +20,7 @@ import { FilterIcon } from './icons/FilterIcon';
 import { UsersIcon } from './icons/UsersIcon';
 import { SparklesIcon } from './icons/SparklesIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
+import EnquiryDebugPanel from './common/EnquiryDebugPanel';
 
 const statusColors: Record<string, string> = {
   'NEW': 'bg-gray-500/10 text-gray-400 border-gray-500/20',
@@ -67,6 +68,7 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
     const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [showDebugPanel, setShowDebugPanel] = useState(false);
 
     // Use centralized service status management
     const {
@@ -75,7 +77,11 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
         pendingCount: pendingVerificationsCount,
         isChecking: isRetrying,
         message: serviceMessage,
-        checkServiceHealth
+        checkServiceHealth,
+        // Separate enquiry status tracking
+        enquiryStatus,
+        enquiryLastChecked,
+        enquiryMessage
     } = useServiceStatus();
 
     const [searchTerm, setSearchTerm] = useState('');
@@ -84,12 +90,13 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
 
     // Fallback query that loads enquiries directly from table when RPC fails
     const fallbackFetchEnquiries = useCallback(async (isSilent = false) => {
-        if (branchId === undefined) return;
+        // Always try to load enquiries, regardless of branchId
+        // If branchId is null/undefined, load all accessible enquiries
 
         if (!isSilent) setLoading(true);
         try {
             // Direct query to enquiries table - this should always work
-            const { data, error } = await supabase
+            let query = supabase
                 .from('enquiries')
                 .select('*')
                 .eq('conversion_state', 'NOT_CONVERTED')
@@ -97,44 +104,160 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                 .eq('is_deleted', false)
                 .order('created_at', { ascending: false });
 
+            // If branchId is specified, filter by it; otherwise load all accessible
+            if (branchId) {
+                query = query.eq('branch_id', branchId);
+            }
+
+            const { data, error } = await query;
             if (error) throw error;
+
             setEnquiries(data || []);
+            return { success: true, data: data || [] };
         } catch (err: any) {
-            // If even the fallback fails, show blocking error
-            setError(formatError(err));
+            const formattedError = formatError(err);
+            console.error('Fallback enquiry loading failed:', formattedError);
+
+            // Don't set blocking error here - let the caller handle it
+            // This allows for multiple fallback layers
+            return { success: false, error: formattedError };
         } finally {
-            setLoading(false);
+            if (!isSilent) setLoading(false);
         }
     }, [branchId]);
 
     const fetchEnquiries = useCallback(async (isSilent = false, isRetry = false) => {
-        // Always fetch enquiries - if branchId is null/undefined, fetch from all accessible branches
+        // Three-tier fallback system:
+        // 1. Try RPC function
+        // 2. Fallback to direct table query
+        // 3. Final fallback to localStorage cache
+
         if (!isSilent) {
             setLoading(true);
         }
         setError(null);
 
-        let rpcSuccess = false;
+        let dataLoaded = false;
+        let lastError = null;
+
+        // Tier 1: Try RPC function
         try {
             const { data, error: rpcError } = await supabase.rpc('get_enquiries_for_node', {
                 p_branch_id: branchId
             });
 
             if (rpcError) throw rpcError;
+
             setEnquiries(data || []);
-            rpcSuccess = true;
+            dataLoaded = true;
+
+            // Cache successful data for offline use
+            localStorage.setItem('enquiries_cache', JSON.stringify({
+                data: data || [],
+                timestamp: new Date().toISOString(),
+                branchId: branchId
+            }));
+
+            // Update debug info
+            const existingDebug = JSON.parse(localStorage.getItem('enquiry_debug_info') || '{}');
+            localStorage.setItem('enquiry_debug_info', JSON.stringify({
+                ...existingDebug,
+                lastError: null,
+                lastSuccessfulLoad: new Date(),
+                loadAttempts: (existingDebug.loadAttempts || 0) + 1,
+                currentSource: 'rpc'
+            }));
+
+            return { success: true, source: 'rpc' };
         } catch (err: any) {
-            // RPC failed - load from cache
-            console.warn("RPC failed, falling back to direct query:", formatError(err));
-            await fallbackFetchEnquiries(true); // Use silent fallback
-            rpcSuccess = false;
-        } finally {
-            if (!isSilent) {
-                setLoading(false);
-            }
+            console.warn("RPC failed, trying direct query:", formatError(err));
+            lastError = err;
         }
 
-        return rpcSuccess;
+        // Tier 2: Direct table query fallback
+        try {
+            const fallbackResult = await fallbackFetchEnquiries(true); // Silent mode
+            if (fallbackResult.success) {
+                dataLoaded = true;
+
+                // Cache successful data for offline use
+                localStorage.setItem('enquiries_cache', JSON.stringify({
+                    data: fallbackResult.data,
+                    timestamp: new Date().toISOString(),
+                    branchId: branchId
+                }));
+
+                // Update debug info
+                const existingDebug = JSON.parse(localStorage.getItem('enquiry_debug_info') || '{}');
+                localStorage.setItem('enquiry_debug_info', JSON.stringify({
+                    ...existingDebug,
+                    lastError: null,
+                    lastSuccessfulLoad: new Date(),
+                    loadAttempts: (existingDebug.loadAttempts || 0) + 1,
+                    currentSource: 'table'
+                }));
+
+                return { success: true, source: 'table' };
+            } else {
+                throw new Error(fallbackResult.error);
+            }
+        } catch (err: any) {
+            console.warn("Direct query failed, trying cache:", formatError(err));
+            lastError = err;
+        }
+
+        // Tier 3: localStorage cache fallback
+        try {
+            const cached = localStorage.getItem('enquiries_cache');
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                // Check if cache is for the same branch and not too old (24 hours)
+                const cacheAge = Date.now() - new Date(parsed.timestamp).getTime();
+                const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+
+                if ((!branchId || parsed.branchId === branchId) && cacheAge < maxAge) {
+                    setEnquiries(parsed.data || []);
+                    dataLoaded = true;
+                    console.log("Loaded data from cache (age:", Math.round(cacheAge / 60000), "minutes)");
+
+                    // Update debug info for cache load
+                    const existingDebug = JSON.parse(localStorage.getItem('enquiry_debug_info') || '{}');
+                    localStorage.setItem('enquiry_debug_info', JSON.stringify({
+                        ...existingDebug,
+                        lastError: null,
+                        lastSuccessfulLoad: new Date(),
+                        loadAttempts: (existingDebug.loadAttempts || 0) + 1,
+                        currentSource: 'cache'
+                    }));
+
+                    return { success: true, source: 'cache' };
+                }
+            }
+        } catch (err: any) {
+            console.warn("Cache loading failed:", formatError(err));
+        }
+
+        // Store debug information
+        const existingDebug = JSON.parse(localStorage.getItem('enquiry_debug_info') || '{}');
+        localStorage.setItem('enquiry_debug_info', JSON.stringify({
+            lastError: !dataLoaded ? (lastError ? formatError(lastError) : "All data sources unavailable") : null,
+            lastSuccessfulLoad: dataLoaded ? new Date() : existingDebug.lastSuccessfulLoad,
+            loadAttempts: (existingDebug.loadAttempts || 0) + 1,
+            currentSource: dataLoaded ? 'cache' : 'failed' // This will be updated by the successful tier
+        }));
+
+        // All tiers failed - set error state
+        if (!dataLoaded) {
+            const errorMessage = lastError ? formatError(lastError) : "All data sources unavailable";
+            setError(errorMessage);
+            console.error("All enquiry loading tiers failed:", errorMessage);
+        }
+
+        if (!isSilent) {
+            setLoading(false);
+        }
+
+        return { success: dataLoaded, source: dataLoaded ? 'cache' : 'failed' };
     }, [branchId, fallbackFetchEnquiries]);
 
     useEffect(() => {
@@ -163,6 +286,19 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
 
         return () => clearInterval(retryInterval);
     }, [serviceStatus, fetchEnquiries]);
+
+    // Keyboard shortcut for debug panel (Ctrl+Shift+D)
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.ctrlKey && event.shiftKey && event.key === 'D') {
+                event.preventDefault();
+                setShowDebugPanel(true);
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, []);
     
     const processedEnquiries = useMemo(() => {
         let data = enquiries.filter(enq => {
@@ -268,24 +404,24 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
             </div>
 
             {/* Unified System Status Banner */}
-            {(serviceStatus === 'offline' || serviceStatus === 'degraded' || serviceStatus === 'syncing' || error) && (
+            {(enquiryStatus === 'offline' || enquiryStatus === 'degraded' || serviceStatus === 'syncing' || error) && (
                 <SystemStatusBanner
-                    status={error ? 'offline' : serviceStatus}
+                    status={error ? 'offline' : enquiryStatus}
                     message={
                         error
                             ? `Connection failed: ${error}`
-                            : serviceStatus === 'offline'
-                            ? "Verification service is temporarily unavailable. Enquiry data is safe and cached. Status updates will resume automatically when service recovers."
-                            : serviceStatus === 'degraded'
-                            ? "Verification service is experiencing delays. Some operations may be slower than usual."
+                            : enquiryStatus === 'offline'
+                            ? "Enquiry service is temporarily unavailable. Data is cached locally and will be available when service recovers."
+                            : enquiryStatus === 'degraded'
+                            ? "Enquiry service is experiencing delays. Some operations may be slower than usual."
                             : serviceStatus === 'syncing'
-                            ? "Reconnecting to verification services..."
-                            : "Checking service status..."
+                            ? "Reconnecting to services..."
+                            : "Checking enquiry service status..."
                     }
-                    lastSync={lastSyncTime || undefined}
-                    pendingCount={pendingVerificationsCount}
+                    lastSync={enquiryLastChecked || undefined}
+                    pendingCount={enquiryStatus === 'offline' ? 0 : pendingVerificationsCount}
                     onRetry={() => {
-                        checkServiceHealth();
+                        fetchEnquiries(); // Retry enquiry loading instead of verification check
                     }}
                     isRetrying={isRetrying}
                 />
@@ -485,6 +621,12 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                 )}
             </div>
 
+            {/* Debug Panel */}
+            <EnquiryDebugPanel
+                isVisible={showDebugPanel}
+                onClose={() => setShowDebugPanel(false)}
+                branchId={branchId}
+            />
 
         </div>
     );
