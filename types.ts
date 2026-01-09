@@ -221,11 +221,21 @@ export interface MyEnquiry {
     parent_email?: string;
 }
 
+export type VerificationStatus =
+  | 'PENDING'        // Awaiting verification
+  | 'QUEUED'         // Added to verification queue
+  | 'VERIFYING'      // Currently being processed
+  | 'VERIFIED'       // Successfully verified
+  | 'FAILED'         // Verification failed (user can retry)
+  | 'SERVICE_OFFLINE'; // Service unavailable (auto-retry)
+
+export type ServiceStatus = 'online' | 'degraded' | 'offline' | 'syncing' | 'unknown';
+
 export interface Enquiry extends MyEnquiry {
     parent_name: string;
     notes?: string;
     conversion_state?: 'NOT_CONVERTED' | 'CONVERTED';
-    verification_status?: 'PENDING' | 'VERIFIED';
+    verification_status?: VerificationStatus;
 }
 
 export interface TimelineItem {

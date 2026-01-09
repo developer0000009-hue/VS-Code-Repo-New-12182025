@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { ServiceStatus, VerificationStatus } from '../types';
 import { ClockIcon } from './icons/ClockIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
+import { RefreshIcon } from './icons/RefreshIcon';
 
 interface VerificationStatusWidgetProps {
-    status: 'online' | 'degraded' | 'offline' | 'unknown';
+    status: ServiceStatus;
     lastSync?: Date;
     pendingCount?: number;
     isRefreshing?: boolean;

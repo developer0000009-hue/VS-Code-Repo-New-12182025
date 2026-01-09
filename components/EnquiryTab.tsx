@@ -2,9 +2,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, formatError } from '../services/supabase';
-import { Enquiry, EnquiryStatus } from '../types';
+import { Enquiry, EnquiryStatus, ServiceStatus, VerificationStatus } from '../types';
 import Spinner from './common/Spinner';
 import VerificationStatusWidget from './VerificationStatusWidget';
+import SystemStatusBanner from './SystemStatusBanner';
 import { SearchIcon } from './icons/SearchIcon';
 import { KeyIcon } from './icons/KeyIcon';
 import { MailIcon } from './icons/MailIcon';
@@ -64,12 +65,11 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
     const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [verificationWarning, setVerificationWarning] = useState<string | null>(null);
 
-    // Verification status tracking
-    const [verificationStatus, setVerificationStatus] = useState<'online' | 'degraded' | 'offline' | 'unknown'>('unknown');
+    // Service status tracking
+    const [serviceStatus, setServiceStatus] = useState<ServiceStatus>('unknown');
     const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
-    const [isRefreshingVerification, setIsRefreshingVerification] = useState(false);
+    const [isRetrying, setIsRetrying] = useState(false);
     const [pendingVerificationsCount, setPendingVerificationsCount] = useState(0);
 
     const [searchTerm, setSearchTerm] = useState('');
@@ -101,11 +101,16 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
         }
     }, [branchId]);
 
-    const fetchEnquiries = useCallback(async (isSilent = false) => {
+    const fetchEnquiries = useCallback(async (isSilent = false, isRetry = false) => {
         // Always fetch enquiries - if branchId is null/undefined, fetch from all accessible branches
-        if (!isSilent) setLoading(true);
+        if (!isSilent) {
+            if (isRetry) {
+                setServiceStatus('syncing');
+            } else {
+                setLoading(true);
+            }
+        }
         setError(null);
-        setVerificationWarning(null); // Clear previous warnings
 
         let rpcSuccess = false;
         try {
@@ -115,26 +120,44 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
 
             if (rpcError) throw rpcError;
             setEnquiries(data || []);
-            setVerificationStatus('online');
+            setServiceStatus('online');
             setLastSyncTime(new Date());
             rpcSuccess = true;
         } catch (err: any) {
-            // RPC failed - set status to offline and show neutral message
-            setVerificationStatus('offline');
-            setVerificationWarning("Verification service is currently offline. Enquiry data is loaded from cache. Status updates will resume automatically.");
+            // RPC failed - set status to offline and load from cache
+            setServiceStatus('offline');
             console.warn("RPC failed, falling back to direct query:", formatError(err));
             await fallbackFetchEnquiries(true); // Use silent fallback
             rpcSuccess = false;
         } finally {
-            if (!isSilent) setLoading(false);
+            if (!isSilent) {
+                setLoading(false);
+                setServiceStatus(prev => prev === 'syncing' ? 'online' : prev);
+            }
+            if (isRetry) {
+                setIsRetrying(false);
+            }
         }
 
-        // Calculate pending verifications count
-        const pendingCount = enquiries.filter(enq => enq.verification_status === 'PENDING').length;
-        setPendingVerificationsCount(pendingCount);
+        // Calculate pending verifications count from current enquiries
+        const currentEnquiries = await supabase
+            .from('enquiries')
+            .select('verification_status')
+            .eq('conversion_state', 'NOT_CONVERTED')
+            .eq('is_archived', false)
+            .eq('is_deleted', false);
+
+        if (currentEnquiries.data) {
+            const pendingCount = currentEnquiries.data.filter(enq =>
+                enq.verification_status === 'PENDING' ||
+                enq.verification_status === 'QUEUED' ||
+                enq.verification_status === 'VERIFYING'
+            ).length;
+            setPendingVerificationsCount(pendingCount);
+        }
 
         return rpcSuccess;
-    }, [branchId, fallbackFetchEnquiries, enquiries]);
+    }, [branchId, fallbackFetchEnquiries]);
 
     useEffect(() => {
         fetchEnquiries();
@@ -151,9 +174,9 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
         return () => { supabase.removeChannel(channel); };
     }, [fetchEnquiries, branchId]);
 
-    // Background retry logic for verification sync
+    // Background retry logic for verification sync when offline
     useEffect(() => {
-        if (!verificationWarning) return; // Only run when there's a warning
+        if (serviceStatus !== 'offline') return;
 
         const retryInterval = setInterval(() => {
             console.log('Background retry: attempting verification sync...');
@@ -161,7 +184,7 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
         }, 60000); // Retry every 60 seconds
 
         return () => clearInterval(retryInterval);
-    }, [verificationWarning, fetchEnquiries]);
+    }, [serviceStatus, fetchEnquiries]);
     
     const processedEnquiries = useMemo(() => {
         let data = enquiries.filter(enq => {
@@ -219,13 +242,13 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                     </p>
                     <div className="flex items-center gap-3 mt-4">
                         <VerificationStatusWidget
-                            status={verificationStatus}
+                            status={serviceStatus}
                             lastSync={lastSyncTime}
                             pendingCount={pendingVerificationsCount}
-                            isRefreshing={isRefreshingVerification}
+                            isRefreshing={isRetrying}
                             onRetry={() => {
-                                setIsRefreshingVerification(true);
-                                fetchEnquiries().finally(() => setIsRefreshingVerification(false));
+                                setIsRetrying(true);
+                                fetchEnquiries(false, true);
                             }}
                         />
                     </div>
@@ -247,7 +270,12 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                     {onNavigate && (
                         <button
                             onClick={() => onNavigate('Code Verification')}
-                            className="px-8 py-5 bg-primary text-white font-black text-[11px] uppercase tracking-[0.3em] rounded-2xl shadow-2xl shadow-primary/20 hover:bg-primary/90 transition-all flex items-center justify-center gap-3 transform hover:-translate-y-1 active:scale-95 ring-4 ring-primary/10"
+                            disabled={serviceStatus === 'offline'}
+                            className={`px-8 py-5 font-black text-[11px] uppercase tracking-[0.3em] rounded-2xl shadow-2xl transition-all flex items-center justify-center gap-3 transform active:scale-95 ring-4 ${
+                                serviceStatus === 'offline'
+                                    ? 'bg-gray-500/20 text-gray-400/50 cursor-not-allowed ring-gray-500/10'
+                                    : 'bg-primary text-white shadow-primary/20 hover:bg-primary/90 hover:-translate-y-1 ring-primary/10'
+                            }`}
                         >
                             <KeyIcon className="w-5 h-5" /> Start Verification
                         </button>
@@ -255,49 +283,29 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                 </div>
             </div>
 
-            {error && (
-                <div className="p-6 bg-red-500/10 border border-red-500/20 rounded-[2rem] flex items-center justify-between shadow-xl animate-in shake">
-                    <div className="flex items-center gap-4">
-                        <AlertTriangleIcon className="w-8 h-8 text-red-500 shrink-0" />
-                        <div>
-                            <p className="text-xs font-black uppercase text-red-500 tracking-widest">Sync Failure</p>
-                            <p className="text-sm font-bold text-red-200/70 mt-1">{error}</p>
-                        </div>
-                    </div>
-                    <button onClick={() => fetchEnquiries()} className="px-6 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95">Retry Sync</button>
-                </div>
-            )}
-
-            {verificationWarning && (
-                <div className="p-6 bg-blue-500/5 border border-blue-500/20 rounded-[2rem] flex items-center justify-between shadow-xl animate-in fade-in">
-                    <div className="flex items-center gap-4">
-                        <div className="w-8 h-8 bg-blue-500/10 rounded-full flex items-center justify-center shrink-0">
-                            <AlertTriangleIcon className="w-4 h-4 text-blue-400" />
-                        </div>
-                        <div>
-                            <p className="text-xs font-black uppercase text-blue-400 tracking-widest">Service Status</p>
-                            <p className="text-sm font-medium text-blue-200/80 mt-1">{verificationWarning}</p>
-                        </div>
-                    </div>
-                    <div className="flex gap-3">
-                        <button
-                            onClick={() => setVerificationWarning(null)}
-                            className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all active:scale-95"
-                        >
-                            Dismiss
-                        </button>
-                        <button
-                            onClick={() => {
-                                setIsRefreshingVerification(true);
-                                fetchEnquiries().finally(() => setIsRefreshingVerification(false));
-                            }}
-                            disabled={loading || isRefreshingVerification}
-                            className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95 disabled:opacity-50"
-                        >
-                            {isRefreshingVerification ? 'Checking...' : 'Check Status'}
-                        </button>
-                    </div>
-                </div>
+            {/* Unified System Status Banner */}
+            {(serviceStatus === 'offline' || serviceStatus === 'degraded' || serviceStatus === 'syncing' || error) && (
+                <SystemStatusBanner
+                    status={error ? 'offline' : serviceStatus}
+                    message={
+                        error
+                            ? `Connection failed: ${error}`
+                            : serviceStatus === 'offline'
+                            ? "Verification service is temporarily unavailable. Enquiry data is safe and cached. Status updates will resume automatically when service recovers."
+                            : serviceStatus === 'degraded'
+                            ? "Verification service is experiencing delays. Some operations may be slower than usual."
+                            : serviceStatus === 'syncing'
+                            ? "Reconnecting to verification services..."
+                            : "Checking service status..."
+                    }
+                    lastSync={lastSyncTime || undefined}
+                    pendingCount={pendingVerificationsCount}
+                    onRetry={() => {
+                        setIsRetrying(true);
+                        fetchEnquiries(false, true);
+                    }}
+                    isRetrying={isRetrying}
+                />
             )}
 
             {/* Stats Deck */}
