@@ -95,11 +95,7 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
     }, [branchId]);
 
     const fetchEnquiries = useCallback(async (isSilent = false) => {
-        if (branchId === undefined) {
-            setLoading(false);
-            return;
-        }
-
+        // Always fetch enquiries - if branchId is null/undefined, fetch from all accessible branches
         if (!isSilent) setLoading(true);
         setError(null);
         setVerificationWarning(null); // Clear previous warnings

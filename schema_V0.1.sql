@@ -1000,13 +1000,29 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.get_my_branch_ids()
 RETURNS SETOF bigint LANGUAGE sql SECURITY DEFINER AS $$
+    -- Direct branch ownership (School Admin)
     SELECT id FROM public.school_branches WHERE school_user_id = auth.uid()
     UNION
+    -- Branch Admin assignments
     SELECT id FROM public.school_branches WHERE branch_admin_id = auth.uid()
     UNION
+    -- Teacher branch assignments
     SELECT branch_id FROM public.teacher_profiles WHERE user_id = auth.uid() AND branch_id IS NOT NULL
     UNION
+    -- Student branch assignments
     SELECT branch_id FROM public.student_profiles WHERE user_id = auth.uid() AND branch_id IS NOT NULL
+    UNION
+    -- Admin roles from user_role_assignments (Principal, HR Manager, etc.)
+    SELECT ura.branch_id FROM public.user_role_assignments ura
+    JOIN public.user_roles ur ON ura.role_name = ur.name
+    WHERE ura.user_id = auth.uid()
+    AND ur.name IN ('Principal', 'HR Manager', 'Academic Coordinator', 'Accountant', 'Branch Admin', 'School Administration')
+    AND ura.branch_id IS NOT NULL
+    UNION
+    -- All branches for Super Admin
+    SELECT id FROM public.school_branches WHERE EXISTS (
+        SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_super_admin = true
+    )
 $$;
 
 CREATE OR REPLACE FUNCTION public.complete_user_profile(
