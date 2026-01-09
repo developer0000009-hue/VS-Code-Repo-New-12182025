@@ -1,4 +1,5 @@
 import { supabase, formatError } from './supabase';
+import { EnquiryDetails } from '../types';
 
 /**
  * Enquiry Domain Service
@@ -136,6 +137,52 @@ export const EnquiryService = {
             const formatted = formatError(err);
             console.error("Enquiry Promotion Failure:", formatted);
             throw new Error(formatted);
+        }
+    },
+
+    /**
+     * Fetches complete enquiry details from the enquiries table.
+     * Used for displaying detailed information in verification flow.
+     */
+    async getEnquiryDetails(enquiryId: string): Promise<{ success: boolean; enquiry?: EnquiryDetails; error?: string }> {
+        try {
+            if (!enquiryId) throw new Error("Enquiry ID required for fetching details.");
+
+            const { data, error } = await supabase
+                .from('enquiries')
+                .select(`
+                    id,
+                    applicant_name,
+                    grade,
+                    status,
+                    verification_status,
+                    conversion_state,
+                    parent_name,
+                    parent_email,
+                    parent_phone,
+                    notes,
+                    created_at,
+                    updated_at,
+                    branch_id,
+                    is_archived,
+                    is_deleted
+                `)
+                .eq('id', enquiryId)
+                .maybeSingle();
+
+            if (error) throw error;
+            if (!data) throw new Error("Enquiry record not found.");
+
+            return {
+                success: true,
+                enquiry: data as EnquiryDetails
+            };
+        } catch (err) {
+            console.error("Failed to fetch enquiry details:", err);
+            return {
+                success: false,
+                error: formatError(err)
+            };
         }
     }
 };

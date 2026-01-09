@@ -400,6 +400,58 @@ export interface VerifiedShareCodeData {
     already_imported?: boolean;
 }
 
+export interface EnquiryDetails {
+    id: string;
+    applicant_name: string;
+    grade: string;
+    status: EnquiryStatus;
+    verification_status: VerificationStatus;
+    conversion_state: 'NOT_CONVERTED' | 'CONVERTED';
+    parent_name: string;
+    parent_email: string;
+    parent_phone: string;
+    notes?: string;
+    created_at: string;
+    updated_at: string;
+    branch_id?: string | null;
+    is_archived: boolean;
+    is_deleted: boolean;
+}
+
+export interface AdmissionVaultDetails {
+    id: string;
+    applicant_name: string;
+    grade: string;
+    status: AdmissionStatus;
+    date_of_birth?: string;
+    gender?: string;
+    parent_name?: string;
+    parent_email?: string;
+    parent_phone?: string;
+    emergency_contact?: string;
+    medical_info?: string;
+    application_number?: string;
+    submitted_at: string;
+    registered_at?: string;
+    profile_photo_url?: string | null;
+    parent_id?: string;
+    student_user_id?: string;
+}
+
+export interface VerificationAuditLog {
+    id: string;
+    code: string;
+    code_type: ShareCodeType;
+    admission_id?: string;
+    enquiry_id?: string;
+    applicant_name: string;
+    result: 'SUCCESS' | 'FAILED' | 'EXPIRED' | 'INVALID';
+    error_message?: string;
+    verified_by?: string;
+    verified_at: string;
+    branch_id?: string | null;
+}
+
 export interface TeacherClassOverview {
     id: string;
     name: string;

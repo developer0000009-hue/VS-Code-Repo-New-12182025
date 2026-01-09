@@ -1,5 +1,5 @@
 import { supabase, formatError } from './supabase';
-import { ServiceStatus, VerificationStatus } from '../types';
+import { ServiceStatus, VerificationStatus, VerificationAuditLog, ShareCodeType } from '../types';
 
 export interface ServiceHealthStatus {
     status: ServiceStatus;
@@ -263,6 +263,77 @@ class VerificationService {
         if (this.healthCheckInterval) {
             clearInterval(this.healthCheckInterval);
             this.healthCheckInterval = null;
+        }
+    }
+
+    /**
+     * Logs verification attempts for audit and debugging purposes.
+     * Stores in localStorage for offline scenarios and attempts database logging.
+     */
+    async logVerificationAttempt(attempt: {
+        code: string;
+        code_type: ShareCodeType;
+        admission_id?: string;
+        enquiry_id?: string;
+        applicant_name: string;
+        result: 'SUCCESS' | 'FAILED' | 'EXPIRED' | 'INVALID';
+        error_message?: string;
+        branch_id?: string | null;
+    }): Promise<void> {
+        try {
+            const logEntry: VerificationAuditLog = {
+                id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                ...attempt,
+                verified_at: new Date().toISOString()
+            };
+
+            // Store in localStorage for immediate access
+            const existingLogs = this.getVerificationLogs();
+            existingLogs.unshift(logEntry); // Add to beginning
+
+            // Keep only last 1000 logs to prevent storage bloat
+            const trimmedLogs = existingLogs.slice(0, 1000);
+            localStorage.setItem('verification_audit_logs', JSON.stringify(trimmedLogs));
+
+            // Attempt to log to database (fire and forget - don't fail verification if this fails)
+            try {
+                await supabase
+                    .from('verification_audit_logs')
+                    .insert({
+                        code: attempt.code,
+                        code_type: attempt.code_type,
+                        admission_id: attempt.admission_id,
+                        enquiry_id: attempt.enquiry_id,
+                        applicant_name: attempt.applicant_name,
+                        result: attempt.result,
+                        error_message: attempt.error_message,
+                        branch_id: attempt.branch_id,
+                        verified_at: logEntry.verified_at
+                    });
+            } catch (dbError) {
+                // Database logging failed - this is OK, we still have localStorage
+                console.warn('Failed to log verification to database:', dbError);
+            }
+
+        } catch (error) {
+            // If localStorage logging fails, log to console
+            console.error('Failed to log verification attempt:', error);
+        }
+    }
+
+    /**
+     * Retrieves verification audit logs from localStorage.
+     */
+    getVerificationLogs(): VerificationAuditLog[] {
+        try {
+            const stored = localStorage.getItem('verification_audit_logs');
+            if (!stored) return [];
+
+            const parsed = JSON.parse(stored);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+            console.error('Error parsing verification logs:', error);
+            return [];
         }
     }
 }

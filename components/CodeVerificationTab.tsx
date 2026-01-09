@@ -1,9 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase, formatError } from '../services/supabase';
 import { EnquiryService } from '../services/enquiry';
 import { AdmissionService } from '../services/admission';
-import { VerifiedShareCodeData } from '../types';
+import { VerifiedShareCodeData, EnquiryDetails, AdmissionVaultDetails } from '../types';
 import { useServiceStatus } from '../hooks/useServiceStatus';
 import { verificationService } from '../services/verificationService';
 import Spinner from './common/Spinner';
@@ -39,12 +39,53 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
     const [queuedForOffline, setQueuedForOffline] = useState(false);
     const [retryCount, setRetryCount] = useState(0);
 
+    // New state for detailed information display
+    const [enquiryDetails, setEnquiryDetails] = useState<EnquiryDetails | null>(null);
+    const [admissionDetails, setAdmissionDetails] = useState<AdmissionVaultDetails | null>(null);
+    const [loadingDetails, setLoadingDetails] = useState(false);
+
     const resetState = () => {
         setError(null);
         setVerificationResult(null);
         setSyncSuccess(false);
         setQueuedForOffline(false);
+        setEnquiryDetails(null);
+        setAdmissionDetails(null);
+        setLoadingDetails(false);
     };
+
+    // Fetch detailed information when verification result changes
+    useEffect(() => {
+        if (verificationResult && verificationResult.code_type) {
+            setLoadingDetails(true);
+
+            if (verificationResult.code_type === 'Enquiry' && verificationResult.enquiry_id) {
+                EnquiryService.getEnquiryDetails(verificationResult.enquiry_id)
+                    .then(result => {
+                        if (result.success) {
+                            setEnquiryDetails(result.enquiry);
+                        } else {
+                            console.warn('Failed to fetch enquiry details:', result.error);
+                        }
+                    })
+                    .catch(err => console.error('Error fetching enquiry details:', err))
+                    .finally(() => setLoadingDetails(false));
+            } else if (verificationResult.code_type === 'Admission' && verificationResult.admission_id) {
+                AdmissionService.getAdmissionDetails(verificationResult.admission_id)
+                    .then(result => {
+                        if (result.success) {
+                            setAdmissionDetails(result.admission);
+                        } else {
+                            console.warn('Failed to fetch admission details:', result.error);
+                        }
+                    })
+                    .catch(err => console.error('Error fetching admission details:', err))
+                    .finally(() => setLoadingDetails(false));
+            } else {
+                setLoadingDetails(false);
+            }
+        }
+    }, [verificationResult]);
 
     const handleVerify = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -90,11 +131,44 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
 
             if (data && data.found) {
                 setVerificationResult(data);
+
+                // Log successful verification
+                await verificationService.logVerificationAttempt({
+                    code: cleanCode,
+                    code_type: data.code_type,
+                    admission_id: data.admission_id,
+                    enquiry_id: data.enquiry_id,
+                    applicant_name: data.applicant_name,
+                    result: 'SUCCESS',
+                    branch_id: branchId
+                });
             } else {
-                setError("Verification Failed: The code could not be processed due to a configuration mismatch.");
+                // Log failed verification
+                await verificationService.logVerificationAttempt({
+                    code: cleanCode,
+                    code_type: 'Enquiry', // Default assumption
+                    applicant_name: 'Unknown',
+                    result: 'INVALID',
+                    error_message: 'Code not found or invalid',
+                    branch_id: branchId
+                });
+
+                setError("Invalid Access Code: This verification code is not recognized or has expired. Please verify the code and try again.");
             }
         } catch (err: any) {
-            setError(formatError(err));
+            const errorMessage = formatError(err);
+
+            // Log verification failure
+            await verificationService.logVerificationAttempt({
+                code: cleanCode,
+                code_type: 'Enquiry', // Default assumption
+                applicant_name: 'Unknown',
+                result: 'FAILED',
+                error_message: errorMessage,
+                branch_id: branchId
+            });
+
+            setError(errorMessage);
         } finally {
             setVerifying(false);
         }
@@ -250,39 +324,239 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
             </div>
 
             {verificationResult && !error && !syncSuccess && (
-                <div className="bg-[#0c0e14] border border-white/5 rounded-[4rem] p-12 md:p-16 shadow-2xl animate-in slide-in-from-bottom-12 duration-1000 relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-12 opacity-[0.02] group-hover:scale-110 transition-transform duration-1000 pointer-events-none">
-                        <UsersIcon className="w-64 h-64 text-white" />
-                    </div>
-                    
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 relative z-10">
-                        <div className="space-y-12">
-                             <div className="space-y-1.5">
-                                <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Verified Identity</p>
-                                <p className="text-4xl md:text-5xl font-serif font-black text-white leading-tight uppercase truncate">{verificationResult.applicant_name}</p>
+                <div className="space-y-8">
+                    {/* Enquiry Details Section - Only show for Enquiry codes */}
+                    {verificationResult.code_type === 'Enquiry' && enquiryDetails && (
+                        <div className="bg-[#0c0e14] border border-white/5 rounded-[4rem] p-12 md:p-16 shadow-2xl animate-in slide-in-from-bottom-12 duration-1000 relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 p-12 opacity-[0.02] group-hover:scale-110 transition-transform duration-1000 pointer-events-none">
+                                <UsersIcon className="w-64 h-64 text-white" />
                             </div>
-                            <div className="grid grid-cols-2 gap-8">
-                                <div className="space-y-1.5">
-                                    <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Academic Level</p>
-                                    <p className="text-xl font-bold text-white">Grade {verificationResult.grade}</p>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 relative z-10">
+                                {/* Basic Info */}
+                                <div className="lg:col-span-2 space-y-8">
+                                    <div className="space-y-1.5">
+                                        <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Enquiry Details</p>
+                                        <h3 className="text-3xl md:text-4xl font-serif font-black text-white leading-tight uppercase">{verificationResult.applicant_name}</h3>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-8">
+                                        <div className="space-y-1.5">
+                                            <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Academic Level</p>
+                                            <p className="text-xl font-bold text-white">Grade {verificationResult.grade}</p>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Verification Status</p>
+                                            <p className="text-xl font-black text-primary uppercase tracking-widest">{enquiryDetails.verification_status}</p>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Enquiry Status</p>
+                                            <p className="text-xl font-bold text-white">{enquiryDetails.status}</p>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Conversion State</p>
+                                            <p className="text-xl font-bold text-white">{enquiryDetails.conversion_state}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Parent Details */}
+                                    <div className="space-y-4">
+                                        <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Parent/Guardian Details</p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-1">
+                                                <p className="text-sm font-bold text-white/60">Name</p>
+                                                <p className="text-lg font-serif text-white">{enquiryDetails.parent_name}</p>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-sm font-bold text-white/60">Email</p>
+                                                <p className="text-lg font-serif text-white">{enquiryDetails.parent_email}</p>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-sm font-bold text-white/60">Phone</p>
+                                                <p className="text-lg font-serif text-white">{enquiryDetails.parent_phone}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Notes */}
+                                    {enquiryDetails.notes && (
+                                        <div className="space-y-2">
+                                            <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Additional Notes</p>
+                                            <p className="text-white/80 font-serif italic">{enquiryDetails.notes}</p>
+                                        </div>
+                                    )}
+
+                                    {/* Timestamps */}
+                                    <div className="space-y-2">
+                                        <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Record Information</p>
+                                        <div className="grid grid-cols-2 gap-4 text-sm text-white/60">
+                                            <div>Created: {new Date(enquiryDetails.created_at).toLocaleDateString()}</div>
+                                            <div>Updated: {new Date(enquiryDetails.updated_at).toLocaleDateString()}</div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="space-y-1.5">
-                                    <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Verification Domain</p>
-                                    <p className="text-xl font-black text-primary uppercase tracking-widest">{verificationResult.code_type}</p>
+
+                                {/* Action Panel */}
+                                <div className="flex flex-col justify-center gap-6">
+                                    <button onClick={handleProcess} disabled={processing || loadingDetails} className="w-full py-7 bg-primary hover:bg-primary/90 text-white font-black text-xs uppercase tracking-[0.4em] rounded-[2.2rem] shadow-2xl transition-all transform hover:-translate-y-1 active:scale-95 disabled:opacity-50 ring-4 ring-primary/10">
+                                        {processing ? <Spinner size="sm" className="text-white"/> : 'SYNC TO ENQUIRIES'}
+                                    </button>
+                                    <div className="flex items-center justify-center gap-4 text-white/20">
+                                        <div className="h-px bg-white/5 flex-grow"></div>
+                                        <p className="text-[9px] font-black uppercase tracking-[0.3em]">Ready for Enquiry Sync</p>
+                                        <div className="h-px bg-white/5 flex-grow"></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <div className="flex flex-col justify-center gap-6">
-                             <button onClick={handleProcess} disabled={processing} className="w-full py-7 bg-primary hover:bg-primary/90 text-white font-black text-xs uppercase tracking-[0.4em] rounded-[2.2rem] shadow-2xl transition-all transform hover:-translate-y-1 active:scale-95 disabled:opacity-50 ring-4 ring-primary/10">
-                                 {processing ? <Spinner size="sm" className="text-white"/> : `SYNC AS ${verificationResult.code_type.toUpperCase()}`}
-                             </button>
-                             <div className="flex items-center justify-center gap-4 text-white/20">
-                                 <div className="h-px bg-white/5 flex-grow"></div>
-                                 <p className="text-[9px] font-black uppercase tracking-[0.3em]">Ready for Domain Sync</p>
-                                 <div className="h-px bg-white/5 flex-grow"></div>
-                             </div>
+                    )}
+
+                    {/* Admission Vault Section - Only show for Admission codes */}
+                    {verificationResult.code_type === 'Admission' && admissionDetails && (
+                        <div className="bg-[#0c0e14] border border-white/5 rounded-[4rem] p-12 md:p-16 shadow-2xl animate-in slide-in-from-bottom-12 duration-1000 relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 p-12 opacity-[0.02] group-hover:scale-110 transition-transform duration-1000 pointer-events-none">
+                                <UsersIcon className="w-64 h-64 text-white" />
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 relative z-10">
+                                {/* Basic Info */}
+                                <div className="lg:col-span-2 space-y-8">
+                                    <div className="space-y-1.5">
+                                        <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Admission Vault Details</p>
+                                        <h3 className="text-3xl md:text-4xl font-serif font-black text-white leading-tight uppercase">{verificationResult.applicant_name}</h3>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-8">
+                                        <div className="space-y-1.5">
+                                            <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Academic Level</p>
+                                            <p className="text-xl font-bold text-white">Grade {verificationResult.grade}</p>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Application Status</p>
+                                            <p className="text-xl font-black text-primary uppercase tracking-widest">{admissionDetails.status}</p>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Application Number</p>
+                                            <p className="text-xl font-bold text-white">{admissionDetails.application_number}</p>
+                                        </div>
+                                        {admissionDetails.date_of_birth && (
+                                            <div className="space-y-1.5">
+                                                <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Date of Birth</p>
+                                                <p className="text-xl font-bold text-white">{new Date(admissionDetails.date_of_birth).toLocaleDateString()}</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Parent Details */}
+                                    <div className="space-y-4">
+                                        <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Parent/Guardian Details</p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-1">
+                                                <p className="text-sm font-bold text-white/60">Name</p>
+                                                <p className="text-lg font-serif text-white">{admissionDetails.parent_name}</p>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-sm font-bold text-white/60">Email</p>
+                                                <p className="text-lg font-serif text-white">{admissionDetails.parent_email}</p>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-sm font-bold text-white/60">Phone</p>
+                                                <p className="text-lg font-serif text-white">{admissionDetails.parent_phone}</p>
+                                            </div>
+                                            {admissionDetails.emergency_contact && (
+                                                <div className="space-y-1">
+                                                    <p className="text-sm font-bold text-white/60">Emergency Contact</p>
+                                                    <p className="text-lg font-serif text-white">{admissionDetails.emergency_contact}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Medical Info */}
+                                    {admissionDetails.medical_info && (
+                                        <div className="space-y-2">
+                                            <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Medical Information</p>
+                                            <p className="text-white/80 font-serif italic">{admissionDetails.medical_info}</p>
+                                        </div>
+                                    )}
+
+                                    {/* Timestamps */}
+                                    <div className="space-y-2">
+                                        <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Application Timeline</p>
+                                        <div className="grid grid-cols-2 gap-4 text-sm text-white/60">
+                                            <div>Submitted: {new Date(admissionDetails.submitted_at).toLocaleDateString()}</div>
+                                            {admissionDetails.registered_at && (
+                                                <div>Registered: {new Date(admissionDetails.registered_at).toLocaleDateString()}</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Action Panel */}
+                                <div className="flex flex-col justify-center gap-6">
+                                    <button onClick={handleProcess} disabled={processing || loadingDetails} className="w-full py-7 bg-primary hover:bg-primary/90 text-white font-black text-xs uppercase tracking-[0.4em] rounded-[2.2rem] shadow-2xl transition-all transform hover:-translate-y-1 active:scale-95 disabled:opacity-50 ring-4 ring-primary/10">
+                                        {processing ? <Spinner size="sm" className="text-white"/> : 'SYNC TO ADMISSIONS'}
+                                    </button>
+                                    <div className="flex items-center justify-center gap-4 text-white/20">
+                                        <div className="h-px bg-white/5 flex-grow"></div>
+                                        <p className="text-[9px] font-black uppercase tracking-[0.3em]">Ready for Admission Sync</p>
+                                        <div className="h-px bg-white/5 flex-grow"></div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    )}
+
+                    {/* Loading State for Details */}
+                    {verificationResult && loadingDetails && (
+                        <div className="bg-[#0c0e14] border border-white/5 rounded-[4rem] p-12 md:p-16 shadow-2xl animate-in slide-in-from-bottom-12 duration-1000">
+                            <div className="flex items-center justify-center gap-4">
+                                <Spinner size="lg" className="text-primary" />
+                                <p className="text-white/60 text-lg font-serif italic">Loading detailed information...</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Fallback for when details fail to load */}
+                    {verificationResult && !loadingDetails && !enquiryDetails && !admissionDetails && (
+                        <div className="bg-[#0c0e14] border border-white/5 rounded-[4rem] p-12 md:p-16 shadow-2xl animate-in slide-in-from-bottom-12 duration-1000 relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 p-12 opacity-[0.02] group-hover:scale-110 transition-transform duration-1000 pointer-events-none">
+                                <UsersIcon className="w-64 h-64 text-white" />
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 relative z-10">
+                                <div className="space-y-12">
+                                    <div className="space-y-1.5">
+                                        <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Verified Identity</p>
+                                        <p className="text-4xl md:text-5xl font-serif font-black text-white leading-tight uppercase truncate">{verificationResult.applicant_name}</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-8">
+                                        <div className="space-y-1.5">
+                                            <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Academic Level</p>
+                                            <p className="text-xl font-bold text-white">Grade {verificationResult.grade}</p>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.25em]">Verification Domain</p>
+                                            <p className="text-xl font-black text-primary uppercase tracking-widest">{verificationResult.code_type}</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-white/60 text-sm italic">
+                                        Detailed information could not be loaded. Proceeding with basic verification.
+                                    </div>
+                                </div>
+                                <div className="flex flex-col justify-center gap-6">
+                                    <button onClick={handleProcess} disabled={processing} className="w-full py-7 bg-primary hover:bg-primary/90 text-white font-black text-xs uppercase tracking-[0.4em] rounded-[2.2rem] shadow-2xl transition-all transform hover:-translate-y-1 active:scale-95 disabled:opacity-50 ring-4 ring-primary/10">
+                                        {processing ? <Spinner size="sm" className="text-white"/> : `SYNC AS ${verificationResult.code_type.toUpperCase()}`}
+                                    </button>
+                                    <div className="flex items-center justify-center gap-4 text-white/20">
+                                        <div className="h-px bg-white/5 flex-grow"></div>
+                                        <p className="text-[9px] font-black uppercase tracking-[0.3em]">Ready for Domain Sync</p>
+                                        <div className="h-px bg-white/5 flex-grow"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
