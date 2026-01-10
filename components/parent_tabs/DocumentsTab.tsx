@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../services/supabase';
-import { StorageService, BUCKETS } from '../../services/storage';
 import { AdmissionApplication } from '../../types';
 import Spinner from '../common/Spinner';
 import { DocumentTextIcon } from '../icons/DocumentTextIcon';
@@ -14,20 +13,19 @@ import { AlertTriangleIcon } from '../icons/AlertTriangleIcon';
 import { RefreshIcon } from '../icons/RefreshIcon';
 import { ShieldCheckIcon } from '../icons/ShieldCheckIcon';
 import { PlusIcon } from '../icons/PlusIcon';
-import { DownloadIcon } from '../icons/DownloadIcon';
 import PremiumAvatar from '../common/PremiumAvatar';
 
 // --- Internal Types ---
 
 interface DocumentFile {
-    id: number;
+    id: string;
     file_name: string;
     storage_path: string;
     uploaded_at: string;
 }
 
 interface RequirementWithDocs {
-    id: number;
+    id: string;
     admission_id: string;
     document_name: string;
     status: 'Pending' | 'Submitted' | 'Verified' | 'Rejected';
@@ -54,12 +52,12 @@ const IntegritySeal = () => (
     </div>
 );
 
-const DocumentCard: React.FC<{
-    req: RequirementWithDocs;
-    onUpload: (file: File, reqId: number, admId: string) => Promise<void>;
+const DocumentCard: React.FC<{ 
+    req: RequirementWithDocs; 
+    onUpload: (file: File, reqId: string, admId: string) => Promise<void>;
 }> = ({ req, onUpload }) => {
     const [isUploading, setIsUploading] = useState(false);
-    const [isDownloading, setIsDownloading] = useState(false);
+    const [actionLoading, setActionLoading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const latestDoc = req.admission_documents?.[0];
@@ -79,28 +77,6 @@ const DocumentCard: React.FC<{
         }
     };
 
-    const handleDownload = async () => {
-        if (!latestDoc) return;
-        setIsDownloading(true);
-        try {
-            const fileBlob = await StorageService.download(BUCKETS.GUARDIAN_DOCUMENTS, latestDoc.storage_path);
-            const blob = new Blob([fileBlob], { type: fileBlob.type });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = latestDoc.file_name;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-        } catch (error: any) {
-            console.error('Download failed:', error);
-            alert('Failed to download document: ' + (error.message || 'Please try again.'));
-        } finally {
-            setIsDownloading(false);
-        }
-    };
-
     return (
         <div className={`relative rounded-3xl border transition-all duration-500 group overflow-hidden bg-[#111318] flex flex-col min-h-[240px] ${isLocked ? 'border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.05)]' : isRejected ? 'border-rose-500/30' : 'border-white/5 hover:border-primary/30'}`}>
             <div className="p-6 flex flex-col h-full z-10">
@@ -115,7 +91,7 @@ const DocumentCard: React.FC<{
 
                 <div className="flex-grow">
                     <h4 className="font-serif font-black text-white text-base mb-1 group-hover:text-primary transition-colors uppercase tracking-tight">{req.document_name}</h4>
-                    <p className={`text-[10px] font-bold uppercase tracking-widest ${req.is_mandatory ? 'text-amber-400' : 'text-white/20'}`}>{req.is_mandatory ? 'Required Document' : 'Optional'}</p>
+                    <p className="text-[10px] text-white/20 font-bold uppercase tracking-widest">{req.is_mandatory ? 'Mandatory Artifact' : 'Supplemental'}</p>
                     
                     {isRejected && (
                         <div className="mt-4 p-3 bg-rose-500/5 border border-rose-500/10 rounded-2xl animate-pulse">
@@ -127,15 +103,14 @@ const DocumentCard: React.FC<{
 
                 <div className="mt-6 pt-4 border-t border-white/5 flex gap-2">
                     {hasFile ? (
-                        <button
-                            onClick={handleDownload}
-                            disabled={isDownloading || isUploading}
+                        <button 
+                            disabled={actionLoading || isUploading}
                             className="flex-1 flex items-center justify-center gap-2 h-11 rounded-xl text-[10px] font-black bg-white/5 border border-white/5 text-white/50 hover:text-white hover:bg-white/10 transition-all uppercase tracking-widest"
                         >
-                            {isDownloading ? <Spinner size="sm" className="text-white"/> : <><DownloadIcon className="w-4 h-4" /> Download</>}
+                            <EyeIcon className="w-4 h-4" /> View
                         </button>
                     ) : (
-                        <button
+                        <button 
                             onClick={() => fileInputRef.current?.click()}
                             disabled={isUploading}
                             className="w-full h-11 flex items-center justify-center gap-2 rounded-xl text-[10px] font-black text-white bg-primary hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 active:scale-95 uppercase tracking-widest"
@@ -203,31 +178,24 @@ const DocumentsTab: React.FC<{ focusOnAdmissionId?: string | null; onClearFocus?
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
-    const handleUpload = async (file: File, reqId: number, admId: string) => {
+    const handleUpload = async (file: File, reqId: string, admId: string) => {
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('User authentication required');
-
+        if (!user) return;
+        
         const filePath = `parent/${user.id}/adm-${admId}/req-${reqId}_${Date.now()}`;
+        const { error: upErr } = await supabase.storage.from('guardian-documents').upload(filePath, file);
+        if (upErr) throw upErr;
 
-        try {
-            // Use StorageService for consistent bucket handling
-            await StorageService.upload(BUCKETS.GUARDIAN_DOCUMENTS, filePath, file);
-
-            const { error: dbErr } = await supabase.rpc('parent_complete_document_upload', {
-                p_requirement_id: reqId,
-                p_admission_id: admId,
-                p_file_name: file.name,
-                p_storage_path: filePath,
-                p_file_size: file.size,
-                p_mime_type: file.type
-            });
-            if (dbErr) throw dbErr;
-
-            fetchData();
-        } catch (error: any) {
-            console.error("Document upload failed:", error);
-            throw new Error(error.message || 'Failed to upload document. Please try again.');
-        }
+        const { error: dbErr } = await supabase.rpc('parent_complete_document_upload', {
+            p_requirement_id: reqId,
+            p_admission_id: admId,
+            p_file_name: file.name,
+            p_storage_path: filePath,
+            p_file_size: file.size,
+            p_mime_type: file.type
+        });
+        if (dbErr) throw dbErr;
+        fetchData();
     };
 
     const toggleChild = (id: string) => {
@@ -269,8 +237,8 @@ const DocumentsTab: React.FC<{ focusOnAdmissionId?: string | null; onClearFocus?
                 </div>
                 
                 <div className="flex items-center gap-4 bg-white/[0.02] p-4 rounded-[2rem] border border-white/5">
-                     <span className="text-[10px] font-black uppercase text-white/20 tracking-widest px-4 border-r border-white/5">Vault Status</span>
-                     <span className={`text-lg font-black px-2 ${childIds.length > 0 ? 'text-emerald-400' : 'text-amber-400'}`}>{childIds.length > 0 ? 'Active' : 'Dormant'}</span>
+                     <span className="text-[10px] font-black uppercase text-white/20 tracking-widest px-4 border-r border-white/5">Active Nodes</span>
+                     <span className="text-2xl font-black text-white px-2">{childIds.length}</span>
                 </div>
             </div>
 
@@ -279,10 +247,9 @@ const DocumentsTab: React.FC<{ focusOnAdmissionId?: string | null; onClearFocus?
                 {childIds.map(admId => {
                     const group = groupedRequirements[admId];
                     const isExpanded = expandedChildIds.has(admId);
-                    const mandatoryDocs = group.requirements.filter(r => r.is_mandatory);
-                    const verifiedMandatoryCount = mandatoryDocs.filter(r => r.status === 'Verified').length;
-                    const totalMandatoryCount = mandatoryDocs.length;
-                    const completion = totalMandatoryCount > 0 ? Math.round((verifiedMandatoryCount / totalMandatoryCount) * 100) : 0;
+                    const verifiedCount = group.requirements.filter(r => r.status === 'Verified').length;
+                    const totalCount = group.requirements.length;
+                    const completion = totalCount > 0 ? Math.round((verifiedCount / totalCount) * 100) : 0;
                     const isFullySealed = completion === 100;
 
                     return (
@@ -341,31 +308,15 @@ const DocumentsTab: React.FC<{ focusOnAdmissionId?: string | null; onClearFocus?
                             {/* --- EXPANDED GRID --- */}
                             {isExpanded && (
                                 <div className="p-8 md:p-14 border-t border-white/5 bg-black/20 animate-in slide-in-from-top-4 duration-700">
-                                    {/* Warning for missing mandatory documents */}
-                                    {mandatoryDocs.some(r => r.status !== 'Verified') && (
-                                        <div className="mb-8 p-6 bg-amber-500/10 border border-amber-500/20 rounded-[2rem] flex items-center gap-4 animate-in slide-in-from-top-2 duration-500">
-                                            <div className="p-3 bg-amber-500/10 rounded-xl text-amber-500 border border-amber-500/20">
-                                                <AlertTriangleIcon className="w-6 h-6" />
-                                            </div>
-                                            <div className="flex-grow">
-                                                <h4 className="text-sm font-bold text-amber-400 uppercase tracking-widest mb-1">Mandatory Documents Required</h4>
-                                                <p className="text-xs text-amber-200/80 leading-relaxed">
-                                                    {mandatoryDocs.filter(r => r.status !== 'Verified').length} required document(s) are not yet verified.
-                                                    Please upload and submit all mandatory documents to complete enrollment verification.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    )}
-
                                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 max-w-[1400px] mx-auto">
                                         {group.requirements.map(req => (
-                                            <DocumentCard
-                                                key={req.id}
-                                                req={req}
-                                                onUpload={handleUpload}
+                                            <DocumentCard 
+                                                key={req.id} 
+                                                req={req} 
+                                                onUpload={handleUpload} 
                                             />
                                         ))}
-
+                                        
                                         <div className="rounded-[2.5rem] border-2 border-dashed border-white/5 hover:border-primary/20 transition-all duration-500 flex flex-col items-center justify-center p-10 bg-white/[0.01] hover:bg-white/[0.03] group/plus cursor-pointer min-h-[240px]">
                                             <div className="w-16 h-16 rounded-3xl bg-white/5 flex items-center justify-center mb-6 group-hover/plus:scale-110 group-hover/plus:bg-primary/10 transition-all duration-700 shadow-inner border border-white/5">
                                                 <PlusIcon className="w-8 h-8 text-white/10 group-hover/plus:text-primary transition-colors" />

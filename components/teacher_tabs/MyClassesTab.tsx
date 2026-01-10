@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../services/supabase';
 import { TeacherClassOverview, TeacherClassDetails, ClassSubject, LessonPlan, FunctionComponentWithIcon } from '../../types';
@@ -15,7 +16,6 @@ interface MyClassesTabProps {
 
 const MyClassesTab: FunctionComponentWithIcon<MyClassesTabProps> = ({ currentUserId }) => {
     const [overviews, setOverviews] = useState<TeacherClassOverview[]>([]);
-    // FIX: selectedClassId should be string to match UUID standard in types.ts
     const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
     const [classDetails, setClassDetails] = useState<TeacherClassDetails | null>(null);
     const [loading, setLoading] = useState({ overviews: true, details: false });
@@ -38,7 +38,6 @@ const MyClassesTab: FunctionComponentWithIcon<MyClassesTabProps> = ({ currentUse
         fetchOverviews();
     }, [fetchOverviews]);
 
-    // FIX: Parameter classId should be string to match UUID standard in types.ts
     const handleSelectClass = useCallback(async (classId: string) => {
         if (selectedClassId === classId) {
             setSelectedClassId(null);
@@ -48,7 +47,7 @@ const MyClassesTab: FunctionComponentWithIcon<MyClassesTabProps> = ({ currentUse
         setSelectedClassId(classId);
         setLoading(prev => ({ ...prev, details: true }));
         setError(null);
-        // FIX: classId is already a string (UUID), no need to parseInt.
+        
         const { data, error } = await supabase.rpc('get_teacher_class_details', { p_class_id: classId });
         if (error) setError(`Failed to fetch class details: ${error.message}`);
         else setClassDetails(data);
@@ -206,7 +205,6 @@ const MaterialsView: React.FC<{details: TeacherClassDetails, onAdd: ()=>void}> =
     );
 };
 
-// FIX: classId should be string to match UUID standards.
 const AddAssignmentModal: React.FC<{classId: string, subjects: ClassSubject[], onClose:()=>void, onSuccess:()=>void, currentUserId: string}> = ({classId, subjects, onClose, onSuccess, currentUserId}) => {
     const [title, setTitle] = useState('');
     const [subjectId, setSubjectId] = useState<string>(subjects?.[0]?.id?.toString() || '');
@@ -225,7 +223,7 @@ const AddAssignmentModal: React.FC<{classId: string, subjects: ClassSubject[], o
 
         const { error: rpcError } = await supabase.rpc('create_homework_assignment', {
             p_class_id: classId,
-            p_subject_id: parseInt(subjectId),
+            p_subject_id: subjectId,
             p_teacher_id: currentUserId, 
             p_title: title,
             p_description: description,
@@ -271,7 +269,6 @@ const AddAssignmentModal: React.FC<{classId: string, subjects: ClassSubject[], o
     );
 };
 
-// FIX: classId should be string to match UUID standards.
 const AddMaterialModal: React.FC<{classId: string, subjects: ClassSubject[], onClose:()=>void, onSuccess:()=>void, currentUserId: string}> = ({classId, subjects, onClose, onSuccess, currentUserId}) => {
     const [title, setTitle] = useState('');
     const [subjectId, setSubjectId] = useState<string>(subjects?.[0]?.id?.toString() || '');
@@ -297,7 +294,7 @@ const AddMaterialModal: React.FC<{classId: string, subjects: ClassSubject[], onC
 
             const { error: rpcError } = await supabase.rpc('teacher_create_study_material', {
                 p_class_id: classId,
-                p_subject_id: parseInt(subjectId),
+                p_subject_id: subjectId,
                 p_title: title,
                 p_description: description,
                 p_file_name: file.name,

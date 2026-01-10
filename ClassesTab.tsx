@@ -1,31 +1,31 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase, formatError } from '../services/supabase';
-import { SchoolClass, Course, UserProfile, SchoolAdminProfileData } from '../types';
-import Spinner from './common/Spinner';
-import { ClassIcon } from './icons/ClassIcon';
-import { PlusIcon } from './icons/PlusIcon';
-import { SearchIcon } from './icons/SearchIcon';
-import { EditIcon } from './icons/EditIcon';
-import { TrashIcon } from './icons/TrashIcon';
-import { UsersIcon } from './icons/UsersIcon';
-import { TeacherIcon } from './icons/TeacherIcon';
-import { XIcon } from './icons/XIcon';
-import { ChartBarIcon } from './icons/ChartBarIcon';
-import { BookIcon } from './icons/BookIcon';
-import { FilterIcon } from './icons/FilterIcon';
-import { CheckCircleIcon } from './icons/CheckCircleIcon';
-import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
-import { ClockIcon } from './icons/ClockIcon';
-import { MoreHorizontalIcon } from './icons/MoreHorizontalIcon';
-import { UploadIcon } from './icons/UploadIcon';
-import { ChevronRightIcon } from './icons/ChevronRightIcon';
-import { ChevronLeftIcon } from './icons/ChevronLeftIcon';
-import BulkClassOperationsModal from './classes/BulkClassOperationsModal';
-import { SparklesIcon } from './icons/SparklesIcon';
-import { GridIcon } from './icons/GridIcon';
+import { supabase, formatError } from './services/supabase';
+import { SchoolClass, Course, UserProfile, SchoolAdminProfileData } from './types';
+import Spinner from './components/common/Spinner';
+import { ClassIcon } from './components/icons/ClassIcon';
+import { PlusIcon } from './components/icons/PlusIcon';
+import { SearchIcon } from './components/icons/SearchIcon';
+import { EditIcon } from './components/icons/EditIcon';
+import { TrashIcon } from './components/icons/TrashIcon';
+import { UsersIcon } from './components/icons/UsersIcon';
+import { TeacherIcon } from './components/icons/TeacherIcon';
+import { XIcon } from './components/icons/XIcon';
+import { ChartBarIcon } from './components/icons/ChartBarIcon';
+import { BookIcon } from './components/icons/BookIcon';
+import { FilterIcon } from './components/icons/FilterIcon';
+import { CheckCircleIcon } from './components/icons/CheckCircleIcon';
+import { AlertTriangleIcon } from './components/icons/AlertTriangleIcon';
+import { ClockIcon } from './components/icons/ClockIcon';
+import { MoreHorizontalIcon } from './components/icons/MoreHorizontalIcon';
+import { UploadIcon } from './components/icons/UploadIcon';
+import { ChevronRightIcon } from './components/icons/ChevronRightIcon';
+import { ChevronLeftIcon } from './components/icons/ChevronLeftIcon';
+import BulkClassOperationsModal from './components/classes/BulkClassOperationsModal';
+import { SparklesIcon } from './components/icons/SparklesIcon';
+import { GridIcon } from './components/icons/GridIcon';
 import { GoogleGenAI } from '@google/genai';
-import CreateClassWizard from './classes/CreateClassWizard';
-import ClassWorkspace from './classes/ClassWorkspace';
+import CreateClassWizard from './components/classes/CreateClassWizard';
+import ClassWorkspace from './components/classes/ClassWorkspace';
 
 // --- Types ---
 
@@ -87,7 +87,7 @@ const KPICard: React.FC<{
                     <h3 className="text-3xl font-black text-foreground tracking-tight">{value}</h3>
                     {subValue && <div className="mt-1 text-xs font-medium text-muted-foreground">{subValue}</div>}
                 </div>
-                <div className={`p-3 rounded-xl ${color} bg-opacity-10 text-${colorBase}-600 shadow-sm ring-1 ring-inset ring-black/5 dark:ring-white/5 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3`}>
+                <div className={`p-3 rounded-xl ${color} bg-opacity-10 text-${colorBase}-600 shadow-sm ring-1 ring-inset ring-black/5 dark:ring-white/10 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3`}>
                     {icon}
                 </div>
             </div>
@@ -138,6 +138,11 @@ const ClassroomAIModal: React.FC<{ classes: ExtendedClass[]; onClose: () => void
     }, [activeTab, teachers.length]);
 
     const runAnalysis = async () => {
+        if (!process.env.API_KEY) {
+            alert("Security Protocol Violation: AI Intelligence Key is not provisioned.");
+            return;
+        }
+
         setLoading(true);
         setAiResponse(null);
         
@@ -179,13 +184,15 @@ const ClassroomAIModal: React.FC<{ classes: ExtendedClass[]; onClose: () => void
 
             const response = await ai.models.generateContent({
                 model: 'gemini-3-flash-preview',
-                contents: prompt
+                contents: { parts: [{ text: prompt }] }
             });
             
             setAiResponse(response.text || "No response generated.");
 
         } catch (err: any) {
-            setAiResponse("AI Analysis Unavailable: " + formatError(err));
+            const formatted = formatError(err);
+            console.error("AI Analysis Failed:", formatted);
+            setAiResponse("AI Analysis Interrupted: " + formatted);
         } finally {
             setLoading(false);
         }
@@ -402,7 +409,7 @@ const ClassesTab: React.FC<ClassesTabProps> = ({ branchId }) => {
                     <table className="w-full text-left text-sm whitespace-nowrap">
                         <thead className="bg-muted/30 border-b border-border text-xs font-black text-muted-foreground uppercase tracking-wider">
                             <tr>
-                                <th className="p-5 pl-8 cursor-pointer hover:text-foreground group" onClick={() => handleSort('name')}>
+                                <th className="p-5 font-bold cursor-pointer hover:text-foreground group pl-8" onClick={() => handleSort('name')}>
                                     Class Identity <SortIcon direction={sortConfig.key === 'name' ? sortConfig.direction : null} />
                                 </th>
                                 <th className="p-5">Grade</th>

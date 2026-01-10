@@ -3,8 +3,7 @@ import { supabase } from './supabase';
 
 export const BUCKETS = {
     PROFILES: 'profile-images',
-    DOCUMENTS: 'student-documents', // Standardized for Admissions
-    GUARDIAN_DOCUMENTS: 'guardian-documents' // For parent-uploaded admission documents
+    DOCUMENTS: 'student-documents' // Standardized for Admissions
 } as const;
 
 export type BucketName = typeof BUCKETS[keyof typeof BUCKETS];
@@ -29,17 +28,6 @@ export const StorageService = {
     },
 
     async upload(bucket: BucketName, path: string, file: File) {
-        // Validate file size (5MB limit for profile images)
-        const maxSize = 5 * 1024 * 1024; // 5MB
-        if (file.size > maxSize) {
-            throw new Error(`File size exceeds 5MB limit. Please choose a smaller image.`);
-        }
-
-        // Validate file type
-        if (!file.type.startsWith('image/')) {
-            throw new Error('Only image files are allowed for profile pictures.');
-        }
-
         const { data, error } = await supabase.storage
             .from(bucket)
             .upload(path, file, {
@@ -47,57 +35,16 @@ export const StorageService = {
                 upsert: true
             });
 
-        if (error) {
-            // Handle bucket not found error gracefully
-            if (error.message?.includes('Bucket not found')) {
-                throw new Error(`Storage bucket '${bucket}' not found. Please ensure the bucket exists in Supabase Storage and has proper permissions.`);
-            }
-            // Handle permission errors
-            if (error.message?.includes('permission') || error.message?.includes('unauthorized')) {
-                throw new Error(`Upload failed due to permission restrictions. Please contact support.`);
-            }
-            throw error;
-        }
+        if (error) throw error;
         return { path: data.path };
     },
 
-    /**
-     * Get public URL for a file in a public bucket
-     */
-    getPublicUrl(bucket: BucketName, path: string) {
-        const { data } = supabase.storage
-            .from(bucket)
-            .getPublicUrl(path);
-        return data.publicUrl;
-    },
-
-    async getSignedUrl(bucket: BucketName, path: string, expiresIn = 3600) {
+    async getSignedUrl(path: string, expiresIn = 3600) {
         const { data, error } = await supabase.storage
-            .from(bucket)
+            .from(BUCKETS.DOCUMENTS)
             .createSignedUrl(path, expiresIn);
-
-        if (error) {
-            // Handle bucket not found error gracefully
-            if (error.message?.includes('Bucket not found')) {
-                throw new Error(`Storage bucket '${bucket}' not found. Please ensure the bucket exists in Supabase Storage and has proper permissions.`);
-            }
-            throw error;
-        }
+            
+        if (error) throw error;
         return data.signedUrl;
-    },
-
-    async download(bucket: BucketName, path: string) {
-        const { data, error } = await supabase.storage
-            .from(bucket)
-            .download(path);
-
-        if (error) {
-            // Handle bucket not found error gracefully
-            if (error.message?.includes('Bucket not found')) {
-                throw new Error(`Storage bucket '${bucket}' not found. Please ensure the bucket exists in Supabase Storage and has proper permissions.`);
-            }
-            throw error;
-        }
-        return data;
     }
 };

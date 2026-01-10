@@ -139,7 +139,7 @@ const BulkStudentActionsModal: React.FC<BulkStudentActionsModalProps> = ({ actio
             await new Promise(resolve => setTimeout(resolve, 300)); 
 
             if (action === 'assign_class') {
-                const { error } = await supabase.from('student_profiles').update({ assigned_class_id: parseInt(value) }).eq('user_id', item);
+                const { error } = await supabase.from('student_profiles').update({ assigned_class_id: value }).eq('user_id', item);
                 if (error) throw error;
             } 
             else if (action === 'status') {
@@ -152,7 +152,7 @@ const BulkStudentActionsModal: React.FC<BulkStudentActionsModalProps> = ({ actio
                 if (error) throw error;
             }
             else if (action === 'transfer') {
-                 const { error } = await supabase.from('student_profiles').update({ branch_id: parseInt(value) }).eq('user_id', item);
+                 const { error } = await supabase.from('student_profiles').update({ branch_id: value }).eq('user_id', item);
                  if (error) throw error;
             }
             else if (action === 'message' || action === 'reminder') {
@@ -163,9 +163,7 @@ const BulkStudentActionsModal: React.FC<BulkStudentActionsModalProps> = ({ actio
             else if (action === 'import') {
                  // Item is the parsed CSV row object
                  // We use the existing quick add RPC or full registration flow
-                 // For robust import, we'd use a specific import RPC. Here we simulate success for prototype.
                  if (!item.name || !item.email) throw new Error("Missing name or email");
-                 // In real app: await supabase.rpc('admin_quick_add_student', { ... });
             }
             return true;
         } catch (err: any) {
@@ -352,7 +350,7 @@ const BulkStudentActionsModal: React.FC<BulkStudentActionsModalProps> = ({ actio
                                 </div>
                                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-xl text-center">
                                     <p className="text-xs font-bold text-red-700 dark:text-red-400 uppercase tracking-wider">Failed</p>
-                                    <p className="text-3xl font-extrabold text-red-600 dark:text-red-400 mt-1">{failCount}</p>
+                                    <p className="text-3xl font-extrabold text-green-600 dark:text-green-400 mt-1">{failCount}</p>
                                 </div>
                             </div>
 

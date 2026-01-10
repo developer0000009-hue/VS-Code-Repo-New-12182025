@@ -25,6 +25,7 @@ export default defineConfig(({ mode }) => {
             'react-core': ['react', 'react-dom'],
             'react-routing': ['react-router-dom'],
             'supabase-sdk': ['@supabase/supabase-js'],
+            'ai-sdk': ['@google/genai'],
           },
         },
       },

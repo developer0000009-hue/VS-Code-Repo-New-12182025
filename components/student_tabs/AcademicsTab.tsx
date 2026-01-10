@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { GoogleGenAI, Type } from '@google/genai';
 import { StudentDashboardData, SubmissionStatus, StudentAssignment, StudyMaterial } from '../../types';
 import { supabase } from '../../services/supabase';
 import Spinner from '../common/Spinner';
@@ -20,83 +21,36 @@ import { BookOpenIcon } from '../icons/BookOpenIcon';
 const SyllabusModal: React.FC<{ subject: string; courseClass: string; onClose: () => void; }> = ({ subject, courseClass, onClose }) => {
     const [syllabus, setSyllabus] = useState('');
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        // Simulate loading and show a static syllabus
-        setTimeout(() => {
-            const staticSyllabus = `# ${subject} Syllabus - Class ${courseClass}
+        const generateSyllabus = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                if (!process.env.API_KEY) {
+                    throw new Error("API Key is not configured. Cannot generate syllabus.");
+                }
+                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                const prompt = `
+                Generate a detailed syllabus for the subject "${subject}" for a student in Class ${courseClass}. The syllabus should include:\n1. A brief course overview (1-2 paragraphs).\n2. A week-by-week topic breakdown for a 12-week semester.\n3. A list of 3-5 key learning objectives.\nFormat the output clearly with headings for each section.
+            `;
 
-## Course Overview
+            const response = await ai.models.generateContent({
+                model: 'gemini-3-flash-preview',
+                contents: prompt,
+            });
 
-This course provides a comprehensive foundation in ${subject.toLowerCase()} for Grade ${courseClass} students. Through interactive lessons, practical exercises, and collaborative projects, students will develop essential skills and knowledge in this subject area.
-
-## Learning Objectives
-
-By the end of this course, students will be able to:
-- Understand fundamental concepts and principles of ${subject.toLowerCase()}
-- Apply learned concepts to real-world scenarios
-- Develop critical thinking and problem-solving skills
-- Collaborate effectively with peers on group projects
-- Communicate ideas clearly through written and verbal presentations
-
-## Weekly Topic Breakdown
-
-**Week 1-2: Introduction and Fundamentals**
-- Basic concepts and terminology
-- Historical context and importance
-- Introduction to key principles
-
-**Week 3-4: Core Concepts**
-- In-depth exploration of main topics
-- Practical applications and examples
-- Hands-on activities and exercises
-
-**Week 5-6: Advanced Topics**
-- Complex problem-solving scenarios
-- Integration of multiple concepts
-- Real-world case studies
-
-**Week 7-8: Practical Applications**
-- Project-based learning
-- Collaborative assignments
-- Presentation and communication skills
-
-**Week 9-10: Review and Assessment**
-- Comprehensive review sessions
-- Practice examinations
-- Individual skill assessments
-
-**Week 11-12: Final Projects and Reflection**
-- Capstone projects
-- Peer reviews and feedback
-- Course reflection and goal setting
-
-## Assessment Methods
-
-- Weekly quizzes and assignments (40%)
-- Mid-term examination (25%)
-- Final project and presentation (25%)
-- Class participation and homework (10%)
-
-## Required Materials
-
-- Textbook: Standard Grade ${courseClass} ${subject} textbook
-- Notebook and writing materials
-- Access to online learning platform
-- Basic calculator (for applicable subjects)
-
-## Course Policies
-
-- Regular attendance is mandatory
-- Assignments must be submitted by due dates
-- Academic honesty is expected at all times
-- Late submissions will be penalized
-- Communication with instructor is encouraged for any concerns
-`;
-
-            setSyllabus(staticSyllabus);
+            setSyllabus(response.text || "No syllabus generated.");
+        } catch (err: any) {
+            console.error("Syllabus generation failed:", err);
+            setError("Could not generate syllabus at this time. The AI service may be busy or unavailable.");
+        } finally {
             setLoading(false);
-        }, 1000);
+        }
+        };
+
+        generateSyllabus();
     }, [subject, courseClass]);
 
     return (
@@ -113,7 +67,8 @@ By the end of this course, students will be able to:
                     <button onClick={onClose} className="p-2 rounded-full hover:bg-muted"><XIcon className="w-5 h-5 text-muted-foreground" /></button>
                 </header>
                 <main className="p-6 overflow-y-auto">
-                    {loading && <div className="flex flex-col items-center justify-center p-8"><Spinner /><p className="mt-2 text-sm text-muted-foreground animate-pulse">Generating syllabus...</p></div>}
+                    {loading && <div className="flex flex-col items-center justify-center p-8"><Spinner /><p className="mt-2 text-sm text-muted-foreground animate-pulse">AI is generating syllabus...</p></div>}
+                    {error && <p className="text-destructive text-center p-4 bg-destructive/10 rounded-lg">{error}</p>}
                     {syllabus && <div className="prose dark:prose-invert prose-sm max-w-none whitespace-pre-wrap">{syllabus}</div>}
                 </main>
             </div>

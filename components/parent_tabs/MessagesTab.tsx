@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, formatError } from '../../services/supabase';
 import { MyEnquiry, TimelineItem, EnquiryStatus, Communication } from '../../types';
@@ -14,13 +13,16 @@ import { ShieldCheckIcon } from '../icons/ShieldCheckIcon';
 
 type Tab = 'inbox' | 'enquiries';
 
-// Status colors for EnquiryStatus enum values
+// Updated to include all EnquiryStatus values used in the UI
 const statusColors: { [key in EnquiryStatus]: string } = {
-  'NEW': 'bg-blue-400/10 text-blue-400 border-blue-400/20',
-  'CONTACTED': 'bg-amber-400/10 text-amber-400 border-amber-400/20',
-  'VERIFIED': 'bg-indigo-400/10 text-indigo-400 border-indigo-400/20',
-  'APPROVED': 'bg-purple-400/10 text-purple-400 border-purple-400/20',
-  'REJECTED': 'bg-red-400/10 text-red-400 border-red-400/20',
+  'New': 'bg-blue-400/10 text-blue-400 border-blue-400/20',
+  'Contacted': 'bg-amber-400/10 text-amber-400 border-amber-400/20',
+  'Verified': 'bg-indigo-400/10 text-indigo-400 border-indigo-400/20',
+  'ENQUIRY_VERIFIED': 'bg-indigo-400/10 text-indigo-400 border-indigo-400/20',
+  'In Review': 'bg-purple-400/10 text-purple-400 border-purple-400/20',
+  'ENQUIRY_IN_PROGRESS': 'bg-purple-400/10 text-purple-400 border-purple-400/20',
+  'ENQUIRY_ACTIVE': 'bg-indigo-400/10 text-indigo-400 border-indigo-400/20',
+  'Completed': 'bg-emerald-400/10 text-emerald-400 border-emerald-400/20',
   'CONVERTED': 'bg-emerald-400/10 text-emerald-400 border-emerald-400/20',
 };
 
@@ -136,7 +138,7 @@ const MessagesTab: React.FC = () => {
                                     </div>
                                     <p className={`text-xl font-serif font-black tracking-tight truncate mb-3 transition-colors ${selectedAnnouncement?.id === msg.id ? 'text-white' : 'text-white/70 group-hover:text-white'}`}>{msg.subject}</p>
                                     <p className="text-[14px] text-white/20 line-clamp-2 leading-relaxed font-medium italic font-serif group-hover:text-white/40 transition-colors">{msg.body}</p>
-                                    {selectedAnnouncement?.id === msg.id && <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary shadow-[0_0_20px_rgba(var(--primary),0.8)] animate-in slide-in-from-left-8"></div>}
+                                    {selectedAnnouncement?.id === msg.id && <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary shadow-[0_0_20px_rgba(99,102,241,0.8)] animate-in slide-in-from-left-8"></div>}
                                 </button>
                             ))
                         ) : (
@@ -262,7 +264,7 @@ const ConversationView = ({ enquiry, onBack, refreshEnquiries }: any) => {
     useEffect(() => { 
         fetchTimeline(); 
         const channel = supabase.channel(`parent-enq-view-${primaryId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'enquiry_messages', filter: `admission_id=eq.${primaryId}` }, () => fetchTimeline())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'enquiry_messages', filter: `enquiry_id=eq.${primaryId}` }, () => fetchTimeline())
             .subscribe();
         return () => { supabase.removeChannel(channel); };
     }, [fetchTimeline, primaryId]);
@@ -331,7 +333,7 @@ const ConversationView = ({ enquiry, onBack, refreshEnquiries }: any) => {
                 <input 
                     type="text" value={newMessage} onChange={e => setNewMessage(e.target.value)}
                     placeholder="Type payload here..."
-                    className="flex-grow p-7 md:p-10 rounded-[2.5rem] md:rounded-[3rem] bg-black/60 border border-white/10 text-white placeholder:text-white/5 focus:border-primary/50 outline-none transition-all font-serif italic text-xl md:text-2xl"
+                    className="flex-grow p-7 md:p-10 rounded-[2.5rem] md:rounded-[3rem] bg-black/60 border border-white/10 text-white placeholder:text-white/5 outline-none resize-none font-serif italic text-xl md:text-2xl"
                 />
                 <button 
                     type="submit" disabled={!newMessage.trim() || sending} 
@@ -345,4 +347,3 @@ const ConversationView = ({ enquiry, onBack, refreshEnquiries }: any) => {
 };
 
 export default MessagesTab;
-

@@ -40,7 +40,7 @@ export interface UserProfile {
     grade?: string;
 }
 
-export type AdmissionStatus = 'Registered' | 'Pending Review' | 'Verified' | 'Approved' | 'Rejected' | 'Cancelled' | 'Enquiry Node Active' | 'ENQUIRY_NODE_ACTIVE' | 'ENQUIRY_NODE_VERIFIED' | 'ENQUIRY_NODE_IN_PROGRESS' | 'CONVERTED';
+export type AdmissionStatus = 'Registered' | 'Pending Review' | 'Verified' | 'Approved' | 'Rejected' | 'Cancelled' | 'Enquiry Active' | 'ENQUIRY_ACTIVE' | 'ENQUIRY_VERIFIED' | 'ENQUIRY_IN_PROGRESS' | 'CONVERTED';
 
 export interface AdmissionApplication {
     id: string;
@@ -210,7 +210,7 @@ export interface Communication {
     target_criteria?: any;
 }
 
-export type EnquiryStatus = 'NEW' | 'CONTACTED' | 'APPROVED' | 'REJECTED' | 'CONVERTED' | 'VERIFIED';
+export type EnquiryStatus = 'New' | 'Contacted' | 'Verified' | 'ENQUIRY_VERIFIED' | 'In Review' | 'ENQUIRY_IN_PROGRESS' | 'ENQUIRY_ACTIVE' | 'Completed' | 'CONVERTED';
 
 export interface MyEnquiry {
     id: string;
@@ -221,25 +221,12 @@ export interface MyEnquiry {
     parent_email?: string;
 }
 
-export type VerificationStatus =
-  | 'PENDING'        // Awaiting verification
-  | 'QUEUED'         // Added to verification queue (service offline)
-  | 'VERIFYING'      // Currently being processed
-  | 'VERIFIED'       // Successfully verified
-  | 'FAILED'         // Verification failed (user can retry)
-  | 'SERVICE_OFFLINE'; // Service unavailable (auto-retry enabled)
-
-export type ServiceStatus = 'online' | 'degraded' | 'offline' | 'syncing' | 'unknown';
-
 export interface Enquiry extends MyEnquiry {
     parent_name: string;
     notes?: string;
-    conversion_state?: 'NOT_CONVERTED' | 'CONVERTED';
-    verification_status?: VerificationStatus;
 }
 
 export interface TimelineItem {
-    id: string; // Added id property to match database schema
     item_type: 'MESSAGE' | 'STATUS_CHANGE' | 'DOCUMENT_UPLOAD' | 'ARTIFACT_VERIFICATION' | 'ENQUIRY_CREATED';
     is_admin: boolean;
     created_by_name: string;
@@ -388,69 +375,10 @@ export interface VerifiedShareCodeData {
     id?: string;
     found: boolean;
     admission_id: string;
-    enquiry_id?: string;
     applicant_name: string;
     grade: string;
     code_type: ShareCodeType;
     error?: string;
-    date_of_birth?: string;
-    gender?: string;
-    parent_name?: string;
-    parent_email?: string;
-    parent_phone?: string;
-    already_imported?: boolean;
-}
-
-export interface EnquiryDetails {
-    id: string;
-    applicant_name: string;
-    grade: string;
-    status: EnquiryStatus;
-    verification_status: VerificationStatus;
-    conversion_state: 'NOT_CONVERTED' | 'CONVERTED';
-    parent_name: string;
-    parent_email: string;
-    parent_phone: string;
-    notes?: string;
-    created_at: string;
-    updated_at: string;
-    branch_id?: string | null;
-    is_archived: boolean;
-    is_deleted: boolean;
-}
-
-export interface AdmissionVaultDetails {
-    id: string;
-    applicant_name: string;
-    grade: string;
-    status: AdmissionStatus;
-    date_of_birth?: string;
-    gender?: string;
-    parent_name?: string;
-    parent_email?: string;
-    parent_phone?: string;
-    emergency_contact?: string;
-    medical_info?: string;
-    application_number?: string;
-    submitted_at: string;
-    registered_at?: string;
-    profile_photo_url?: string | null;
-    parent_id?: string;
-    student_user_id?: string;
-}
-
-export interface VerificationAuditLog {
-    id: string;
-    code: string;
-    code_type: ShareCodeType;
-    admission_id?: string;
-    enquiry_id?: string;
-    applicant_name: string;
-    result: 'SUCCESS' | 'FAILED' | 'EXPIRED' | 'INVALID';
-    error_message?: string;
-    verified_by?: string;
-    verified_at: string;
-    branch_id?: string | null;
 }
 
 export interface TeacherClassOverview {

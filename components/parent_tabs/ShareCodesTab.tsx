@@ -27,7 +27,6 @@ export default function ShareCodesTab() {
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    // FIX: focusedPermitId should be string to match UUID standard in types.ts
     const [focusedPermitId, setFocusedPermitId] = useState<string | null>(null);
     const [copyFeedback, setCopyFeedback] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
@@ -71,16 +70,13 @@ export default function ShareCodesTab() {
 
         setActionLoading(true);
         setError(null);
-
+        
         try {
-            // Always use generate_admission_share_code with code_type parameter
-            const rpcParams = {
-                p_admission_id: selectedAdmissionId,
+            const { data, error: rpcError } = await supabase.rpc('generate_admission_share_code', {
+                p_admission_id: selectedAdmissionId, 
                 p_purpose: 'Institutional Handshake',
-                p_code_type: permitType
-            };
-
-            const { data, error: rpcError } = await supabase.rpc('generate_admission_share_code', rpcParams);
+                p_code_type: permitType, 
+            });
 
             if (rpcError) throw rpcError;
 
@@ -105,7 +101,6 @@ export default function ShareCodesTab() {
         }
     };
 
-    // FIX: Parameter id should be string to match UUID standard in types.ts
     const handleRevoke = async (id: string) => {
         if (!confirm("Terminate this permit immediately? It will be decommissioned from all registries and portals.")) return;
         setActionLoading(true);
@@ -331,7 +326,7 @@ export default function ShareCodesTab() {
                     </div>
                 </div>
 
-                {/* --- RIGHT: THE PERMIT CARD (WORLD CLASS UI) --- */}
+                {/* --- RIGHT: THE PERMIT CARD --- */}
                 <div className="xl:col-span-5 flex flex-col">
                     <div className="bg-[#0F1116] border border-white/5 rounded-[2.5rem] flex flex-col shadow-[0_12px_30px_rgba(0,0,0,0.45)] relative overflow-hidden h-full ring-1 ring-white/5">
                         
@@ -348,7 +343,7 @@ export default function ShareCodesTab() {
                                         />
                                         <div className="min-w-0">
                                             <h4 className="text-[15px] font-semibold text-white truncate leading-tight uppercase tracking-tight">{focusedPermit.applicant_name}</h4>
-                                            <p className="text-[11px] text-[#9AA3B2] uppercase font-bold tracking-widest mt-1">Grade {focusedPermit.applicant_name ? 'Node Owner' : 'Unknown'}</p>
+                                            <p className="text-[11px] text-[#9AA3B2] uppercase font-bold tracking-widest mt-1">Grade Node Owner</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shadow-sm animate-in zoom-in-95">
@@ -369,7 +364,6 @@ export default function ShareCodesTab() {
                                             <span className={`font-mono font-black text-[38px] md:text-[46px] tracking-[0.25em] transition-all duration-700 relative z-10 select-all block ${copyFeedback ? 'text-[#22C55E] scale-110' : 'text-[#F2F4F8] group-hover:text-primary'}`}>
                                                 {focusedPermit.code}
                                             </span>
-                                            {/* Glow behind code */}
                                             <div className={`absolute inset-0 blur-[60px] opacity-10 transition-opacity duration-1000 ${copyFeedback ? 'bg-[#22C55E] opacity-40' : 'bg-primary/20 group-hover:opacity-40'}`}></div>
                                         </div>
 

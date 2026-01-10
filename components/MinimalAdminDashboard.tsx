@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, formatError } from '../services/supabase';
 import { UserProfile, Role } from '../types';
+import { GoogleGenAI } from '@google/genai';
 import Spinner from './common/Spinner';
 import { ChartBarIcon } from './icons/ChartBarIcon';
 import { UsersIcon } from './icons/UsersIcon';
@@ -43,25 +44,34 @@ interface MinimalAdminDashboardProps {
 
 const MinimalAdminDashboard: React.FC<MinimalAdminDashboardProps> = ({ profile, onSignOut, onSelectRole }) => {
     const [stats, setStats] = useState({ students: 0, teachers: 0, revenue: 0, applications: 0 });
+    const [aiInsight, setAiInsight] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchStats = async () => {
             setLoading(true);
             try {
-                const [std, tea, adm] = await Promise.all([
+                const [std, tea, fin, adm] = await Promise.all([
                     supabase.from('student_profiles').select('*', { count: 'exact', head: true }),
                     supabase.from('teacher_profiles').select('*', { count: 'exact', head: true }),
+                    supabase.rpc('get_finance_dashboard_data').catch(() => ({ data: { revenue_ytd: 0 } })),
                     supabase.from('admissions').select('*', { count: 'exact', head: true }).eq('status', 'Pending Review')
                 ]);
-
+                
                 const statsObj = {
                     students: std.count || 0,
                     teachers: tea.count || 0,
-                    revenue: 0, // Placeholder - remove when finance function is fixed
+                    revenue: (fin as any).data?.revenue_ytd || 0,
                     applications: adm.count || 0
                 };
                 setStats(statsObj);
+                
+                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                const response = await ai.models.generateContent({
+                    model: 'gemini-3-flash-preview',
+                    contents: `Provide a one-sentence executive summary of these school metrics: Total Students ${statsObj.students}, Faculty ${statsObj.teachers}, Revenue $${statsObj.revenue}, Pending Applications ${statsObj.applications}. Tone: Decisive and analytical.`
+                });
+                setAiInsight(response.text || null);
             } catch (e) {
                 console.error("Metric sync failed:", formatError(e));
             } finally {
@@ -135,6 +145,14 @@ const MinimalAdminDashboard: React.FC<MinimalAdminDashboardProps> = ({ profile, 
                                  <div className="flex justify-between text-sm"><span className="text-white/30 font-bold uppercase tracking-widest text-[9px]">Uptime</span><span className="font-mono font-black text-emerald-500 tracking-widest text-xs">99.98%</span></div>
                              </div>
                         </div>
+
+                        {aiInsight && (
+                            <div className="bg-primary/5 border border-primary/20 p-8 rounded-[2.5rem] relative group overflow-hidden animate-in fade-in slide-in-from-right-8 duration-1000">
+                                <SparklesIcon className="absolute -right-2 -top-2 w-16 h-16 text-primary/10 group-hover:scale-110 transition-transform" />
+                                <p className="text-[9px] font-black uppercase tracking-[0.4em] text-primary mb-3">AI Intelligence Summary</p>
+                                <p className="text-sm font-serif italic text-white/70 leading-relaxed">"{aiInsight}"</p>
+                            </div>
+                        )}
                     </div>
                 </header>
 

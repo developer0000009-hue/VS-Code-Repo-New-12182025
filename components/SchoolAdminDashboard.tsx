@@ -212,7 +212,7 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
 
     return (
         <div className="min-h-screen bg-background text-foreground flex overflow-hidden">
-            <Sidebar
+            <Sidebar 
                 activeComponent={activeComponent}
                 setActiveComponent={setActiveComponent}
                 isCollapsed={isSidebarCollapsed}
@@ -223,7 +223,7 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
             />
 
             <div className={`flex-1 flex flex-col transition-all duration-300 ease-in-out h-screen overflow-hidden ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-[280px]'}`}>
-                <Navbar
+                <Navbar 
                     activeComponent={activeComponent}
                     setActiveComponent={setActiveComponent}
                     isBranchAdmin={isBranchAdmin}
@@ -236,7 +236,7 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
                     onSwitchBranch={onSwitchBranch}
                     menuGroups={menuGroups}
                 />
-
+                
                 <main className="flex-grow w-full max-w-[1800px] mx-auto p-4 sm:p-6 lg:p-8 custom-scrollbar overflow-y-auto">
                     <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
                         {renderContent()}

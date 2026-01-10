@@ -1,25 +1,24 @@
-
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { GoogleGenAI } from '@google/genai';
-import { BookIcon } from './icons/BookIcon';
-import { PlusIcon } from './icons/PlusIcon';
-import { SearchIcon } from './icons/SearchIcon';
-import { ClockIcon } from './icons/ClockIcon';
-import { CheckCircleIcon } from './icons/CheckCircleIcon';
-import { DocumentTextIcon } from './icons/DocumentTextIcon';
-import { XIcon } from './icons/XIcon';
-import { CalendarIcon } from './icons/CalendarIcon';
-import { ChevronRightIcon } from './icons/ChevronRightIcon';
-import { ChevronDownIcon } from './icons/ChevronDownIcon';
-import { UploadIcon } from './icons/UploadIcon';
-import { SparklesIcon } from './icons/SparklesIcon';
-import { EditIcon } from './icons/EditIcon';
-import { TrashIcon } from './icons/TrashIcon';
-import Spinner from './common/Spinner';
-import Stepper from './common/Stepper';
-import ConfirmationModal from './common/ConfirmationModal';
-import { supabase } from '../services/supabase';
-import { SchoolClass, Course, UserProfile } from '../types';
+import { BookIcon } from './components/icons/BookIcon';
+import { PlusIcon } from './components/icons/PlusIcon';
+import { SearchIcon } from './components/icons/SearchIcon';
+import { ClockIcon } from './components/icons/ClockIcon';
+import { CheckCircleIcon } from './components/icons/CheckCircleIcon';
+import { DocumentTextIcon } from './components/icons/DocumentTextIcon';
+import { XIcon } from './components/icons/XIcon';
+import { CalendarIcon } from './components/icons/CalendarIcon';
+import { ChevronRightIcon } from './components/icons/ChevronRightIcon';
+import { ChevronDownIcon } from './components/icons/ChevronDownIcon';
+import { UploadIcon } from './components/icons/UploadIcon';
+import { SparklesIcon } from './components/icons/SparklesIcon';
+import { EditIcon } from './components/icons/EditIcon';
+import { TrashIcon } from './components/icons/TrashIcon';
+import Spinner from './components/common/Spinner';
+import Stepper from './components/common/Stepper';
+import ConfirmationModal from './components/common/ConfirmationModal';
+import { supabase, formatError } from './services/supabase';
+import { SchoolClass, Course, UserProfile } from './types';
 
 type AssignmentStatus = 'Active' | 'Draft' | 'Closed' | 'Overdue' | 'Reviewing';
 
@@ -114,14 +113,22 @@ const CreateEditHomeworkModal: React.FC<{
 
     const handleAISuggest = async () => {
         if (!formData.title) return alert("Please enter a title first.");
+        if (!process.env.API_KEY) return alert("Security Context Failure: AI credentials missing.");
+        
         setAiGenerating(true);
         try {
-            if (!process.env.API_KEY) throw new Error("AI Key missing");
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const prompt = `Create a homework description for "${formData.title}". Include 3 questions.`;
-            const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt });
+            const response = await ai.models.generateContent({ 
+                model: 'gemini-3-flash-preview', 
+                contents: { parts: [{ text: prompt }] } 
+            });
             if (response.text) setFormData(prev => ({ ...prev, description: response.text || '' }));
-        } catch (err: any) { alert(`AI Suggestion Failed: ${err.message}`); } finally { setAiGenerating(false); }
+        } catch (err: any) { 
+            alert(`AI Suggestion Failed: ${formatError(err)}`); 
+        } finally { 
+            setAiGenerating(false); 
+        }
     };
 
     const handleSubmit = async () => {
@@ -136,14 +143,14 @@ const CreateEditHomeworkModal: React.FC<{
                 if (error) throw error;
             }
             onSuccess(); onClose();
-        } catch (err: any) { alert(err.message); } finally { setLoading(false); }
+        } catch (err: any) { alert(formatError(err)); } finally { setLoading(false); }
     };
 
     const renderStep = () => {
         if (step === 0) {
             return (<div className="space-y-4 animate-in slide-in-from-right-4 duration-300"><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="md:col-span-2"><label className="input-label">Title</label><input value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="input-premium font-medium" placeholder="Assignment Title" autoFocus /></div>{!isEdit && (<><div><label className="input-label">Class</label><select value={formData.class_id} onChange={e => setFormData({...formData, class_id: e.target.value})} className="input-premium"><option value="">Select Class...</option>{classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div><label className="input-label">Subject</label><select value={formData.subject_id} onChange={e => setFormData({...formData, subject_id: e.target.value})} className="input-premium"><option value="">Select Subject...</option>{subjects.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}</select></div><div className="md:col-span-2"><label className="input-label">Assigning Teacher</label><select value={formData.teacher_id} onChange={e => setFormData({...formData, teacher_id: e.target.value})} className="input-premium"><option value="">Select Teacher...</option>{teachers.map(t => <option key={t.id} value={t.id}>{t.display_name}</option>)}</select></div></>)}{isEdit && (<div className="md:col-span-2 p-3 bg-muted/30 rounded-lg text-sm text-muted-foreground border border-border">Editing: {assignment?.subject_name} for {assignment?.class_name}</div>)}</div></div>);
         } else {
-             return (<div className="space-y-4 animate-in slide-in-from-right-4 duration-300"><div><div className="flex justify-between items-center mb-1.5"><label className="input-label">Instructions / Description</label><button onClick={handleAISuggest} disabled={aiGenerating} className="ai-btn"><SparklesIcon className="w-3 h-3"/> AI Assist</button></div><textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="input-premium h-32 resize-none" placeholder="Detailed instructions..." /></div><div className="grid grid-cols-2 gap-4"><div><label className="input-label">Due Date & Time</label><input type="datetime-local" value={formData.due_date} onChange={e => setFormData({...formData, due_date: e.target.value})} className="input-premium" /></div><div><label className="input-label">Max Score</label><input type="number" value={formData.max_score} onChange={e => setFormData({...formData, max_score: parseInt(e.target.value)})} className="input-premium" /></div><div className="md:col-span-2"><label className="input-label">Status</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="input-premium"><option value="Active">Active (Visible to Students)</option><option value="Reviewing">Reviewing (Submissions Closed)</option><option value="Draft">Draft (Hidden)</option><option value="Closed">Closed (Archived)</option></select></div></div></div>);
+             return (<div className="space-y-4 animate-in slide-in-from-right-4 duration-300"><div><div className="flex justify-between items-center mb-1.5"><label className="input-label">Instructions / Description</label><button type="button" onClick={handleAISuggest} disabled={aiGenerating} className="ai-btn"><SparklesIcon className="w-3 h-3"/> AI Assist</button></div><textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="input-premium h-32 resize-none" placeholder="Detailed instructions..." /></div><div className="grid grid-cols-2 gap-4"><div><label className="input-label">Due Date & Time</label><input type="datetime-local" value={formData.due_date} onChange={e => setFormData({...formData, due_date: e.target.value})} className="input-premium" /></div><div><label className="input-label">Max Score</label><input type="number" value={formData.max_score} onChange={e => setFormData({...formData, max_score: parseInt(e.target.value)})} className="input-premium" /></div><div className="md:col-span-2"><label className="input-label">Status</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="input-premium"><option value="Active">Active (Visible to Students)</option><option value="Reviewing">Reviewing (Submissions Closed)</option><option value="Draft">Draft (Hidden)</option><option value="Closed">Closed (Archived)</option></select></div></div></div>);
         }
     };
 
@@ -172,7 +179,7 @@ const SubmissionsDrawer: React.FC<{ assignment: Assignment, onClose: () => void 
     const handleGradeSubmit = async (submissionId: number | null, studentId: string, grade: string, feedback: string) => {
         if (!submissionId) return alert("No submission to grade.");
         const { error } = await supabase.rpc('grade_homework_submission', { p_submission_id: submissionId, p_grade: grade, p_feedback: feedback });
-        if (error) alert(error.message);
+        if (error) alert(formatError(error));
         else { fetchSubmissions(); setExpandedStudentId(null); }
     };
 
@@ -212,7 +219,7 @@ const HomeworkTab: React.FC = () => {
         const subjectId = filters.subject !== 'All' ? filters.subject : null;
         const teacherId = filters.teacher !== 'All' ? filters.teacher : null;
         const { data, error } = await supabase.rpc('get_admin_homework_list', { p_class_id: classId, p_status: filters.status, p_subject_id: subjectId, p_teacher_id: teacherId });
-        if (error) console.error("Fetch Error:", error.message);
+        if (error) console.error("Fetch Error:", formatError(error));
         else setAssignments(data || []);
         setLoading(false);
     }, [filters]);
@@ -222,7 +229,7 @@ const HomeworkTab: React.FC = () => {
     const handleDelete = async () => {
         if (!deleteConfirm) return;
         const { error } = await supabase.rpc('delete_assignment', { p_id: deleteConfirm.id });
-        if (error) alert("Delete failed: " + error.message);
+        if (error) alert("Delete failed: " + formatError(error));
         else fetchAssignments();
         setDeleteConfirm(null);
     };

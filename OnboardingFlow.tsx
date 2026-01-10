@@ -30,7 +30,6 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
     const [selectedRole, setSelectedRole] = useState<Role | null>(null);
     const [loading, setLoading] = useState(true);
     const [isTransitioning, setIsTransitioning] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     
     const isMounted = useRef(true);
 
@@ -74,7 +73,6 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
         if (!isMounted.current || isTransitioning) return;
         setIsTransitioning(true);
         setLoading(true);
-        setError(null); // Clear previous errors
         
         try {
             // Atomic Role Switch with sub-profile verification
@@ -96,8 +94,8 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
 
         } catch (err: any) {
             console.error('Identity Provisioning failure:', formatError(err));
+            alert(`Setup Failed: ${formatError(err)}`);
             if (isMounted.current) {
-                setError(formatError(err));
                 setStep('role');
                 setLoading(false);
                 setIsTransitioning(false);
@@ -175,23 +173,6 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
                 </div>
             </header>
             <main className="flex-grow max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-12 w-full">
-                {error && (
-                    <div className="mb-8 bg-red-500/10 border border-red-500/20 text-red-500 p-6 rounded-[2rem] flex items-center gap-5 animate-in fade-in slide-in-from-top-2">
-                        <div className="w-6 h-6 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
-                            <span className="text-xs font-black">!</span>
-                        </div>
-                        <div className="flex-grow">
-                            <p className="text-sm font-bold">Identity Provisioning Error</p>
-                            <p className="text-xs text-red-400/80 mt-1">{error}</p>
-                        </div>
-                        <button
-                            onClick={() => setError(null)}
-                            className="text-red-400/60 hover:text-red-400 transition-colors p-2 hover:bg-red-500/10 rounded-lg"
-                        >
-                            <span className="text-xs font-black">×</span>
-                        </button>
-                    </div>
-                )}
                 {content}
             </main>
         </div>

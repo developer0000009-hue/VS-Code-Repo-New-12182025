@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase, formatError } from './services/supabase';
 import { Enquiry, EnquiryStatus } from './types';
 import Spinner from './components/common/Spinner';
-import ErrorBoundary from './components/common/ErrorBoundary';
 import EnquiryDetailsModal from './EnquiryDetailsModal';
 import { SearchIcon } from './components/icons/SearchIcon';
 import { KeyIcon } from './components/icons/KeyIcon';
@@ -34,7 +33,7 @@ const statusLabels: Record<string, string> = {
 type SortableKeys = 'applicant_name' | 'grade' | 'status' | 'updated_at';
 
 interface EnquiryTabProps {
-    branchId?: number | null;
+    branchId?: string | null;
     onNavigate?: (component: string) => void;
 }
 
@@ -176,7 +175,7 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
             {/* Stats Deck */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <StatBox title="Total Ledger" value={stats.total} icon={<MailIcon className="w-7 h-7"/>} color="bg-blue-500" desc="Total Nodes" />
-                <StatBox title="Verified Stream" value={stats.verified} icon={<ShieldCheckIcon className="w-7 h-7"/>} color="bg-teal-500" desc="Clearance Active" />
+                <StatBox title="Verified Stream" value={stats.verified} icon={<ShieldCheckIcon className="h-7 w-7"/>} color="bg-teal-500" desc="Clearance Active" />
                 <StatBox title="promoted" value={stats.converted} icon={<CheckCircleIcon className="w-7 h-7"/>} color="bg-emerald-500" desc="Converted nodes" />
             </div>
             
@@ -311,17 +310,15 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
             </div>
 
             {viewingEnquiry && (
-                <ErrorBoundary>
-                    <EnquiryDetailsModal
-                        enquiry={viewingEnquiry}
-                        currentBranchId={branchId}
-                        onClose={() => setViewingEnquiry(null)}
-                        onUpdate={() => {
-                            fetchEnquiries(true);
-                        }}
-                        onNavigate={onNavigate}
-                    />
-                </ErrorBoundary>
+                <EnquiryDetailsModal 
+                    enquiry={viewingEnquiry} 
+                    currentBranchId={branchId}
+                    onClose={() => setViewingEnquiry(null)} 
+                    onUpdate={() => {
+                        fetchEnquiries(true);
+                    }}
+                    onNavigate={onNavigate}
+                />
             )}
         </div>
     );

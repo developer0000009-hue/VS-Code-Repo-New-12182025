@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Course, UserProfile, BuiltInRoles } from '../../types';
 import { supabase } from '../../services/supabase';
+import { GoogleGenAI } from '@google/genai';
 import { BookIcon } from '../icons/BookIcon';
 import { UsersIcon } from '../icons/UsersIcon';
 import { FileTextIcon } from '../icons/FileTextIcon';

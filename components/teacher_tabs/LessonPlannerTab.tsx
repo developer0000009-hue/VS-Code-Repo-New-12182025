@@ -47,8 +47,8 @@ const LessonPlannerTab: FunctionComponentWithIcon<LessonPlannerTabProps> = ({ cu
         setError(null);
         
         const [plansRes, subjectsRes] = await Promise.all([
-            supabase.rpc('get_teacher_lesson_plans', { p_class_id: parseInt(selectedClassId) }),
-            supabase.rpc('get_teacher_class_details', { p_class_id: parseInt(selectedClassId) })
+            supabase.rpc('get_teacher_lesson_plans', { p_class_id: selectedClassId }),
+            supabase.rpc('get_teacher_class_details', { p_class_id: selectedClassId })
         ]);
         
         if (plansRes.error) setError(plansRes.error.message);
@@ -113,7 +113,7 @@ const LessonPlannerTab: FunctionComponentWithIcon<LessonPlannerTabProps> = ({ cu
             
             {isAddModalOpen && selectedClassId && (
                 <AddLessonPlanModal 
-                    classId={parseInt(selectedClassId)} 
+                    classId={selectedClassId} 
                     subjects={subjects} 
                     onClose={() => setIsAddModalOpen(false)} 
                     onSuccess={fetchLessonPlans}
@@ -137,7 +137,7 @@ const LessonPlannerTab: FunctionComponentWithIcon<LessonPlannerTabProps> = ({ cu
     );
 };
 
-const AddLessonPlanModal: React.FC<{classId: number, subjects: ClassSubject[], onClose:()=>void, onSuccess:()=>void, currentUserId: string}> = ({classId, subjects, onClose, onSuccess, currentUserId}) => {
+const AddLessonPlanModal: React.FC<{classId: string, subjects: ClassSubject[], onClose:()=>void, onSuccess:()=>void, currentUserId: string}> = ({classId, subjects, onClose, onSuccess, currentUserId}) => {
     const [formData, setFormData] = useState({ title: '', subject_id: subjects[0]?.id.toString() || '', lesson_date: '', objectives: '', activities: ''});
     const [files, setFiles] = useState<File[]>([]);
     const [loading, setLoading] = useState(false);

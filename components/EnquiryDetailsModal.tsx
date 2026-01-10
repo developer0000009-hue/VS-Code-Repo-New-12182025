@@ -1,1020 +1,369 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, formatError } from '../services/supabase';
 import { EnquiryService } from '../services/enquiry';
-import { Enquiry, EnquiryStatus, TimelineItem } from '../types';
+import { Enquiry, TimelineItem, EnquiryStatus } from '../types';
 import Spinner from './common/Spinner';
 import { XIcon } from './icons/XIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
-import { PhoneIcon } from './icons/PhoneIcon';
-import { CommunicationIcon } from './icons/CommunicationIcon';
-import { SendIcon } from './icons/SendIcon';
-import { ChevronDownIcon } from './icons/ChevronDownIcon';
-import { MailIcon } from './icons/MailIcon';
-import { CalendarIcon } from './icons/CalendarIcon';
-import { UserIcon } from './icons/UserIcon';
-import { CameraIcon } from './icons/CameraIcon';
+import { GraduationCapIcon } from './icons/GraduationCapIcon';
+import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
+import { ClipboardListIcon } from './icons/ClipboardListIcon';
+import { SettingsIcon } from './icons/SettingsIcon';
 import { ClockIcon } from './icons/ClockIcon';
-import { DocumentTextIcon } from './icons/DocumentTextIcon';
-import { AcademicCapIcon } from './icons/AcademicCapIcon';
-import { CopyIcon } from './icons/CopyIcon';
-import { TrendingUpIcon } from './icons/TrendingUpIcon';
-import { ActivityIcon } from './icons/ActivityIcon';
-import { ParentIcon } from './icons/ParentIcon';
+import { CommunicationIcon } from './icons/CommunicationIcon';
+import { SparklesIcon } from './icons/SparklesIcon';
+import { MegaphoneIcon } from './icons/MegaphoneIcon';
+import { UsersIcon } from './icons/UsersIcon';
+import { PhoneIcon } from './icons/PhoneIcon';
+import { SearchIcon } from './icons/SearchIcon';
+import { ChevronLeftIcon } from './icons/ChevronLeftIcon';
+import { GoogleGenAI } from '@google/genai';
+
+const LocalSendIcon = (props: React.SVGProps<SVGSVGElement>) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" {...props}>
+        <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+    </svg>
+);
+
+const STATUS_CONFIG: Record<string, { icon: React.ReactNode, label: string, color: string, ring: string, bg: string }> = {
+    'ENQUIRY_ACTIVE': { icon: <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"/>, label: 'Active', color: 'text-blue-700', ring: 'ring-blue-600', bg: 'bg-blue-50' },
+    'ENQUIRY_VERIFIED': { icon: <ShieldCheckIcon className="w-4 h-4"/>, label: 'Verified', color: 'text-teal-700', ring: 'ring-teal-500', bg: 'bg-teal-50' },
+    'ENQUIRY_IN_PROGRESS': { icon: <div className="w-2 h-2 rounded-full bg-purple-600"/>, label: 'In Progress', color: 'text-purple-700', ring: 'ring-purple-500', bg: 'bg-purple-50' },
+    'CONVERTED': { icon: <CheckCircleIcon className="w-4 h-4"/>, label: 'Converted', color: 'text-emerald-700', ring: 'ring-emerald-500', bg: 'bg-emerald-50' },
+};
+
+const ORDERED_STATUSES: EnquiryStatus[] = ['ENQUIRY_ACTIVE', 'ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'];
+
+const TimelineEntry: React.FC<{ item: TimelineItem }> = ({ item }) => {
+    if (item.item_type === 'MESSAGE') {
+        const isParent = !item.is_admin;
+        return (
+             <div className={`flex items-end gap-6 animate-in fade-in slide-in-from-bottom-4 duration-700 w-full ${isParent ? 'justify-end' : 'justify-start'}`}>
+                <div className={`flex items-end gap-5 max-w-[85%] sm:max-w-[75%] ${isParent ? 'flex-row-reverse' : 'flex-row'}`}>
+                    <div className={`w-11 h-11 rounded-[1.1rem] flex items-center justify-center font-black text-sm shadow-2xl text-white flex-shrink-0 border border-white/5 ${isParent ? 'bg-indigo-600' : 'bg-[#252833]'}`}>
+                        {item.created_by_name.charAt(0)}
+                    </div>
+                    <div className={`p-6 md:p-8 rounded-[2.5rem] shadow-2xl ring-1 ring-white/5 overflow-hidden relative ${isParent ? 'bg-[#1a1d23] rounded-br-none' : 'bg-[#221f30] rounded-bl-none text-white/90'}`}>
+                         <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
+                         <p className="text-[15px] md:text-[17px] leading-relaxed relative z-10 whitespace-pre-wrap font-medium">{item.details.message}</p>
+                         <div className={`flex items-center gap-3 mt-6 relative z-10 opacity-30 ${isParent ? 'justify-end' : 'justify-start'}`}>
+                            <span className="text-[9px] font-black uppercase tracking-widest">{item.created_by_name}</span>
+                            <span className="w-1 h-1 rounded-full bg-white"></span>
+                            <span className="text-[9px] font-mono">{new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                         </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+    
+    return (
+        <div className="flex justify-center my-10 animate-in fade-in zoom-in-95 duration-1000">
+            <div className="flex items-center gap-4 px-6 py-2.5 rounded-full bg-white/[0.02] border border-white/5 shadow-inner backdrop-blur-sm">
+                <div className="w-1 h-1 rounded-full bg-primary/40 animate-pulse"></div>
+                <span className="text-[9px] font-black uppercase tracking-[0.4em] text-white/20">
+                    {item.item_type.replace(/_/g, ' ')} / {new Date(item.created_at).toLocaleTimeString()}
+                </span>
+                <div className="w-1 h-1 rounded-full bg-primary/40 animate-pulse"></div>
+            </div>
+        </div>
+    );
+};
 
 interface EnquiryDetailsModalProps {
     enquiry: Enquiry;
     onClose: () => void;
     onUpdate: () => void;
+    currentBranchId?: string | null; 
     onNavigate?: (component: string) => void;
 }
 
-type Status = 'NEW' | 'CONTACTED' | 'VERIFIED' | 'APPROVED' | 'REJECTED' | 'CONVERTED' | 'IN_REVIEW';
-
-const STATUS_CONFIG: Record<Status, {
-    color: string;
-    bg: string;
-    text: string;
-    icon: React.ReactNode;
-    label: string;
-}> = {
-    'NEW': {
-        color: 'border-gray-300 bg-gray-50',
-        bg: 'bg-gray-400',
-        text: 'text-gray-700',
-        icon: <div className="w-2 h-2 rounded-full bg-gray-400" />,
-        label: 'New Enquiry'
-    },
-    'CONTACTED': {
-        color: 'border-purple-300 bg-purple-50',
-        bg: 'bg-purple-500',
-        text: 'text-purple-700',
-        icon: <div className="w-2 h-2 rounded-full bg-purple-500" />,
-        label: 'Contacted'
-    },
-    'VERIFIED': {
-        color: 'border-blue-300 bg-blue-50',
-        bg: 'bg-blue-500',
-        text: 'text-blue-700',
-        icon: <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />,
-        label: 'Verified'
-    },
-    'APPROVED': {
-        color: 'border-teal-300 bg-teal-50',
-        bg: 'bg-teal-500',
-        text: 'text-teal-700',
-        icon: <CheckCircleIcon className="w-4 h-4 text-teal-500" />,
-        label: 'Approved'
-    },
-    'REJECTED': {
-        color: 'border-red-300 bg-red-50',
-        bg: 'bg-red-500',
-        text: 'text-red-700',
-        icon: <XIcon className="w-4 h-4 text-red-500" />,
-        label: 'Rejected'
-    },
-    'IN_REVIEW': {
-        color: 'border-orange-300 bg-orange-50',
-        bg: 'bg-orange-500',
-        text: 'text-orange-700',
-        icon: <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />,
-        label: 'In Review'
-    },
-    'CONVERTED': {
-        color: 'border-green-300 bg-green-50',
-        bg: 'bg-green-500',
-        text: 'text-green-700',
-        icon: <CheckCircleIcon className="w-4 h-4 text-green-500" />,
-        label: 'Converted to Admission'
-    }
-};
-
-const REJECTION_REASONS = [
-    'Not interested',
-    'Budget constraints', 
-    'Location not suitable',
-    'Grade not available',
-    'Found another school',
-    'Timing not right',
-    'Other'
-];
-
-const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({
-    enquiry,
-    onClose,
-    onUpdate,
-    onNavigate
-}) => {
-    // Debug logging
-    console.log('EnquiryDetailsModal rendered with enquiry:', {
-        id: enquiry.id,
-        status: enquiry.status,
-        applicant_name: enquiry.applicant_name,
-        hasSource: !!(enquiry as any).source
-    });
-
-    const [status, setStatus] = useState<Status>(enquiry.status as Status);
-    const [followUpNote, setFollowUpNote] = useState('');
-    const [rejectionReason, setRejectionReason] = useState('');
-    const [loading, setLoading] = useState({ 
-        converting: false, 
-        rejecting: false, 
-        messaging: false,
-        updating: false 
-    });
+const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onClose, onUpdate, onNavigate }) => {
     const [timeline, setTimeline] = useState<TimelineItem[]>([]);
-    const [showRejectForm, setShowRejectForm] = useState(false);
-    const [showConvertConfirm, setShowConvertConfirm] = useState(false);
+    const [formData, setFormData] = useState({
+        status: enquiry.status,
+        notes: enquiry.notes || '',
+        applicant_name: enquiry.applicant_name || '',
+    });
+    const [newMessage, setNewMessage] = useState('');
+    const [loading, setLoading] = useState({ timeline: true, saving: false, converting: false, ai: false });
+    const [aiSummary, setAiSummary] = useState<string | null>(null);
+    const commsEndRef = useRef<HTMLDivElement>(null);
 
-    // Load timeline data
-    useEffect(() => {
-        loadTimeline();
+    const fetchTimeline = useCallback(async (isSilent = false) => {
+        if (!isSilent) setLoading(prev => ({ ...prev, timeline: true }));
+        try {
+            const { data, error } = await supabase.rpc('get_enquiry_timeline', { p_enquiry_id: String(enquiry.id) });
+            if (error) throw error;
+            setTimeline(data || []);
+        } catch (e) {
+            console.error("Timeline Sync Error:", formatError(e));
+        } finally {
+            if (!isSilent) setLoading(prev => ({ ...prev, timeline: false }));
+        }
     }, [enquiry.id]);
 
-    const loadTimeline = async () => {
+    useEffect(() => { 
+        fetchTimeline(); 
+    }, [fetchTimeline]);
+
+    useEffect(() => {
+        if (commsEndRef.current) {
+            commsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [timeline]);
+
+    const handleAIGenerateSummary = async () => {
+        if (!process.env.API_KEY) {
+            alert("Security Protocol Violation: AI Intelligence Key is not provisioned.");
+            return;
+        }
+
+        setLoading(prev => ({ ...prev, ai: true }));
         try {
-            const { data, error } = await supabase.rpc('get_enquiry_timeline', {
-                p_enquiry_id: enquiry.id
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const conversationText = timeline
+                .filter(t => t.item_type === 'MESSAGE')
+                .map(t => `${t.is_admin ? 'Admin' : 'Parent'}: ${t.details.message}`)
+                .join('\n');
+                
+            const prompt = `Summarize the following school admission enquiry conversation for ${enquiry.applicant_name} (Grade ${enquiry.grade}). Provide a concise analysis of the parent's primary concerns and the current status of the handshake. Tone: Executive and Brief.\n\nConversation:\n${conversationText}`;
+            
+            const response = await ai.models.generateContent({
+                model: 'gemini-3-flash-preview',
+                contents: { parts: [{ text: prompt }] }
             });
-
-            if (error) throw error;
-
-            // Transform the data to match TimelineItem interface with error handling
-            const transformedTimeline: TimelineItem[] = (data || []).map((item: any) => {
-                try {
-                    return {
-                        id: item.id || `item-${Date.now()}`,
-                        item_type: item.item_type || 'MESSAGE',
-                        is_admin: item.is_admin || false,
-                        created_by_name: item.created_by_name || 'System',
-                        created_at: item.created_at || new Date().toISOString(),
-                        details: item.details || { message: 'Status update' }
-                    };
-                } catch (mappingError) {
-                    console.warn('Error mapping timeline item:', mappingError);
-                    return {
-                        id: `fallback-${Date.now()}`,
-                        item_type: 'MESSAGE' as const,
-                        is_admin: false,
-                        created_by_name: 'System',
-                        created_at: new Date().toISOString(),
-                        details: { message: 'Timeline event' }
-                    };
-                }
-            });
-
-            setTimeline(transformedTimeline);
-        } catch (err) {
-            console.error('Failed to load timeline:', err);
-            // Set empty timeline on error instead of failing silently
-            setTimeline([]);
+            
+            setAiSummary(response.text || "Summary unavailable.");
+        } catch (err: any) {
+            const formatted = formatError(err);
+            console.error("AI Context Failure:", formatted);
+            if (formatted.toLowerCase().includes("abort")) {
+                alert("The AI request was interrupted. This usually happens if you navigate away or the connection is unstable. Please retry.");
+            } else {
+                alert(`AI Synthesis Failed: ${formatted}`);
+            }
+        } finally {
+            setLoading(prev => ({ ...prev, ai: false }));
         }
     };
 
-    const handleCallParent = () => {
-        window.open(`tel:${enquiry.parent_phone}`, '_self');
-    };
-
-    const handleWhatsApp = () => {
-        const message = encodeURIComponent(`Hi, this is regarding ${enquiry.applicant_name}'s admission enquiry for Grade ${enquiry.grade}.`);
-        window.open(`https://wa.me/${enquiry.parent_phone}?text=${message}`, '_blank');
-    };
-
-    const handleSendMessage = async () => {
-        if (!followUpNote.trim()) return;
-        
-        setLoading(prev => ({ ...prev, messaging: true }));
+    const handleSaveStatus = async (newStatus: EnquiryStatus) => {
+        setLoading(prev => ({ ...prev, saving: true }));
         try {
             const { error } = await supabase
-                .from('enquiry_messages')
-                .insert({
-                    enquiry_id: enquiry.id,
-                    message: followUpNote,
-                    is_admin_message: true,
-                    sender_id: (await supabase.auth.getUser()).data.user?.id
-                });
+                .from('enquiries')
+                .update({ status: newStatus, updated_at: new Date().toISOString() })
+                .eq('id', enquiry.id);
             
             if (error) throw error;
-            setFollowUpNote('');
-            await loadTimeline(); // Refresh timeline
+            setFormData(prev => ({ ...prev, status: newStatus }));
+            onUpdate();
+            await fetchTimeline(true);
         } catch (err) {
-            alert("Message send failed: " + formatError(err));
+            alert(`Save failed: ${formatError(err)}`);
         } finally {
-            setLoading(prev => ({ ...prev, messaging: false }));
+            setLoading(prev => ({ ...prev, saving: false }));
         }
     };
 
-    const handleConvert = () => {
-        if (status !== 'VERIFIED' && status !== 'IN_REVIEW') {
-            alert('Enquiry must be verified or in review to convert');
-            return;
-        }
-        // Additional check: ensure enquiry has VERIFIED status in database
-        if (enquiry.verification_status !== 'VERIFIED') {
-            alert('Enquiry must be verified before conversion');
-            return;
-        }
-        setShowConvertConfirm(true);
-    };
-
-    const confirmConvert = async () => {
-        setShowConvertConfirm(false);
+    const handleConvert = async () => {
         setLoading(prev => ({ ...prev, converting: true }));
         try {
             const result = await EnquiryService.convertToAdmission(enquiry.id);
             if (result.success) {
-                setStatus('CONVERTED');
                 onUpdate();
+                onClose();
                 onNavigate?.('Admissions');
             }
         } catch (err: any) {
-            alert(err.message);
+            alert(formatError(err));
         } finally {
             setLoading(prev => ({ ...prev, converting: false }));
         }
     };
 
-    const handleReject = async () => {
-        if (!rejectionReason) {
-            alert('Please select a reason for rejection');
-            return;
-        }
-
-        setLoading(prev => ({ ...prev, rejecting: true }));
+    const handleSendMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const msg = newMessage.trim();
+        if (!msg) return;
+        
         try {
-            const { error } = await supabase
-                .from('enquiries')
-                .update({ 
-                    status: 'REJECTED',
-                    notes: `Rejection reason: ${rejectionReason}`,
-                    updated_at: new Date().toISOString() 
-                })
-                .eq('id', enquiry.id);
-            
+            const { error } = await supabase.rpc('send_enquiry_message', { 
+                p_enquiry_id: String(enquiry.id), 
+                p_message: msg 
+            });
             if (error) throw error;
-            setStatus('REJECTED' as Status);
-            setShowRejectForm(false);
-            setRejectionReason('');
-            onUpdate();
+            setNewMessage('');
+            await fetchTimeline(true);
         } catch (err) {
-            alert(`Rejection failed: ${formatError(err)}`);
-        } finally {
-            setLoading(prev => ({ ...prev, rejecting: false }));
+            alert("Transmit Failure: " + formatError(err));
         }
-    };
-
-    const updateStatus = async (newStatus: Status) => {
-        setLoading(prev => ({ ...prev, updating: true }));
-        try {
-            const { error } = await supabase
-                .from('enquiries')
-                .update({ 
-                    status: newStatus,
-                    updated_at: new Date().toISOString() 
-                })
-                .eq('id', enquiry.id);
-            
-            if (error) throw error;
-            setStatus(newStatus);
-        } catch (err) {
-            alert(`Status update failed: ${formatError(err)}`);
-        } finally {
-            setLoading(prev => ({ ...prev, updating: false }));
-        }
-    };
-
-    // Calculate days active
-    const daysActive = Math.floor(
-        (new Date().getTime() - new Date(enquiry.created_at).getTime()) / (1000 * 60 * 60 * 24)
-    );
-
-    // Calculate progress percentage
-    const getProgressPercentage = () => {
-        const steps: Status[] = ['NEW', 'CONTACTED', 'VERIFIED', 'APPROVED', 'IN_REVIEW', 'CONVERTED'];
-        const currentIndex = steps.indexOf(status);
-        return Math.round(((currentIndex + 1) / steps.length) * 100);
-    };
-
-    // Timeline items for visual progress
-    const getTimelineProgress = () => {
-        const steps: Status[] = ['NEW', 'CONTACTED', 'VERIFIED', 'APPROVED', 'IN_REVIEW', 'CONVERTED'];
-        const currentIndex = steps.indexOf(status);
-
-        return steps.map((step, index) => ({
-            step,
-            completed: currentIndex >= 0 && index <= currentIndex,
-            current: index === currentIndex
-        }));
-    };
-
-    const progress = getTimelineProgress();
-    const progressPercentage = getProgressPercentage();
-
-    // Calculate priority score
-    const getPriorityScore = () => {
-        const baseScore = 100 - (daysActive * 2); // Decay over time
-        const verificationBonus = enquiry.verification_status === 'VERIFIED' ? 20 : 0;
-        const statusBonus = status === 'VERIFIED' || status === 'IN_REVIEW' ? 15 : 0;
-        return Math.max(0, Math.min(100, baseScore + verificationBonus + statusBonus));
-    };
-
-    const priorityScore = getPriorityScore();
-    const priorityLevel = priorityScore >= 80 ? 'High' : priorityScore >= 60 ? 'Medium' : 'Low';
-
-    // Copy to clipboard helper
-    const copyToClipboard = async (text: string) => {
-        try {
-            await navigator.clipboard.writeText(text);
-            // Could add a toast notification here
-        } catch (err) {
-            console.error('Failed to copy:', err);
-        }
-    };
-
-    // Progress Ring Component
-    const ProgressRing = ({ percentage, size = 60 }: { percentage: number; size?: number }) => {
-        const strokeWidth = 4;
-        const radius = (size - strokeWidth) / 2;
-        const circumference = radius * 2 * Math.PI;
-        const strokeDasharray = circumference;
-        const strokeDashoffset = circumference - (percentage / 100) * circumference;
-
-        return (
-            <div className="relative">
-                <svg width={size} height={size} className="transform -rotate-90">
-                    <circle
-                        cx={size / 2}
-                        cy={size / 2}
-                        r={radius}
-                        stroke="currentColor"
-                        strokeWidth={strokeWidth}
-                        fill="transparent"
-                        className="text-slate-700"
-                    />
-                    <circle
-                        cx={size / 2}
-                        cy={size / 2}
-                        r={radius}
-                        stroke="currentColor"
-                        strokeWidth={strokeWidth}
-                        fill="transparent"
-                        strokeDasharray={strokeDasharray}
-                        strokeDashoffset={strokeDashoffset}
-                        className="text-blue-500 transition-all duration-500 ease-out"
-                        strokeLinecap="round"
-                    />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-sm font-bold text-white">{percentage}%</span>
-                </div>
-            </div>
-        );
     };
 
     return (
-        <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md flex items-center justify-center z-50 p-4">
-            <div
-                className="bg-slate-800 rounded-3xl shadow-2xl w-full max-w-7xl max-h-[95vh] overflow-hidden flex flex-col border border-slate-700"
-                onClick={e => e.stopPropagation()}
-            >
-                {/* Command Center Header */}
-                <div className="bg-slate-900 px-8 py-6 border-b border-slate-700 flex justify-between items-center flex-shrink-0">
-                    {/* Left Section - Identity & Status */}
-                    <div className="flex items-center space-x-6">
-                        {/* Premium Avatar */}
-                        <div className="flex-shrink-0">
-                            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-xl">
-                                {enquiry.applicant_name.charAt(0).toUpperCase()}
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-3xl flex items-center justify-center z-[150] p-0 sm:p-4 md:p-6" onClick={onClose}>
+            <div className="bg-[#09090b] rounded-t-[3.5rem] sm:rounded-[4.5rem] shadow-[0_64px_128px_-32px_rgba(0,0,0,1)] w-full max-w-[1700px] h-full sm:h-[94vh] flex flex-col border border-white/5 overflow-hidden ring-1 ring-white/10 animate-in zoom-in-95 duration-500" onClick={e => e.stopPropagation()}>
+                
+                <header className="px-10 md:px-16 py-10 border-b border-white/5 bg-[#0f1115]/95 backdrop-blur-2xl flex flex-wrap justify-between items-center z-40 relative shadow-2xl">
+                    <div className="flex items-center gap-10">
+                        <div className="relative group shrink-0">
+                            <div className="absolute inset-0 bg-indigo-500/20 blur-2xl opacity-40 group-hover:opacity-100 transition-opacity duration-1000"></div>
+                            <div className="w-20 h-20 bg-indigo-600 rounded-[2.2rem] text-white flex items-center justify-center shadow-2xl border border-white/10 relative z-10 transform group-hover:rotate-6 transition-transform duration-700">
+                                <ClipboardListIcon className="w-10 h-10" />
                             </div>
                         </div>
-
-                        {/* Identity Details */}
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center space-x-4 mb-2">
-                                <h1 className="text-2xl font-bold text-white truncate">{enquiry.applicant_name}</h1>
-                                {/* Status Pill */}
-                                <div className={`px-4 py-2 rounded-full text-sm font-semibold flex items-center space-x-2 ${
-                                    status === 'VERIFIED' ? 'bg-green-500/20 border border-green-500/50 text-green-300' :
-                                    status === 'CONVERTED' ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-300' :
-                                    status === 'IN_REVIEW' ? 'bg-orange-500/20 border border-orange-500/50 text-orange-300' :
-                                    status === 'NEW' ? 'bg-blue-500/20 border border-blue-500/50 text-blue-300' :
-                                    'bg-gray-500/20 border border-gray-500/50 text-gray-300'
-                                }`}>
-                                    {STATUS_CONFIG[status]?.icon}
-                                    <span>{STATUS_CONFIG[status]?.label || status}</span>
-                                </div>
+                        <div>
+                            <div className="flex flex-wrap items-center gap-6 mb-3">
+                                <h2 className="text-4xl md:text-6xl font-serif font-black text-white tracking-tighter uppercase leading-none drop-shadow-2xl">{enquiry.applicant_name}</h2>
+                                <span className="px-4 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em] shadow-inner backdrop-blur-md">Node 0x{String(enquiry.id).substring(0,6).toUpperCase()}</span>
                             </div>
-
-                            {/* Badges & ID */}
-                            <div className="flex items-center space-x-4">
-                                <div className="px-3 py-1 bg-slate-700 text-slate-300 rounded-full text-sm font-medium flex items-center space-x-1">
-                                    <AcademicCapIcon className="w-4 h-4" />
-                                    <span>Grade {enquiry.grade}</span>
-                                </div>
-                                <button
-                                    onClick={() => copyToClipboard(enquiry.id.toString())}
-                                    className="px-3 py-1 bg-purple-500/20 text-purple-300 rounded-full text-sm font-medium hover:bg-purple-500/30 transition-colors flex items-center space-x-1"
-                                >
-                                    <span>#{enquiry.id.toString().slice(-6).toUpperCase()}</span>
-                                    <CopyIcon className="w-3 h-3" />
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Center Section - Progress Ring */}
-                    <div className="flex items-center space-x-6">
-                        <div className="text-center">
-                            <ProgressRing percentage={progressPercentage} />
-                            <p className="text-xs text-slate-400 mt-1">Progress</p>
-                        </div>
-                    </div>
-
-                    {/* Right Section - Metadata & Actions */}
-                    <div className="flex items-center space-x-4">
-                        <div className="text-right">
-                            <p className="text-xs text-slate-400">Last Updated</p>
-                            <p className="text-sm text-white font-medium">
-                                {new Date(enquiry.updated_at || enquiry.created_at).toLocaleDateString('en-US', {
-                                    month: 'short',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                })}
+                            <p className="text-[11px] font-black text-white/20 uppercase tracking-[0.5em] flex items-center gap-3">
+                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+                                Domain Sync Active • Grade {enquiry.grade} Context
                             </p>
                         </div>
-
-                        {/* Quick Actions */}
-                        <div className="flex items-center space-x-2">
-                            <button
-                                onClick={handleCallParent}
-                                className="p-2 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 hover:text-blue-300 transition-all duration-200"
-                                title="Call Parent"
-                            >
-                                <PhoneIcon className="w-5 h-5" />
-                            </button>
-                            <button
-                                onClick={handleWhatsApp}
-                                className="p-2 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 hover:text-green-300 transition-all duration-200"
-                                title="WhatsApp"
-                            >
-                                <CommunicationIcon className="w-5 h-5" />
-                            </button>
-                            <button
-                                onClick={onClose}
-                                className="p-2 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-all duration-200"
-                            >
-                                <XIcon className="w-5 h-5" />
-                            </button>
-                        </div>
                     </div>
-                </div>
+                    <button onClick={onClose} className="p-4 rounded-[1.5rem] bg-white/5 text-white/20 hover:text-white hover:bg-white/10 transition-all transform active:scale-90 border border-white/5"><XIcon className="w-8 h-8"/></button>
+                </header>
+                
+                <div className="flex-grow flex flex-col lg:flex-row overflow-hidden relative">
+                    <div className="absolute inset-0 opacity-[0.02] pointer-events-none z-0" style={{ backgroundImage: `radial-gradient(circle at 2px 2px, rgba(255,255,255,0.2) 1px, transparent 0)`, backgroundSize: '40px 40px' }}></div>
 
-                {/* Main Content - Premium Layout */}
-                <div className="flex-1 overflow-hidden flex">
-                    {/* Left Column - Intelligent Information */}
-                    <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-slate-50">
-                        {/* CRM-Grade Timeline */}
-                        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8">
-                            <h3 className="text-xl font-bold text-slate-900 mb-8 flex items-center">
-                                <ActivityIcon className="w-6 h-6 mr-3 text-blue-600" />
-                                Enquiry Timeline
-                            </h3>
-
-                            <div className="relative">
-                                {/* Timeline Line */}
-                                <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-slate-300"></div>
-
-                                <div className="space-y-6">
-                                    {progress.map((item, index) => {
-                                        const stepLabels = {
-                                            'NEW': 'Enquiry Created',
-                                            'CONTACTED': 'Initial Contact Made',
-                                            'VERIFIED': 'Documents Verified',
-                                            'APPROVED': 'Application Approved',
-                                            'IN_REVIEW': 'Final Review',
-                                            'CONVERTED': 'Converted to Admission'
-                                        };
-
-                                        const stepDetails = {
-                                            'NEW': 'Enquiry submitted through website',
-                                            'CONTACTED': 'First communication established',
-                                            'VERIFIED': 'All required documents verified',
-                                            'APPROVED': 'Application meets admission criteria',
-                                            'IN_REVIEW': 'Under final administrative review',
-                                            'CONVERTED': 'Student successfully admitted'
-                                        };
-
-                                        return (
-                                            <div key={item.step} className="flex items-start space-x-6 relative">
-                                                {/* Timeline Node */}
-                                                <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all duration-500 ${
-                                                    item.completed
-                                                        ? 'bg-green-500 text-white shadow-green-200'
-                                                        : item.current
-                                                            ? 'bg-blue-500 text-white shadow-blue-200 animate-pulse'
-                                                            : 'bg-slate-300 text-slate-500'
-                                                }`}>
-                                                    {item.completed ? (
-                                                        <CheckCircleIcon className="w-6 h-6" />
-                                                    ) : item.current ? (
-                                                        <div className="w-3 h-3 rounded-full bg-white animate-pulse" />
-                                                    ) : (
-                                                        <div className="w-3 h-3 rounded-full bg-current" />
-                                                    )}
-                                                </div>
-
-                                                {/* Timeline Content */}
-                                                <div className="flex-1 pb-8">
-                                                    <div className="flex items-center space-x-3 mb-2">
-                                                        <h4 className={`text-lg font-semibold ${
-                                                            item.completed ? 'text-green-800' :
-                                                            item.current ? 'text-blue-800' :
-                                                            'text-slate-500'
-                                                        }`}>
-                                                            {stepLabels[item.step as keyof typeof stepLabels]}
-                                                        </h4>
-                                                        {item.current && (
-                                                            <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full border border-blue-200">
-                                                                In Progress
-                                                            </span>
-                                                        )}
-                                                        {item.completed && (
-                                                            <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full border border-green-200">
-                                                                Completed
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <p className="text-slate-600 text-sm leading-relaxed">
-                                                        {stepDetails[item.step as keyof typeof stepDetails]}
-                                                    </p>
-                                                    {item.completed && (
-                                                        <p className="text-xs text-slate-500 mt-2 flex items-center">
-                                                            <ClockIcon className="w-3 h-3 mr-1" />
-                                                            Completed {Math.floor(Math.random() * 30) + 1} days ago
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                    <div className="flex-1 flex flex-col bg-transparent relative z-10">
+                        <div className="flex-grow overflow-y-auto p-10 md:p-20 space-y-16 custom-scrollbar flex flex-col scroll-smooth">
+                            {loading.timeline && timeline.length === 0 ? (
+                                <div className="m-auto flex flex-col items-center gap-6">
+                                    <Spinner size="lg" className="text-primary" />
+                                    <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white/20 animate-pulse">Recalling Conversation Ledger</p>
                                 </div>
-                            </div>
-                        </div>
-
-                        {/* Intelligent Information Cards */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* Student Identity Card */}
-                            <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-6 hover:shadow-xl transition-shadow duration-300">
-                                <div className="flex items-center justify-between mb-6">
-                                    <h3 className="text-lg font-bold text-slate-900 flex items-center">
-                                        <UserIcon className="w-5 h-5 mr-3 text-indigo-600" />
-                                        Student Identity
-                                    </h3>
-                                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                        enquiry.verification_status === 'VERIFIED'
-                                            ? 'bg-green-100 text-green-700 border border-green-200'
-                                            : 'bg-yellow-100 text-yellow-700 border border-yellow-200'
-                                    }`}>
-                                        {enquiry.verification_status === 'VERIFIED' ? 'Verified' : 'Pending'}
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-1 gap-4">
-                                    <div className="flex justify-between items-center py-2">
-                                        <span className="text-sm text-slate-500 font-medium">Full Name</span>
-                                        <span className="text-sm font-semibold text-slate-900">{enquiry.applicant_name}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center py-2">
-                                        <span className="text-sm text-slate-500 font-medium">Grade Applying</span>
-                                        <span className="text-sm font-semibold text-slate-900">Grade {enquiry.grade}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center py-2">
-                                        <span className="text-sm text-slate-500 font-medium">Enquiry ID</span>
-                                        <button
-                                            onClick={() => copyToClipboard(enquiry.id.toString())}
-                                            className="text-sm font-semibold text-blue-600 hover:text-blue-700 flex items-center space-x-1"
-                                        >
-                                            <span>#{enquiry.id.toString().slice(-6).toUpperCase()}</span>
-                                            <CopyIcon className="w-3 h-3" />
-                                        </button>
-                                    </div>
-                                    <div className="flex justify-between items-center py-2">
-                                        <span className="text-sm text-slate-500 font-medium">Created</span>
-                                        <span className="text-sm font-semibold text-slate-900">
-                                            {new Date(enquiry.created_at).toLocaleDateString('en-US', {
-                                                month: 'short',
-                                                day: 'numeric'
-                                            })}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Parent Contact Card */}
-                            <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-6 hover:shadow-xl transition-shadow duration-300">
-                                <div className="flex items-center justify-between mb-6">
-                                    <h3 className="text-lg font-bold text-slate-900 flex items-center">
-                                        <ParentIcon className="w-5 h-5 mr-3 text-green-600" />
-                                        Parent Contact
-                                    </h3>
-                                    <div className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-medium border border-slate-200">
-                                        Guardian
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-1 gap-4">
-                                    <div className="flex justify-between items-center py-2">
-                                        <span className="text-sm text-slate-500 font-medium">Parent Name</span>
-                                        <span className="text-sm font-semibold text-slate-900">{enquiry.parent_name}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center py-2">
-                                        <span className="text-sm text-slate-500 font-medium">Phone</span>
-                                        <button
-                                            onClick={handleCallParent}
-                                            className="text-sm font-semibold text-blue-600 hover:text-blue-700 flex items-center space-x-1"
-                                        >
-                                            <span>{enquiry.parent_phone}</span>
-                                            <PhoneIcon className="w-3 h-3" />
-                                        </button>
-                                    </div>
-                                    <div className="flex justify-between items-center py-2">
-                                        <span className="text-sm text-slate-500 font-medium">Email</span>
-                                        <a
-                                            href={`mailto:${enquiry.parent_email}`}
-                                            className="text-sm font-semibold text-blue-600 hover:text-blue-700 flex items-center space-x-1"
-                                        >
-                                            <span>{enquiry.parent_email}</span>
-                                            <MailIcon className="w-3 h-3" />
-                                        </a>
-                                    </div>
-                                    <div className="flex justify-between items-center py-2">
-                                        <span className="text-sm text-slate-500 font-medium">Last Contact</span>
-                                        <span className="text-sm font-semibold text-slate-900">
-                                            {timeline.length > 0
-                                                ? new Date(timeline[timeline.length - 1].created_at).toLocaleDateString('en-US', {
-                                                    month: 'short',
-                                                    day: 'numeric'
-                                                })
-                                                : 'Never'
-                                            }
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Enquiry Metadata Card */}
-                            <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-6 hover:shadow-xl transition-shadow duration-300 lg:col-span-2">
-                                <div className="flex items-center justify-between mb-6">
-                                    <h3 className="text-lg font-bold text-slate-900 flex items-center">
-                                        <DocumentTextIcon className="w-5 h-5 mr-3 text-purple-600" />
-                                        Enquiry Metadata
-                                    </h3>
-                                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                        priorityLevel === 'High' ? 'bg-red-100 text-red-700 border border-red-200' :
-                                        priorityLevel === 'Medium' ? 'bg-orange-100 text-orange-700 border border-orange-200' :
-                                        'bg-slate-100 text-slate-700 border border-slate-200'
-                                    }`}>
-                                        {priorityLevel} Priority
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-                                    <div className="text-center">
-                                        <div className="text-2xl font-bold text-slate-900">{priorityScore}</div>
-                                        <div className="text-xs text-slate-500 uppercase tracking-wide">Priority Score</div>
-                                    </div>
-                                    <div className="text-center">
-                                        <div className="text-2xl font-bold text-slate-900">{progressPercentage}%</div>
-                                        <div className="text-xs text-slate-500 uppercase tracking-wide">Progress</div>
-                                    </div>
-                                    <div className="text-center">
-                                        <div className="text-2xl font-bold text-slate-900">{daysActive}</div>
-                                        <div className="text-xs text-slate-500 uppercase tracking-wide">Days Active</div>
-                                    </div>
-                                    <div className="text-center">
-                                        <div className="text-2xl font-bold text-slate-900">
-                                            {(enquiry as any).source || 'Website'}
+                            ) : (
+                                <>
+                                    {timeline.length === 0 && (
+                                        <div className="m-auto flex flex-col items-center text-center opacity-10 space-y-10">
+                                            <CommunicationIcon className="w-48 h-48" />
+                                            <p className="text-4xl font-serif italic text-white max-w-lg leading-relaxed">No encrypted messages exchanged on this channel.</p>
                                         </div>
-                                        <div className="text-xs text-slate-500 uppercase tracking-wide">Source</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Recent Activity Feed */}
-                        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-6">
-                            <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center">
-                                <ClockIcon className="w-5 h-5 mr-3 text-orange-600" />
-                                Recent Activity
-                            </h3>
-                            <div className="space-y-4">
-                                {timeline.length > 0 ? (
-                                    timeline.slice(0, 8).map((item) => (
-                                        <div key={item.id} className="flex items-start space-x-4 p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
-                                            <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
-                                                item.item_type === 'MESSAGE' ? 'bg-blue-500' :
-                                                item.item_type === 'STATUS_CHANGE' ? 'bg-green-500' :
-                                                'bg-purple-500'
-                                            }`}></div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm text-slate-900 font-medium">
-                                                    {item.details?.message || `${item.item_type.replace('_', ' ')} occurred`}
-                                                </p>
-                                                <div className="flex items-center space-x-2 mt-1">
-                                                    <p className="text-xs text-slate-500">
-                                                        {item.created_by_name}
-                                                    </p>
-                                                    <span className="text-xs text-slate-400">•</span>
-                                                    <p className="text-xs text-slate-500">
-                                                        {new Date(item.created_at).toLocaleString('en-US', {
-                                                            month: 'short',
-                                                            day: 'numeric',
-                                                            hour: '2-digit',
-                                                            minute: '2-digit'
-                                                        })}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <div className="text-center py-12 text-slate-500">
-                                        <ActivityIcon className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                                        <p className="text-sm">No recent activity</p>
-                                        <p className="text-xs mt-1">Activity will appear here as the enquiry progresses</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Right Panel - Next Best Action */}
-                    <div className="w-96 border-l border-slate-700 flex flex-col bg-slate-800">
-                        {/* Primary Action Zone */}
-                        <div className="p-6 border-b border-slate-700 bg-slate-900">
-                            <div className="text-center">
-                                <button
-                                    onClick={handleConvert}
-                                    disabled={loading.converting || (status !== 'VERIFIED' && status !== 'IN_REVIEW') || enquiry.conversion_state === 'CONVERTED'}
-                                    className="w-full px-6 py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:from-slate-600 disabled:to-slate-700 text-white rounded-xl transition-all duration-300 flex items-center justify-center space-x-3 shadow-lg hover:shadow-xl transform hover:-translate-y-1 font-semibold text-lg"
-                                >
-                                    {loading.converting ? (
-                                        <Spinner size="sm" />
-                                    ) : (
-                                        <>
-                                            <CheckCircleIcon className="w-6 h-6" />
-                                            <span>Convert to Admission</span>
-                                        </>
                                     )}
-                                </button>
-                                <p className="text-xs text-slate-400 mt-3">
-                                    {status === 'VERIFIED' || status === 'IN_REVIEW'
-                                        ? 'Ready for conversion'
-                                        : 'Complete verification first'
-                                    }
-                                </p>
-                            </div>
+                                    <div className="space-y-16">
+                                        {timeline.map((item, idx) => <TimelineEntry key={idx} item={item} />)}
+                                        <div ref={commsEndRef} className="h-4" />
+                                    </div>
+                                </>
+                            )}
                         </div>
-
-                        {/* Status Control Zone */}
-                        <div className="p-6 border-b border-slate-700 bg-slate-900">
-                            <h3 className="text-lg font-bold text-white mb-4 flex items-center">
-                                <ActivityIcon className="w-5 h-5 mr-3 text-blue-400" />
-                                Status Control
-                            </h3>
-                            <div className="space-y-3">
-                                <div className="relative">
-                                    <select
-                                        value={status}
-                                        onChange={(e) => updateStatus(e.target.value as Status)}
-                                        disabled={loading.updating}
-                                        className="w-full px-4 py-3 bg-slate-700 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 appearance-none"
-                                    >
-                                        {Object.entries(STATUS_CONFIG).map(([key, config]) => (
-                                            <option key={key} value={key} className="bg-slate-700">
-                                                {config.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <ChevronDownIcon className="absolute right-3 top-3 w-5 h-5 text-slate-400 pointer-events-none" />
-                                </div>
-                                <div className={`px-3 py-2 rounded-lg text-sm font-medium ${
-                                    priorityLevel === 'High' ? 'bg-red-500/20 border border-red-500/50 text-red-300' :
-                                    priorityLevel === 'Medium' ? 'bg-orange-500/20 border border-orange-500/50 text-orange-300' :
-                                    'bg-slate-500/20 border border-slate-500/50 text-slate-300'
-                                }`}>
-                                    {priorityLevel} Priority • {priorityScore} Score
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Communication Zone */}
-                        <div className="p-6 border-b border-slate-700 bg-slate-900">
-                            <h3 className="text-lg font-bold text-white mb-4 flex items-center">
-                                <CommunicationIcon className="w-5 h-5 mr-3 text-green-400" />
-                                Communication
-                            </h3>
-                            <div className="space-y-3">
-                                <div className="grid grid-cols-3 gap-2">
-                                    <button
-                                        onClick={handleCallParent}
-                                        className="p-3 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 text-blue-300 rounded-lg transition-all duration-200 hover:scale-105"
-                                        title="Call Parent"
-                                    >
-                                        <PhoneIcon className="w-5 h-5 mx-auto" />
-                                    </button>
-                                    <button
-                                        onClick={handleWhatsApp}
-                                        className="p-3 bg-green-500/20 hover:bg-green-500/30 border border-green-500/50 text-green-300 rounded-lg transition-all duration-200 hover:scale-105"
-                                        title="WhatsApp"
-                                    >
-                                        <CommunicationIcon className="w-5 h-5 mx-auto" />
-                                    </button>
-                                    <button
-                                        className="p-3 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-300 rounded-lg transition-all duration-200 hover:scale-105"
-                                        title="Email"
-                                    >
-                                        <MailIcon className="w-5 h-5 mx-auto" />
-                                    </button>
-                                </div>
-                                <div className="text-xs text-slate-400">
-                                    Last contacted: {
-                                        timeline.length > 0
-                                            ? new Date(timeline[timeline.length - 1].created_at).toLocaleDateString('en-US', {
-                                                month: 'short',
-                                                day: 'numeric'
-                                            })
-                                            : 'Never'
-                                    }
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Intelligence Zone */}
-                        <div className="p-6 flex-1 bg-slate-900">
-                            <h3 className="text-lg font-bold text-white mb-6 flex items-center">
-                                <TrendingUpIcon className="w-5 h-5 mr-3 text-purple-400" />
-                                Intelligence
-                            </h3>
-                            <div className="space-y-6">
-                                {/* Response Time */}
-                                <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <span className="text-sm text-slate-400">Response Time</span>
-                                        <span className="text-lg font-bold text-white">4.2h</span>
+                        
+                        <div className="p-10 md:p-14 border-t border-white/5 bg-[#0a0a0c]/98 backdrop-blur-3xl">
+                            <form onSubmit={handleSendMessage} className="flex gap-8 items-end max-w-5xl mx-auto group">
+                                <div className="flex-grow relative">
+                                    <textarea 
+                                        value={newMessage} 
+                                        onChange={(e) => setNewMessage(e.target.value)} 
+                                        placeholder="TYPE PAYLOAD TO PARENT NODE..." 
+                                        className="w-full p-8 md:p-10 rounded-[3.5rem] bg-white/[0.02] border border-white/10 text-white placeholder:text-white/5 outline-none resize-none font-serif text-xl md:text-2xl shadow-inner focus:bg-white/[0.04] focus:border-primary/40 transition-all duration-500 custom-scrollbar"
+                                        rows={1}
+                                        onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e as any); } }}
+                                    />
+                                    <div className="absolute right-10 top-1/2 -translate-y-1/2 opacity-0 group-focus-within:opacity-100 transition-opacity duration-700 pointer-events-none">
+                                        <span className="text-[9px] font-black text-primary/40 uppercase tracking-[0.4em]">Secure Uplink Terminal</span>
                                     </div>
-                                    <div className="w-full bg-slate-700 rounded-full h-2">
-                                        <div className="bg-green-500 h-2 rounded-full" style={{ width: '75%' }}></div>
-                                    </div>
-                                    <p className="text-xs text-slate-500 mt-2">Average: 6.1 hours</p>
                                 </div>
-
-                                {/* Priority Score */}
-                                <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <span className="text-sm text-slate-400">Priority Score</span>
-                                        <span className="text-lg font-bold text-white">{priorityScore}</span>
-                                    </div>
-                                    <div className="w-full bg-slate-700 rounded-full h-2">
-                                        <div
-                                            className={`h-2 rounded-full ${
-                                                priorityScore >= 80 ? 'bg-red-500' :
-                                                priorityScore >= 60 ? 'bg-orange-500' :
-                                                'bg-slate-500'
-                                            }`}
-                                            style={{ width: `${priorityScore}%` }}
-                                        ></div>
-                                    </div>
-                                    <p className="text-xs text-slate-500 mt-2">{priorityLevel} Priority</p>
-                                </div>
-
-                                {/* Engagement Score */}
-                                <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <span className="text-sm text-slate-400">Engagement</span>
-                                        <span className="text-lg font-bold text-white">78%</span>
-                                    </div>
-                                    <div className="w-full bg-slate-700 rounded-full h-2">
-                                        <div className="bg-blue-500 h-2 rounded-full" style={{ width: '78%' }}></div>
-                                    </div>
-                                    <p className="text-xs text-slate-500 mt-2">Based on activity</p>
-                                </div>
-
-                                {/* Risk Assessment */}
-                                <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <span className="text-sm text-slate-400">Risk Level</span>
-                                        <span className="text-lg font-bold text-green-400">Low</span>
-                                    </div>
-                                    <div className="w-full bg-slate-700 rounded-full h-2">
-                                        <div className="bg-green-500 h-2 rounded-full" style={{ width: '25%' }}></div>
-                                    </div>
-                                    <p className="text-xs text-slate-500 mt-2">35% risk score</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Quick Actions Footer */}
-                        <div className="p-4 border-t border-slate-700 bg-slate-900">
-                            <div className="grid grid-cols-2 gap-2">
-                                <button
-                                    onClick={() => updateStatus('CONTACTED')}
-                                    disabled={loading.updating || status === 'CONTACTED'}
-                                    className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-slate-300 hover:text-white rounded-lg transition-colors text-sm font-medium"
+                                <button 
+                                    type="submit" 
+                                    disabled={!newMessage.trim()}
+                                    className="w-24 h-24 md:w-32 md:h-32 bg-primary text-white rounded-[3rem] md:rounded-[4rem] flex items-center justify-center shadow-[0_32px_64px_-12px_rgba(0,0,0,0.5)] transform active:scale-90 transition-all duration-500 disabled:opacity-5 disabled:grayscale"
                                 >
-                                    Mark Contacted
+                                    <LocalSendIcon className="w-10 h-10 md:w-14 md:h-14" />
                                 </button>
-                                <button
-                                    onClick={() => setShowRejectForm(true)}
-                                    disabled={loading.rejecting || status === 'REJECTED'}
-                                    className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-300 hover:text-red-200 rounded-lg transition-colors text-sm font-medium"
-                                >
-                                    Reject
-                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div className="w-full lg:w-[480px] bg-[#0c0d12]/90 backdrop-blur-3xl border-l border-white/10 p-12 md:p-16 space-y-16 overflow-y-auto custom-scrollbar relative z-20">
+                        <section className="space-y-10">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-[11px] font-black uppercase text-white/30 tracking-[0.5em]">Lifecycle Management</h3>
+                                <div className="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.8)] animate-pulse"></div>
                             </div>
+                            <div className="space-y-4">
+                                {ORDERED_STATUSES.map(s => (
+                                    <button 
+                                        key={s} 
+                                        onClick={() => handleSaveStatus(s)}
+                                        disabled={loading.saving || enquiry.status === 'CONVERTED'}
+                                        className={`w-full flex items-center justify-between p-6 rounded-[2rem] border transition-all duration-700 group/btn relative overflow-hidden ${enquiry.status === s ? 'bg-primary/10 border-primary text-white shadow-2xl' : 'bg-black/20 border-white/5 text-white/30 hover:bg-white/5 hover:border-white/20'}`}
+                                    >
+                                        <div className="flex items-center gap-5 relative z-10">
+                                            <div className={`p-3 rounded-xl transition-all duration-700 ${enquiry.status === s ? 'bg-primary text-white shadow-lg rotate-3' : 'bg-white/5 text-white/20 group-hover/btn:scale-110'}`}>
+                                                {STATUS_CONFIG[s]?.icon}
+                                            </div>
+                                            <span className={`text-sm font-black uppercase tracking-[0.2em] transition-colors duration-700 ${enquiry.status === s ? 'text-primary' : 'group-hover/btn:text-white'}`}>
+                                                {STATUS_CONFIG[s]?.label}
+                                            </span>
+                                        </div>
+                                        {enquiry.status === s && <CheckCircleIcon className="w-5 h-5 text-primary animate-in zoom-in duration-500 relative z-10" />}
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+
+                        <section className="space-y-10">
+                             <div className="flex items-center justify-between">
+                                <h3 className="text-[11px] font-black uppercase text-white/30 tracking-[0.5em]">Identity Intel</h3>
+                                <button 
+                                    onClick={handleAIGenerateSummary} 
+                                    disabled={loading.ai}
+                                    className="p-3 rounded-2xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition-all active:scale-90"
+                                    title="AI Summarize Conversation"
+                                >
+                                    {loading.ai ? <Spinner size="sm" /> : <SparklesIcon className="w-5 h-5" />}
+                                </button>
+                             </div>
+                             
+                             {aiSummary ? (
+                                <div className="bg-primary/5 border border-primary/20 p-8 rounded-[2.5rem] relative group overflow-hidden animate-in fade-in slide-in-from-right-8 duration-1000">
+                                     <div className="absolute -top-10 -right-10 w-32 h-32 bg-primary/10 rounded-full blur-3xl group-hover:opacity-40 transition-opacity"></div>
+                                     <p className="text-[9px] font-black uppercase tracking-[0.4em] text-primary mb-4 flex items-center gap-2">
+                                         <SparklesIcon className="w-3.5 h-3.5" /> AI Synthesis
+                                     </p>
+                                     <p className="text-sm font-serif italic text-white/70 leading-loose">"{aiSummary}"</p>
+                                     <button onClick={() => setAiSummary(null)} className="mt-6 text-[9px] font-black uppercase tracking-[0.2em] text-white/20 hover:text-white transition-colors">Clear Insight</button>
+                                </div>
+                             ) : (
+                                <div className="space-y-5">
+                                    <div className="flex flex-col gap-2 p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 shadow-inner">
+                                        <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.3em]">Parent Contact</span>
+                                        <p className="text-base text-white/80 font-medium font-serif italic">{enquiry.parent_email}</p>
+                                    </div>
+                                    <div className="flex flex-col gap-2 p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 shadow-inner">
+                                        <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.3em]">Institutional Grade</span>
+                                        <p className="text-base text-white/80 font-black font-serif italic tracking-wider">GRADE {enquiry.grade}</p>
+                                    </div>
+                                </div>
+                             )}
+                        </section>
+
+                        {enquiry.status !== 'CONVERTED' && (
+                            <section className="pt-10 border-t border-white/5 space-y-8">
+                                <button 
+                                    onClick={handleConvert}
+                                    disabled={loading.converting || enquiry.status === 'ENQUIRY_ACTIVE'}
+                                    className={`w-full py-7 md:py-8 rounded-[2.8rem] flex items-center justify-center gap-6 font-black text-xs uppercase tracking-[0.5em] transition-all duration-700 shadow-2xl active:scale-95 ${enquiry.status !== 'ENQUIRY_ACTIVE' ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-500/20' : 'bg-white/5 text-white/5 cursor-not-allowed border border-white/5 grayscale'}`}
+                                >
+                                    {loading.converting ? <Spinner size="sm" className="text-white"/> : <><GraduationCapIcon className="w-7 h-7 opacity-60" /> PROMOTE TO ADMISSION</>}
+                                </button>
+                                {enquiry.status === 'ENQUIRY_ACTIVE' && <p className="text-[9px] text-amber-500/60 font-black uppercase tracking-[0.2em] text-center leading-relaxed">Identity verification protocol required <br/> prior to Promotion.</p>}
+                            </section>
+                        )}
+
+                        <div className="mt-auto opacity-5 hover:opacity-100 transition-opacity duration-1000">
+                            <p className="text-[8px] font-mono text-white break-all text-center uppercase tracking-widest">CIPHER: {btoa(String(enquiry.id)).substring(0, 32)}</p>
                         </div>
                     </div>
                 </div>
             </div>
-
-            {/* Convert Confirmation Modal */}
-            {showConvertConfirm && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
-                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-                        <div className="text-center">
-                            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <CheckCircleIcon className="w-8 h-8 text-green-600" />
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-900 mb-2">Convert to Admission</h3>
-                            <p className="text-gray-600 mb-6">
-                                This will convert <strong>{enquiry.applicant_name}</strong> from an enquiry to an admission record.
-                                The student will be moved to the Admission Vault and removed from the Enquiry Desk.
-                            </p>
-                            <div className="flex space-x-3">
-                                <button
-                                    onClick={() => setShowConvertConfirm(false)}
-                                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={confirmConvert}
-                                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                                >
-                                    Confirm Conversion
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Reject Form Modal */}
-            {showRejectForm && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
-                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-                        <div className="text-center">
-                            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <XIcon className="w-8 h-8 text-red-600" />
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-900 mb-2">Reject Enquiry</h3>
-                            <p className="text-gray-600 mb-4">
-                                Please select a reason for rejecting <strong>{enquiry.applicant_name}</strong>'s enquiry:
-                            </p>
-                            <div className="space-y-3 mb-6">
-                                {REJECTION_REASONS.map((reason) => (
-                                    <label key={reason} className="flex items-center space-x-3">
-                                        <input
-                                            type="radio"
-                                            name="rejectionReason"
-                                            value={reason}
-                                            checked={rejectionReason === reason}
-                                            onChange={(e) => setRejectionReason(e.target.value)}
-                                            className="w-4 h-4 text-red-600"
-                                        />
-                                        <span className="text-gray-700">{reason}</span>
-                                    </label>
-                                ))}
-                            </div>
-                            <div className="flex space-x-3">
-                                <button
-                                    onClick={() => setShowRejectForm(false)}
-                                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleReject}
-                                    disabled={!rejectionReason}
-                                    className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300 transition-colors"
-                                >
-                                    Reject Enquiry
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };
 
 export default EnquiryDetailsModal;
-

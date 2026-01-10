@@ -187,13 +187,10 @@ const AdmissionsTab: React.FC<{ branchId?: string | null }> = ({ branchId }) => 
         try {
             const { data, error } = await supabase.rpc('get_admissions', { p_branch_id: branchId });
             if (error) throw error;
-
-            // Only show records that are properly converted to admissions
-            const admissionOnlyRoster = (data || []).filter((a: any) => {
-                const isConverted = a.conversion_state === 'CONVERTED';
-                const hasAdmissionId = a.id && typeof a.id === 'string';
-                return isConverted && hasAdmissionId;
-            });
+            
+            const admissionOnlyRoster = (data || []).filter((a: any) => 
+                !['Enquiry Active', 'ENQUIRY_ACTIVE', 'ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'].includes(a.status)
+            );
             setApplicants(admissionOnlyRoster as AdmissionApplication[]);
         } catch (err) {
             console.error("Fetch failure:", err);
@@ -203,20 +200,7 @@ const AdmissionsTab: React.FC<{ branchId?: string | null }> = ({ branchId }) => 
         }
     }, [branchId]);
 
-    useEffect(() => {
-        fetchApplicants();
-
-        const channel = supabase.channel(`admissions-vault-sync-${branchId || 'master'}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'admissions' }, (payload) => {
-                const record = payload.new as any || payload.old as any;
-                if (branchId === null || branchId === undefined || record.branch_id === branchId) {
-                    fetchApplicants(true);
-                }
-            })
-            .subscribe();
-
-        return () => { supabase.removeChannel(channel); };
-    }, [fetchApplicants, branchId]);
+    useEffect(() => { fetchApplicants(); }, [fetchApplicants]);
 
     const filteredApps = (applicants || []).filter(app => 
         filterStatus === 'All' || app.status === filterStatus
