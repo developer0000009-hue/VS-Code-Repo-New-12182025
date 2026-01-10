@@ -623,9 +623,9 @@ const EnquiryDetailsPage: React.FC<EnquiryDetailsPageProps> = ({ onNavigate }) =
                             <div className="space-y-4">
                                 {[
                                     { step: 'Enquiry Created', status: 'completed', date: enquiry.received_at, phase: 'Created' },
-                                    { step: 'Documents Requested', status: enquiry.status !== 'New' ? 'completed' : 'pending', phase: 'Docs' },
-                                    { step: 'Verification', status: ['ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'].includes(enquiry.status) ? 'completed' : 'pending', phase: 'Verify' },
-                                    { step: 'Review', status: ['ENQUIRY_IN_PROGRESS', 'CONVERTED'].includes(enquiry.status) ? 'completed' : 'pending', phase: 'Review' },
+                                    { step: 'Contacted Parent', status: ['CONTACTED', 'APPROVED', 'REJECTED', 'CONVERTED'].includes(enquiry.status) ? 'completed' : 'pending', phase: 'Contact' },
+                                    { step: 'Verified', status: ['ENQUIRY_VERIFIED', 'VERIFIED', 'ENQUIRY_IN_PROGRESS', 'IN_REVIEW', 'APPROVED', 'CONVERTED'].includes(enquiry.status) ? 'completed' : 'pending', phase: 'Verify' },
+                                    { step: 'Ready for Admission', status: ['APPROVED', 'CONVERTED'].includes(enquiry.status) ? 'completed' : 'pending', phase: 'Admission' },
                                     { step: 'Converted', status: enquiry.status === 'CONVERTED' ? 'completed' : 'pending', phase: 'Convert' }
                                 ].map((item, index) => (
                                     <div key={index} className="group flex items-center gap-4 p-4 rounded-2xl bg-slate-800/30 border border-slate-700/30 hover:bg-slate-700/40 hover:border-slate-600/40 transition-all duration-300 hover:shadow-lg hover:shadow-slate-500/5">
