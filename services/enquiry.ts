@@ -160,14 +160,65 @@ export const EnquiryService = {
         error?: string;
     }> {
         try {
-            // Use the RPC function which handles RLS properly
-            const { data, error } = await supabase.rpc('get_enquiries_for_node', {
-                p_branch_id: branchId
-            });
+            // First try the RPC function which handles RLS properly
+            try {
+                const { data, error } = await supabase.rpc('get_enquiries_for_node', {
+                    p_branch_id: branchId
+                });
+
+                if (!error && data) {
+                    return { success: true, data: data || [] };
+                }
+            } catch (rpcError) {
+                console.warn('RPC function failed, falling back to direct query:', rpcError);
+            }
+
+            // Fallback to direct query if RPC fails
+            const query = supabase
+                .from('enquiries')
+                .select(`
+                    id,
+                    enquiry_code,
+                    applicant_name,
+                    grade,
+                    status,
+                    verification_status,
+                    received_at,
+                    parent_name,
+                    parent_email,
+                    parent_phone,
+                    notes,
+                    updated_at,
+                    admission_id,
+                    branch_id,
+                    conversion_state,
+                    is_archived,
+                    is_deleted,
+                    converted_at
+                `)
+                .eq('conversion_state', 'NOT_CONVERTED')
+                .eq('is_archived', false)
+                .eq('is_deleted', false)
+                .not('status', 'is', null)
+                .neq('status', '')
+                .order('received_at', { ascending: false });
+
+            if (branchId) {
+                query.eq('branch_id', branchId);
+            }
+
+            const { data, error } = await query;
 
             if (error) throw error;
 
-            return { success: true, data: data || [] };
+            // Map received_at to created_at to match EnquiryDetails interface
+            const mappedData = (data || []).map(item => ({
+                ...item,
+                created_at: item.received_at,
+                received_at: undefined
+            }));
+
+            return { success: true, data: mappedData };
         } catch (error: any) {
             return { success: false, error: formatError(error) };
         }
