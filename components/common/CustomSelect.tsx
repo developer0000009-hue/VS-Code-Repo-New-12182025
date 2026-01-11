@@ -1,8 +1,8 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { SearchIcon } from '../icons/SearchIcon';
 import { ChevronDownIcon } from '../icons/ChevronDownIcon';
 import { CheckCircleIcon } from '../icons/CheckCircleIcon';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Option {
     value: string;
@@ -76,102 +76,108 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
     };
 
     return (
-        <div className={`relative group w-full ${className || ''} ${disabled ? 'opacity-60 grayscale-[0.5]' : ''}`} ref={containerRef}>
+        <div className={`relative group w-full ${className || ''} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`} ref={containerRef}>
             {label && (
-                <label className={`absolute left-10 top-0 -translate-y-1/2 bg-[#0a0a0c] px-2 text-[9px] font-black uppercase tracking-[0.3em] z-20 transition-all duration-300 
+                <label className={`absolute left-11 top-0 -translate-y-1/2 bg-slate-900 px-1.5 text-[10px] font-bold uppercase tracking-widest z-20 transition-all duration-300 
                     ${isOpen ? 'text-primary' : isSynced ? 'text-primary' : 'text-white/30'}`}>
                     {label}
                 </label>
             )}
             
-            <div className="relative h-[64px]">
+            <div className="relative h-[48px]">
                 <button
                     type="button"
                     onClick={() => !disabled && setIsOpen(!isOpen)}
                     disabled={disabled}
                     className={`
-                        peer w-full h-full text-left rounded-[1.5rem] border transition-all duration-500 ease-in-out outline-none select-none
-                        flex items-center px-6 pt-4 pb-1
-                        ${icon ? 'pl-14' : 'pl-6'}
-                        ${disabled ? 'cursor-not-allowed border-white/5 bg-black/40' : 'cursor-pointer'}
-                        ${isSynced ? 'border-primary/40 bg-primary/5 shadow-[0_0_20px_rgba(var(--primary),0.1)]' : 'border-white/10 bg-white/[0.02]'}
+                        peer w-full h-full text-left rounded-xl border transition-all duration-300 ease-in-out outline-none select-none
+                        flex items-center px-5 pt-3 pb-1
+                        ${icon ? 'pl-12' : 'pl-5'}
+                        ${isSynced ? 'border-primary/40 bg-primary/5 shadow-[0_0_15px_rgba(var(--primary),0.05)]' : 'border-white/10 bg-black/30'}
                         ${isOpen 
-                            ? 'border-primary ring-8 ring-primary/5 shadow-[0_0_30px_rgba(var(--primary),0.1)]' 
+                            ? 'border-primary/40 ring-4 ring-primary/5 shadow-xl' 
                             : 'hover:border-white/20'
                         }
                     `}
                 >
                     <span className="flex items-center h-full min-w-0 flex-grow">
                         {selectedOption ? (
-                            <span className="text-white font-bold text-sm tracking-tight truncate">{selectedOption.label}</span>
+                            <span className="text-white font-medium text-[15px] tracking-tight truncate">{selectedOption.label}</span>
                         ) : (
-                            <span className="text-white/20 font-medium text-sm truncate">{placeholder}</span>
+                            <span className="text-white/20 font-normal text-[15px] truncate">{placeholder}</span>
                         )}
                     </span>
                 </button>
                 
                 {icon && (
-                    <div className={`absolute left-5 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none transition-all duration-300 ${isOpen ? 'text-primary' : isSynced ? 'text-primary' : 'text-white/20'}`}>
+                    <div className={`absolute left-4 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none transition-all duration-300 ${isOpen ? 'text-primary' : isSynced ? 'text-primary' : 'text-white/10'}`}>
                         {icon}
                     </div>
                 )}
 
-                <span className="absolute inset-y-0 right-5 flex items-center pointer-events-none">
-                    <ChevronDownIcon className={`h-5 w-5 text-white/20 transition-transform duration-500 ${isOpen ? 'rotate-180 text-primary opacity-100' : 'group-hover:opacity-60'}`} />
+                <span className="absolute inset-y-0 right-4 flex items-center pointer-events-none">
+                    <ChevronDownIcon className={`h-4 w-4 text-white/20 transition-transform duration-500 ${isOpen ? 'rotate-180 text-primary opacity-100' : 'group-hover:opacity-60'}`} />
                 </span>
             </div>
 
-            {isOpen && (
-                <div className="absolute z-[110] mt-3 w-full bg-[#13151b] rounded-[1.8rem] shadow-[0_30px_80px_-15px_rgba(0,0,0,0.95)] border border-white/10 overflow-hidden origin-top animate-in fade-in zoom-in-95 slide-in-from-top-4 duration-300 backdrop-blur-3xl ring-1 ring-white/10">
-                    
-                    {searchable && (
-                        <div className="p-3 border-b border-white/5 bg-white/[0.02] sticky top-0 z-10">
-                            <div className="relative">
-                                <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-                                <input
-                                    ref={searchInputRef}
-                                    type="text"
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    placeholder="Filter options..."
-                                    className="w-full pl-11 pr-4 py-2.5 text-xs rounded-xl bg-black/40 border border-white/10 focus:border-primary/50 focus:ring-2 focus:ring-primary/20 outline-none text-white placeholder:text-white/10 font-bold uppercase tracking-widest"
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="max-h-64 overflow-auto p-2 custom-scrollbar">
-                        {filteredOptions.length > 0 ? (
-                            filteredOptions.map((option) => (
-                                <button
-                                    key={option.value}
-                                    type="button"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleSelect(option.value);
-                                    }}
-                                    className={`
-                                        w-full flex items-center gap-4 px-5 py-3.5 text-sm rounded-2xl transition-all duration-200 group select-none cursor-pointer mb-1 last:mb-0
-                                        ${value === option.value 
-                                            ? 'bg-primary text-primary-foreground shadow-xl shadow-primary/20 scale-[1.02] z-10' 
-                                            : 'text-white/60 hover:bg-white/[0.05] hover:text-white border border-transparent'
-                                        }
-                                    `}
-                                >
-                                    <span className={`flex-grow text-left truncate font-bold uppercase tracking-widest text-[9px] ${value === option.value ? 'opacity-100' : 'opacity-80 group-hover:opacity-100'}`}>{option.label}</span>
-                                    {value === option.value && (
-                                        <CheckCircleIcon className="w-4 h-4 text-primary-foreground" />
-                                    )}
-                                </button>
-                            ))
-                        ) : (
-                            <div className="px-6 py-10 text-xs text-white/20 text-center italic select-none font-black uppercase tracking-[0.3em]">
-                                No matches found
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.98, y: 4 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.98, y: 4 }}
+                        transition={{ duration: 0.15, ease: "easeOut" }}
+                        className="absolute z-[110] mt-2 w-full bg-[#1e293b] rounded-2xl shadow-[0_30px_80px_-15px_rgba(0,0,0,0.8)] border border-white/10 overflow-hidden origin-top backdrop-blur-2xl ring-1 ring-white/10"
+                    >
+                        {searchable && (
+                            <div className="p-3 border-b border-white/[0.05] bg-white/[0.01]">
+                                <div className="relative">
+                                    <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                                    <input
+                                        ref={searchInputRef}
+                                        type="text"
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        placeholder="Search..."
+                                        className="w-full pl-10 pr-3 py-2 text-xs rounded-lg bg-black/40 border border-white/5 focus:border-primary/50 outline-none text-white placeholder:text-white/10 font-medium"
+                                    />
+                                </div>
                             </div>
                         )}
-                    </div>
-                </div>
-            )}
+
+                        <div className="max-h-60 overflow-auto p-1.5 custom-scrollbar">
+                            {filteredOptions.length > 0 ? (
+                                filteredOptions.map((option) => (
+                                    <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleSelect(option.value);
+                                        }}
+                                        className={`
+                                            w-full flex items-center gap-3 px-4 py-2.5 text-sm rounded-xl transition-all duration-200 group select-none cursor-pointer mb-1 last:mb-0
+                                            ${value === option.value 
+                                                ? 'bg-primary/10 text-primary shadow-sm' 
+                                                : 'text-white/60 hover:bg-white/[0.05] hover:text-white'
+                                            }
+                                        `}
+                                    >
+                                        <span className={`flex-grow text-left truncate font-medium ${value === option.value ? 'font-semibold' : ''}`}>{option.label}</span>
+                                        {value === option.value && (
+                                            <CheckCircleIcon className="w-4 h-4 text-primary animate-in zoom-in-50" />
+                                        )}
+                                    </button>
+                                ))
+                            ) : (
+                                <div className="px-6 py-8 text-xs text-white/20 text-center italic select-none font-medium uppercase tracking-widest">
+                                    No records found
+                                </div>
+                            )}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

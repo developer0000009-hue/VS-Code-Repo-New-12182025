@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { UserProfile, Role, Communication } from '../../types';
 import { supabase } from '../../services/supabase';
@@ -32,7 +31,6 @@ const Header: React.FC<HeaderProps> = ({ profile, onSelectRole, onSignOut, onPro
                 return;
             }
 
-            // Strict array verification to prevent .map crashes
             if (data && Array.isArray(data)) {
                 const mappedData = data.map((item: any) => ({
                     ...item,
@@ -70,29 +68,29 @@ const Header: React.FC<HeaderProps> = ({ profile, onSelectRole, onSignOut, onPro
     };
 
     return (
-        <header className="bg-card/80 backdrop-blur-md border-b border-border shadow-sm sticky top-0 z-40">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex items-center justify-between h-16 md:h-20">
+        <header className="bg-[#08090a]/90 backdrop-blur-xl border-b border-white/[0.03] h-20 md:h-24 sticky top-0 z-40 transition-all">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full">
+                <div className="flex items-center justify-between h-full">
                     <div className="flex items-center flex-shrink-0 cursor-pointer group" onClick={() => window.location.hash = '#/'}>
-                        <div className="p-2 bg-primary/10 rounded-xl transition-colors group-hover:bg-primary/20">
+                        <div className="p-2.5 bg-primary/10 rounded-xl transition-all duration-300 group-hover:bg-primary/20 group-hover:scale-105 border border-primary/20">
                             <SchoolIcon className="h-6 w-6 text-primary" />
                         </div>
-                        <span className="font-serif font-bold text-xl ml-3 hidden sm:block tracking-tight text-foreground">Parent Portal</span>
+                        <span className="font-serif font-black text-2xl ml-4 hidden sm:block tracking-tight text-white uppercase group-hover:text-primary transition-colors">Gurukul</span>
                     </div>
                     
-                    <div className="flex items-center gap-2 sm:gap-4 relative">
+                    <div className="flex items-center gap-4 sm:gap-6 relative">
                         <ThemeSwitcher />
                         
                         <div className="relative">
                             <button 
                                 ref={notifButtonRef}
                                 onClick={toggleNotifications}
-                                className={`p-2.5 rounded-full transition-all relative ${isNotifOpen ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+                                className={`p-3 rounded-xl transition-all relative ${isNotifOpen ? 'bg-primary/10 text-primary border border-primary/20' : 'text-white/30 hover:text-white hover:bg-white/5 border border-transparent'}`}
                                 aria-label="Notifications"
                             >
-                                <BellIcon className="h-5 w-5" />
+                                <BellIcon className="h-5.5 w-5.5" />
                                 {notifications.length > 0 && (
-                                    <span className="absolute top-2 right-2.5 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-card animate-pulse"></span>
+                                    <span className="absolute top-2.5 right-2.5 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-[#08090a] animate-pulse"></span>
                                 )}
                             </button>
                             
@@ -105,7 +103,7 @@ const Header: React.FC<HeaderProps> = ({ profile, onSelectRole, onSignOut, onPro
                             />
                         </div>
                         
-                        <div className="h-8 w-px bg-border/50 mx-1 hidden md:block"></div>
+                        <div className="h-10 w-px bg-white/5 mx-1 hidden md:block"></div>
                         
                         <ProfileDropdown
                             profile={profile}

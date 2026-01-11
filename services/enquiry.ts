@@ -1,4 +1,3 @@
-
 import { supabase, formatError } from './supabase';
 
 /**
@@ -20,21 +19,20 @@ export const EnquiryService = {
             });
 
             if (error) throw error;
-            
-            // Handle error in response data
-            if (data && data.success === false) {
-                throw new Error(data.message || "Protocol rejection.");
-            }
+            if (!data.success) throw new Error(data.message);
 
             return {
                 success: true,
-                message: data?.message || "Identity synchronized successfully.",
-                enquiryId: data?.enquiry_id,
+                message: data.message,
+                enquiryId: data.enquiry_id,
                 targetModule: 'Enquiries'
             };
         } catch (err) {
             const formatted = formatError(err);
-            console.error("Enquiry Synchronization Failure:", formatted);
+            // If we catch a specific alignment error, we re-wrap it for better UX
+            if (formatted.includes("Data Alignment Error")) {
+                console.error("Critical identity mapping failure. Migration 14.2.9 required.");
+            }
             throw new Error(formatted);
         }
     },
@@ -51,12 +49,12 @@ export const EnquiryService = {
             });
 
             if (error) throw error;
-            if (data && data.success === false) throw new Error(data.message);
+            if (!data.success) throw new Error(data.message);
 
             return {
                 success: true,
-                message: data?.message || "Promotion finalized.",
-                admissionId: data?.admission_id
+                message: data.message,
+                admissionId: data.admission_id
             };
         } catch (err) {
             const formatted = formatError(err);

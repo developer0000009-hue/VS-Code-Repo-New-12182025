@@ -68,24 +68,24 @@ const MyChildrenTab: React.FC<MyChildrenTabProps> = ({ onManageDocuments, profil
     }
 
     return (
-        <div className="w-full max-w-7xl mx-auto animate-in fade-in duration-1000 pb-20">
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-10 mb-12">
-                <div>
+        <div className="w-full max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20 font-sans">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-10 mb-16">
+                <div className="max-w-2xl">
                     <div className="flex items-center gap-3 mb-4">
                          <span className="text-[10px] font-black uppercase text-primary tracking-[0.4em] border-l-2 border-primary/40 pl-4">Institutional Roster</span>
                     </div>
-                    <h2 className="text-[clamp(34px,3.2vw,48px)] font-serif font-black text-white tracking-[-0.03em] leading-none uppercase">
-                        FAMILY <span className="text-white/30 font-normal italic">NODES.</span>
+                    <h2 className="text-3xl md:text-4xl font-serif font-black text-white tracking-tighter uppercase leading-none">
+                        Family <span className="text-white/20 font-normal italic">Nodes.</span>
                     </h2>
-                    <p className="text-white/40 text-[16px] leading-relaxed font-serif italic mt-6 max-w-lg border-l border-white/5 pl-8">
-                        Centralized management for enrollment identities, academic milestones, and cryptographic access permits.
+                    <p className="text-white/40 text-[15px] leading-relaxed font-serif italic mt-6 max-w-lg border-l border-white/10 pl-8">
+                        Centralized oversight for enrollment identities, academic records, and secure institutional access.
                     </p>
                 </div>
                 
                 <div className="flex items-center gap-4 w-full lg:w-auto">
                     <button 
                         onClick={() => { setEditingChild(null); setIsModalOpen(true); }} 
-                        className="flex-grow lg:flex-grow-0 h-[62px] px-10 bg-primary hover:bg-primary/90 text-white font-black text-[11px] uppercase tracking-[0.25em] rounded-2xl shadow-2xl shadow-primary/20 transition-all transform active:scale-95 flex items-center justify-center gap-3 group"
+                        className="flex-grow lg:flex-grow-0 h-12 md:h-14 px-10 bg-primary hover:bg-primary/90 text-white font-bold text-[12px] uppercase tracking-widest rounded-2xl shadow-xl shadow-primary/20 transition-all transform active:scale-[0.98] hover:scale-[1.02] flex items-center justify-center gap-3 group"
                     >
                         <PlusIcon className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" /> Provision Node
                     </button>
@@ -93,13 +93,13 @@ const MyChildrenTab: React.FC<MyChildrenTabProps> = ({ onManageDocuments, profil
             </div>
 
             {/* Filter Hub */}
-            <div className="flex flex-col md:flex-row justify-between items-center gap-6 bg-white/[0.02] p-4 rounded-[2.5rem] border border-white/5 mb-10 shadow-inner">
-                <div className="flex bg-black/40 p-1.5 rounded-2xl border border-white/5 w-full md:w-auto overflow-x-auto no-scrollbar">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-6 bg-white/[0.01] p-3 rounded-[2rem] border border-white/5 mb-12 shadow-inner">
+                <div className="flex bg-black/40 p-1 rounded-xl border border-white/5 w-full md:w-auto overflow-x-auto no-scrollbar">
                     {(['ALL', 'APPROVED', 'PENDING', 'REJECTED'] as FilterType[]).map(f => (
                         <button
                             key={f}
                             onClick={() => setActiveFilter(f)}
-                            className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl text-[10px] font-black tracking-[0.2em] uppercase transition-all duration-500 ${activeFilter === f ? 'bg-[#1a1d24] text-primary shadow-2xl ring-1 ring-white/10' : 'text-white/20 hover:text-white/40'}`}
+                            className={`flex-1 md:flex-none px-6 py-2.5 rounded-lg text-[10px] font-black tracking-[0.15em] uppercase transition-all duration-300 ${activeFilter === f ? 'bg-primary/10 text-primary shadow-sm ring-1 ring-primary/20' : 'text-white/30 hover:text-white/60'}`}
                         >
                             {f}
                         </button>
@@ -107,29 +107,29 @@ const MyChildrenTab: React.FC<MyChildrenTabProps> = ({ onManageDocuments, profil
                 </div>
                 
                 <div className="relative flex-grow w-full md:max-w-md group">
-                    <SearchIcon className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-white/10 group-focus-within:text-primary transition-colors duration-300" />
+                    <SearchIcon className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-primary transition-colors duration-300" />
                     <input 
                         type="text" 
                         placeholder="Search identities..." 
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="h-[58px] w-full pl-14 pr-6 bg-black/20 border border-white/5 rounded-2xl text-sm font-medium text-white focus:bg-black/40 outline-none transition-all placeholder:text-white/5 focus:border-primary/30"
+                        className="h-12 w-full pl-12 pr-6 bg-black/20 border border-white/5 rounded-xl text-sm font-medium text-white focus:bg-black/30 outline-none transition-all placeholder:text-white/10 focus:ring-4 focus:ring-primary/10"
                     />
                 </div>
             </div>
 
             {/* Error Display */}
             {error && (
-                <div className="mb-8 p-6 bg-red-500/10 border border-red-500/20 text-red-500 rounded-[2rem] flex items-center gap-4 animate-in shake">
+                <div className="mb-8 p-6 bg-red-500/10 border border-red-500/20 text-red-500 rounded-2xl flex items-center gap-4 animate-in shake">
                     <AlertTriangleIcon className="w-6 h-6 shrink-0" />
-                    <p className="text-sm font-bold">{error}</p>
+                    <p className="text-sm font-bold uppercase tracking-wide">{error}</p>
                 </div>
             )}
 
             {/* Card Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
                 {filteredApplications.map((app, idx) => (
-                    <div key={app.id} className="animate-in fade-in slide-in-from-bottom-8 duration-700" style={{ animationDelay: `${idx * 80}ms` }}>
+                    <div key={app.id} className="animate-in fade-in slide-in-from-bottom-4 duration-700" style={{ animationDelay: `${idx * 60}ms` }}>
                         <ChildProfileCard 
                             child={app}
                             isExpanded={false}
@@ -148,12 +148,15 @@ const MyChildrenTab: React.FC<MyChildrenTabProps> = ({ onManageDocuments, profil
                 {/* Empty State / Add Child Trigger */}
                 <button 
                     onClick={() => { setEditingChild(null); setIsModalOpen(true); }}
-                    className="flex flex-col items-center justify-center p-12 rounded-[2.5rem] border-2 border-dashed border-white/5 hover:border-primary/40 hover:bg-primary/[0.01] transition-all duration-700 group relative overflow-hidden h-full min-h-[300px] bg-black/20"
+                    className="flex flex-col items-center justify-center p-12 rounded-2xl border-2 border-dashed border-white/5 hover:border-primary/40 hover:bg-primary/[0.01] transition-all duration-700 group relative overflow-hidden h-full min-h-[340px] bg-black/20"
                 >
-                    <div className="w-16 h-16 rounded-3xl bg-white/[0.03] flex items-center justify-center mb-6 transition-all duration-700 group-hover:bg-primary/10 group-hover:scale-110 border border-white/5">
+                    <div className="w-16 h-16 rounded-2xl bg-white/[0.03] flex items-center justify-center mb-6 transition-all duration-700 group-hover:bg-primary/10 group-hover:scale-110 border border-white/5 shadow-inner">
                         <PlusIcon className="w-6 h-6 text-white/10 group-hover:text-primary transition-colors" />
                     </div>
-                    <span className="font-serif font-black text-xl text-white/10 group-hover:text-white/30 transition-all uppercase tracking-widest">Enroll Sibling</span>
+                    <div className="text-center">
+                        <span className="font-sans font-bold text-[13px] text-white/20 group-hover:text-white/60 transition-all uppercase tracking-[0.2em] block mb-2">Enroll Sibling</span>
+                        <p className="text-[11px] text-white/10 font-medium italic group-hover:text-white/30 transition-all">Create a new family node to link an additional student.</p>
+                    </div>
                 </button>
             </div>
 

@@ -36,7 +36,7 @@ const App: React.FC = () => {
             if (profileError) {
                 const errorStr = formatError(profileError);
                 if (errorStr.toLowerCase().includes('permission denied')) {
-                    throw new Error("Identity Lock: Database permissions rejected. Deployment of Version 19.11.0 required in SQL Editor.");
+                    throw new Error("Identity Lock: Database permissions rejected. Deployment of Version 19.13.0 required in SQL Editor.");
                 }
                 throw profileError;
             }
@@ -56,7 +56,7 @@ const App: React.FC = () => {
                 if (insertError) {
                     const insErrStr = formatError(insertError);
                     if (insErrStr.toLowerCase().includes('permission denied')) {
-                        throw new Error("Handshake Protocol Failure: Access Denied to Registry. Please execute Migration 19.11.0 in Supabase SQL Editor.");
+                        throw new Error("Handshake Protocol Failure: Access Denied to Registry. Please execute Migration 19.13.0 in Supabase SQL Editor.");
                     }
                     throw insertError;
                 }
@@ -77,7 +77,7 @@ const App: React.FC = () => {
         } catch (e) {
             console.error("CRITICAL: Identity Sync Protocol failure.", formatError(e));
             const errMessage = formatError(e);
-            if (errMessage.includes("Version 19.11.0")) {
+            if (errMessage.includes("Version 19.13.0")) {
                 alert(errMessage);
             }
         } finally {
@@ -112,6 +112,7 @@ const App: React.FC = () => {
     const handleRoleSelect = async (role: Role, isExisting?: boolean) => {
         setLoading(true);
         try {
+            // Contextual Switch: Transition the active identity node
             const { error } = await supabase.rpc('switch_active_role', { p_target_role: role });
             if (error) throw error;
 

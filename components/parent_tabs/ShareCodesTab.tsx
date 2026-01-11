@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase, formatError } from '../../services/supabase';
 import { ShareCode, AdmissionApplication, ShareCodeType } from '../../types';
@@ -10,17 +9,16 @@ import { RefreshIcon } from '../icons/RefreshIcon';
 import { ShieldCheckIcon } from '../icons/ShieldCheckIcon';
 import { MailIcon } from '../icons/MailIcon';
 import { DocumentTextIcon } from '../icons/DocumentTextIcon';
-import { FileTextIcon } from '../icons/FileTextIcon';
 import { ChevronRightIcon } from '../icons/ChevronRightIcon';
 import { XCircleIcon } from '../icons/XCircleIcon';
 import { AlertTriangleIcon } from '../icons/AlertTriangleIcon';
-import { UsersIcon } from '../icons/UsersIcon';
 import { ChevronDownIcon } from '../icons/ChevronDownIcon';
 import { LockIcon } from '../icons/LockIcon';
 import { EyeIcon } from '../icons/EyeIcon';
 import { EyeOffIcon } from '../icons/EyeOffIcon';
 import { CopyIcon } from '../icons/CopyIcon';
 import PremiumAvatar from '../common/PremiumAvatar';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function ShareCodesTab() {
     const [codes, setCodes] = useState<ShareCode[]>([]);
@@ -54,7 +52,6 @@ export default function ShareCodesTab() {
             setMyApplications(appsData);
             setCodes(codesData);
             
-            // Auto-select first child if none selected
             if (!selectedAdmissionId && appsData.length > 0) {
                 setSelectedAdmissionId(appsData[0].id);
             }
@@ -104,7 +101,7 @@ export default function ShareCodesTab() {
     };
 
     const handleRevoke = async (id: number) => {
-        if (!confirm("Terminate this permit immediately? It will be decommissioned from all registries and portals.")) return;
+        if (!confirm("Terminate this access permit artifact? This operation is irreversible.")) return;
         setActionLoading(true);
         setError(null);
         try {
@@ -122,26 +119,10 @@ export default function ShareCodesTab() {
 
     const handleCopy = (code: string) => {
         if (!code) return;
-        if (navigator.clipboard && window.isSecureContext) {
-            navigator.clipboard.writeText(code).then(() => {
-                setCopyFeedback(true);
-                setTimeout(() => setCopyFeedback(false), 2000);
-            });
-        } else {
-            // Fallback for non-secure contexts
-            const textArea = document.createElement("textarea");
-            textArea.value = code;
-            document.body.appendChild(textArea);
-            textArea.select();
-            try {
-                document.execCommand('copy');
-                setCopyFeedback(true);
-                setTimeout(() => setCopyFeedback(false), 2000);
-            } catch (err) {
-                console.error('Fallback copy failed', err);
-            }
-            document.body.removeChild(textArea);
-        }
+        navigator.clipboard.writeText(code).then(() => {
+            setCopyFeedback(true);
+            setTimeout(() => setCopyFeedback(false), 2000);
+        });
     };
 
     const { activeCodes, inactiveCodes } = useMemo(() => {
@@ -166,77 +147,74 @@ export default function ShareCodesTab() {
         return (
             <div className="flex flex-col items-center justify-center py-40 gap-6">
                 <Spinner size="lg" className="text-primary"/>
-                <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/20 animate-pulse">Syncing Cryptographic Vault</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/20 animate-pulse font-sans">Syncing Handshake Center</p>
             </div>
         );
     }
 
     return (
-        <div className="max-w-[1700px] mx-auto space-y-12 animate-in fade-in duration-1000 pb-32">
-            {/* Header */}
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-10">
-                <div className="max-w-4xl space-y-4">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-primary/10 rounded-xl text-primary border border-primary/20 shadow-inner">
+        <div className="max-w-[1600px] mx-auto space-y-12 animate-in fade-in duration-700 pb-32 font-sans">
+            {/* --- MASTER HEADER SECTION --- */}
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-10 px-4">
+                <div className="max-w-4xl space-y-5">
+                    <div className="flex items-center gap-4">
+                        <div className="p-2.5 bg-primary/10 rounded-xl text-primary border border-primary/20 shadow-inner">
                             <ShieldCheckIcon className="w-5 h-5"/>
                         </div>
-                        <span className="text-[10px] font-black uppercase text-primary tracking-[0.4em] pl-2 border-l border-primary/20">Security Access Module</span>
+                        <span className="text-[11px] font-bold uppercase text-primary tracking-[0.5em] pl-3 border-l border-white/10">Authorized Gateway</span>
                     </div>
-                    <h2 className="text-[clamp(40px,4vw,60px)] font-serif font-black text-white tracking-tighter leading-none uppercase">
-                        DIGITAL <span className="text-white/30 font-normal italic lowercase">permits.</span>
-                    </h2>
-                    <p className="text-white/40 text-[18px] leading-relaxed font-serif italic max-w-2xl border-l border-white/5 pl-8">
-                        Provision temporary high-fidelity access tokens for institutional verification and secure enrolment handshakes.
-                    </p>
+                    <div>
+                        <h2 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight uppercase leading-none">
+                            Digital <span className="text-white/40 italic font-light">Permits.</span>
+                        </h2>
+                        <p className="text-white/40 text-lg leading-relaxed font-serif italic max-w-2xl mt-4 border-l border-white/10 pl-8">
+                            Provision temporary high-fidelity tokens for institutional verification and secure enrollment handshakes.
+                        </p>
+                    </div>
                 </div>
                 <button 
                     onClick={() => fetchData()} 
                     disabled={actionLoading}
-                    className="p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.08] text-white/40 hover:text-white transition-all border border-white/5 group active:scale-95 shadow-2xl disabled:opacity-50"
+                    className="p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.08] text-white/40 hover:text-white transition-all border border-white/10 group active:scale-95 shadow-2xl backdrop-blur-md no-print"
                 >
                     <RefreshIcon className={`w-6 h-6 ${actionLoading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-700'}`} />
                 </button>
             </div>
 
             {error && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-8 rounded-[2.5rem] flex items-center gap-6 animate-in shake shadow-2xl ring-1 ring-red-500/20">
+                <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-8 rounded-[2.5rem] flex items-center gap-6 animate-in shake shadow-2xl ring-1 ring-red-500/20 mx-4">
                     <AlertTriangleIcon className="w-8 h-8 shrink-0" />
                     <div className="flex-1">
-                        <p className="text-[11px] font-black uppercase tracking-widest mb-1 opacity-60">Protocol Interruption</p>
+                        <p className="text-[11px] font-black uppercase tracking-widest mb-1 opacity-60">System Interrupt</p>
                         <p className="text-sm font-bold uppercase tracking-widest leading-relaxed">{error}</p>
                     </div>
-                    <button onClick={() => setError(null)} className="p-2 hover:bg-red-500/10 rounded-full transition-colors"><XCircleIcon className="w-6 h-6"/></button>
                 </div>
             )}
 
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-stretch min-h-[800px]">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-10 items-stretch min-h-[800px] px-4">
                 
-                {/* --- LEFT: PROVISIONING WIZARD --- */}
-                <div className="xl:col-span-4 flex flex-col">
-                    <div className="bg-[#0a0a0c]/80 backdrop-blur-3xl border border-white/5 p-10 rounded-[3.5rem] shadow-[0_48px_128px_-24px_rgba(0,0,0,1)] space-y-12 flex flex-col h-full ring-1 ring-white/5 relative overflow-hidden">
-                        <div className="absolute -top-24 -left-24 w-64 h-64 bg-primary/10 rounded-full blur-[100px] pointer-events-none opacity-40"></div>
+                {/* --- 1. PROVISIONING HUB (Left) --- */}
+                <div className="xl:col-span-4 flex flex-col group/panel">
+                    <div className="bg-slate-900/40 backdrop-blur-3xl border border-white/10 p-10 rounded-[2.8rem] shadow-2xl space-y-12 flex flex-col h-full ring-1 ring-white/5 relative overflow-hidden transition-all duration-500 group-hover/panel:border-primary/20">
+                        <div className="absolute -top-32 -left-32 w-80 h-80 bg-primary/5 rounded-full blur-[120px] pointer-events-none opacity-40"></div>
                         
-                        {/* Step 1: Select Node */}
-                        <div className="space-y-6 relative z-10">
-                            <div className="flex items-center gap-4">
-                                <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-[10px] font-black text-white/40 shadow-inner">01</div>
-                                <label className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em]">Target Identity Node</label>
+                        {/* Section A: Target Identity */}
+                        <div className="space-y-8 relative z-10">
+                            <div className="flex items-center gap-5">
+                                <div className="w-9 h-9 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-[11px] font-black text-white/30 shadow-inner">01</div>
+                                <h3 className="text-[12px] font-bold text-white/40 uppercase tracking-[0.2em]">Target Identity Node</h3>
                             </div>
-                            <div className="space-y-2.5 max-h-[350px] overflow-y-auto custom-scrollbar pr-3">
-                                {myApplications.length === 0 ? (
-                                    <div className="py-12 text-center text-white/20 border border-dashed border-white/5 rounded-3xl">
-                                        <p className="text-[10px] font-black uppercase tracking-widest">No Active Nodes</p>
-                                    </div>
-                                ) : myApplications.map(app => (
+                            <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-3">
+                                {myApplications.map(app => (
                                     <button
                                         key={app.id} 
                                         onClick={() => setSelectedAdmissionId(app.id)}
-                                        className={`w-full flex items-center gap-5 p-5 rounded-[2rem] border transition-all duration-500 group/item ${selectedAdmissionId === app.id ? 'bg-primary/10 border-primary ring-4 ring-primary/5 shadow-xl' : 'bg-white/[0.02] border-white/5 hover:border-white/10 hover:bg-white/[0.04]'}`}
+                                        className={`w-full flex items-center gap-5 p-5 rounded-[2rem] border transition-all duration-300 group/item ${selectedAdmissionId === app.id ? 'bg-primary/10 border-primary ring-4 ring-primary/5 shadow-2xl' : 'bg-white/[0.02] border-white/5 hover:border-white/10 hover:bg-white/[0.05]'}`}
                                     >
-                                        <PremiumAvatar src={app.profile_photo_url} name={app.applicant_name || 'Child'} size="xs" className="w-12 h-12 shadow-lg" />
+                                        <PremiumAvatar src={app.profile_photo_url} name={app.applicant_name} size="xs" className="w-12 h-12 shadow-2xl" />
                                         <div className="text-left min-w-0 flex-grow">
-                                            <p className={`font-serif font-black text-base truncate transition-colors ${selectedAdmissionId === app.id ? 'text-white' : 'text-white/40 group-hover/item:text-white/60'}`}>{app.applicant_name}</p>
-                                            <p className="text-[8px] text-white/20 font-black uppercase mt-1 tracking-[0.2em]">Grade {app.grade} Cluster</p>
+                                            <p className={`font-bold text-base truncate transition-colors ${selectedAdmissionId === app.id ? 'text-white' : 'text-white/40 group-hover/item:text-white/60'}`}>{app.applicant_name}</p>
+                                            <p className="text-[9px] text-white/20 font-bold uppercase mt-1 tracking-widest">Grade {app.grade} Node</p>
                                         </div>
                                         {selectedAdmissionId === app.id && <CheckCircleIcon className="w-5 h-5 text-primary animate-in zoom-in duration-300" />}
                                     </button>
@@ -244,11 +222,11 @@ export default function ShareCodesTab() {
                             </div>
                         </div>
 
-                        {/* Step 2: Define Scope */}
-                        <div className="space-y-6 relative z-10">
-                            <div className="flex items-center gap-4">
-                                <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-[10px] font-black text-white/40 shadow-inner">02</div>
-                                <label className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em]">Access Protocol Scope</label>
+                        {/* Section B: Protocol Scope */}
+                        <div className="space-y-8 relative z-10">
+                            <div className="flex items-center gap-5">
+                                <div className="w-9 h-9 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-[11px] font-black text-white/30 shadow-inner">02</div>
+                                <h3 className="text-[12px] font-bold text-white/40 uppercase tracking-[0.2em]">Access Protocol Scope</h3>
                             </div>
                             <div className="grid grid-cols-1 gap-4">
                                 {[
@@ -258,12 +236,12 @@ export default function ShareCodesTab() {
                                     <button
                                         key={type.id} 
                                         onClick={() => setPermitType(type.id as ShareCodeType)}
-                                        className={`p-7 rounded-[2.5rem] border transition-all duration-500 flex items-center gap-6 group/type ${permitType === type.id ? 'bg-primary/10 border-primary shadow-2xl ring-2 ring-primary/5' : 'bg-white/[0.01] border-white/5 hover:border-white/10 hover:bg-white/[0.02]'}`}
+                                        className={`p-6 rounded-[2.2rem] border transition-all duration-300 flex items-center gap-6 group/type ${permitType === type.id ? 'bg-primary/10 border-primary shadow-2xl ring-2 ring-primary/5' : 'bg-white/[0.01] border-white/5 hover:border-white/10 hover:bg-white/[0.03]'}`}
                                     >
-                                        <div className={`p-4 rounded-2xl transition-all duration-700 shadow-inner ${permitType === type.id ? 'bg-primary text-white scale-110 rotate-3' : 'bg-white/5 text-white/10'}`}>{type.icon}</div>
+                                        <div className={`p-3.5 rounded-xl transition-all duration-500 shadow-inner ${permitType === type.id ? 'bg-primary text-white scale-110 shadow-lg shadow-primary/20' : 'bg-white/5 text-white/10'}`}>{type.icon}</div>
                                         <div className="text-left flex-grow">
-                                            <h4 className={`text-sm font-black uppercase tracking-widest ${permitType === type.id ? 'text-primary' : 'text-white/50'}`}>{type.label}</h4>
-                                            <p className="text-[11px] text-white/20 mt-1.5 font-serif italic leading-relaxed">{type.desc}</p>
+                                            <h4 className={`text-[12px] font-bold uppercase tracking-widest ${permitType === type.id ? 'text-primary' : 'text-white/40 group/type:text-white/60'}`}>{type.label}</h4>
+                                            <p className="text-[11px] text-white/20 mt-1 font-serif italic leading-relaxed">{type.desc}</p>
                                         </div>
                                     </button>
                                 ))}
@@ -274,186 +252,200 @@ export default function ShareCodesTab() {
                             <button 
                                 onClick={handleGenerate} 
                                 disabled={!isReadyToActivate || actionLoading}
-                                className={`w-full py-6 rounded-[2rem] text-[11px] font-black uppercase tracking-[0.5em] transition-all duration-500 flex items-center justify-center gap-4 shadow-2xl ${isReadyToActivate && !actionLoading ? 'bg-primary text-white shadow-primary/25 hover:bg-primary/90 transform hover:-translate-y-1 active:scale-95' : 'bg-white/5 text-white/10 cursor-not-allowed border border-white/5'}`}
+                                className={`w-full h-14 rounded-[1.4rem] text-[11px] font-bold uppercase tracking-[0.4em] transition-all duration-300 flex items-center justify-center gap-4 shadow-2xl ${isReadyToActivate && !actionLoading ? 'bg-primary text-primary-foreground shadow-primary/30 hover:shadow-primary/50 transform hover:-translate-y-0.5 active:scale-95' : 'bg-white/5 text-white/10 cursor-not-allowed border border-white/5'}`}
                             >
-                                {actionLoading ? <Spinner size="sm" className="text-current" /> : 'INITIALIZE PERMIT'}
+                                {actionLoading ? <Spinner size="sm" className="text-current" /> : 'Initialize Permit'}
                             </button>
                         </div>
                     </div>
                 </div>
 
-                {/* --- MIDDLE: ARTIFACT REGISTRY --- */}
-                <div className="xl:col-span-3 flex flex-col space-y-8">
-                    <div className="flex justify-between items-center px-4">
-                        <h3 className="text-xl font-serif font-black text-white tracking-tighter uppercase leading-none">ARTIFACT <span className="text-white/20 italic">registry.</span></h3>
+                {/* --- 2. REGISTRY INDEX (Middle) --- */}
+                <div className="xl:col-span-3 flex flex-col space-y-8 group/registry">
+                    <div className="flex justify-between items-center px-6">
+                        <h3 className="text-sm font-bold text-white uppercase tracking-[0.2em]">Registry Index</h3>
                         <div className="flex items-center gap-3">
-                             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.8)]"></div>
-                             <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">{activeCodes.length} LIVE</span>
+                             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]"></div>
+                             <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">LIVE</span>
                         </div>
                     </div>
 
-                    <div className="space-y-4 overflow-y-auto max-h-[850px] custom-scrollbar pr-3 flex-grow">
+                    <div className="space-y-3 overflow-y-auto max-h-[800px] custom-scrollbar pr-3 flex-grow">
                         {activeCodes.length === 0 ? (
-                            <div className="py-32 text-center border-2 border-dashed border-white/5 rounded-[3.5rem] opacity-30 flex flex-col items-center justify-center bg-black/20">
-                                <KeyIcon className="w-12 h-12 mx-auto mb-8 text-white/20" />
-                                <p className="text-[11px] font-black uppercase tracking-[0.4em] text-white italic">IDLE.</p>
+                            <div className="py-32 text-center border-2 border-dashed border-white/5 rounded-[3rem] flex flex-col items-center justify-center bg-white/[0.01] group-hover/registry:border-white/10 transition-colors">
+                                <KeyIcon className="w-12 h-12 text-white/5 mb-6" />
+                                <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-white/10 italic">IDLE.</p>
                             </div>
                         ) : (
                             activeCodes.map(code => (
                                 <button 
                                     key={code.id} 
                                     onClick={() => setFocusedPermitId(code.id)}
-                                    className={`w-full text-left p-7 rounded-[2.5rem] border transition-all duration-700 group relative overflow-hidden ${focusedPermitId === code.id ? 'bg-[#14161d] border-primary shadow-2xl z-10 scale-[1.02]' : 'bg-[#0a0a0c]/60 border-white/5 hover:border-white/10'}`}
+                                    className={`w-full text-left p-6 rounded-[2.2rem] border transition-all duration-500 group/artifact relative overflow-hidden ${focusedPermitId === code.id ? 'bg-slate-900 border-primary shadow-2xl z-10 scale-[1.02] ring-1 ring-primary/20' : 'bg-white/[0.02] border-white/5 hover:border-white/10'}`}
                                 >
                                     <div className="flex items-center gap-5 relative z-10">
                                         <div className="relative shrink-0">
-                                            <PremiumAvatar src={code.profile_photo_url} name={code.applicant_name || 'Code'} size="xs" className="w-14 h-14 shadow-xl border border-white/10" />
-                                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-4 border-[#0c0d12] shadow-lg animate-pulse"></div>
+                                            <PremiumAvatar src={code.profile_photo_url} name={code.applicant_name} size="xs" className="w-14 h-14 rounded-[1.2rem] shadow-xl border border-white/10" />
+                                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-[#09090b] shadow-2xl"></div>
                                         </div>
                                         <div className="min-w-0">
-                                            <h4 className={`font-serif font-black text-lg text-white transition-colors duration-700 leading-tight mb-1 truncate ${focusedPermitId === code.id ? 'text-primary' : 'group-hover:text-primary'}`}>{code.applicant_name}</h4>
-                                            <p className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em]">{code.code_type} SCOPE</p>
+                                            <h4 className={`font-bold text-base text-white transition-colors duration-500 leading-tight mb-1 truncate ${focusedPermitId === code.id ? 'text-primary' : 'group-hover/artifact:text-primary'}`}>{code.applicant_name}</h4>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest">{code.code_type}</span>
+                                                <span className="w-1 h-1 rounded-full bg-white/10"></span>
+                                                <span className="text-[9px] font-mono text-white/10">ID_{code.id}</span>
+                                            </div>
                                         </div>
                                     </div>
+                                    {focusedPermitId === code.id && (
+                                        <div className="absolute right-0 top-0 bottom-0 w-1 bg-primary shadow-[0_0_15px_rgba(var(--primary),0.8)]"></div>
+                                    )}
                                 </button>
                             ))
                         )}
 
-                        <div className="pt-10 border-t border-white/5 mt-auto">
+                        <div className="pt-8 border-t border-white/5 mt-auto">
                             <button 
                                 onClick={() => setShowHistory(!showHistory)}
-                                className={`w-full flex items-center justify-between px-8 py-5 rounded-[2rem] bg-white/[0.02] hover:bg-white/[0.05] transition-all group border border-white/5 ${showHistory ? 'border-primary/20 bg-primary/5' : ''}`}
+                                className={`w-full flex items-center justify-between px-8 py-5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.05] transition-all group border border-white/5 ${showHistory ? 'border-primary/20 bg-primary/5' : ''}`}
                             >
-                                <span className={`text-[10px] font-black uppercase tracking-[0.3em] transition-colors ${showHistory ? 'text-primary' : 'text-white/20 group-hover:text-white/40'}`}>Registry Archives</span>
-                                <ChevronDownIcon className={`w-5 h-5 transition-all duration-500 ${showHistory ? 'rotate-180 text-primary' : 'text-white/20'}`} />
+                                <span className={`text-[10px] font-bold uppercase tracking-[0.2em] transition-colors ${showHistory ? 'text-primary' : 'text-white/20 group-hover:text-white/40'}`}>Registry Archives</span>
+                                <ChevronDownIcon className={`w-4 h-4 transition-all duration-500 ${showHistory ? 'rotate-180 text-primary' : 'text-white/20'}`} />
                             </button>
                             
-                            {showHistory && (
-                                <div className="mt-5 space-y-3 animate-in slide-in-from-top-4 duration-500">
-                                    {inactiveCodes.map(code => (
-                                        <div key={code.id} className="flex items-center justify-between p-6 rounded-[1.8rem] bg-black/60 border border-white/5 opacity-40 grayscale hover:grayscale-0 hover:opacity-70 transition-all shadow-inner">
-                                            <div className="flex items-center gap-4">
-                                                <PremiumAvatar src={code.profile_photo_url} name={code.applicant_name || 'Code'} size="xs" className="w-10 h-10 border border-white/5" />
-                                                <div>
-                                                    <p className="text-[10px] font-black text-white uppercase tracking-wider truncate max-w-[120px]">{code.applicant_name}</p>
-                                                    <p className="text-[8px] font-bold text-white/20 uppercase mt-0.5 tracking-tighter">{code.status}</p>
+                            <AnimatePresence>
+                                {showHistory && (
+                                    <motion.div 
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: 'auto', opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        className="mt-4 space-y-2 overflow-hidden"
+                                    >
+                                        {inactiveCodes.map(code => (
+                                            <div key={code.id} className="flex items-center justify-between p-5 rounded-xl bg-white/[0.01] border border-white/5 opacity-40 hover:opacity-60 transition-all shadow-inner">
+                                                <div className="flex items-center gap-4">
+                                                    <PremiumAvatar src={code.profile_photo_url} name={code.applicant_name} size="xs" className="w-10 h-10 border border-white/5 grayscale" />
+                                                    <p className="text-[11px] font-bold text-white uppercase tracking-wider truncate max-w-[120px]">{code.applicant_name}</p>
                                                 </div>
+                                                <span className="text-[11px] font-mono text-white/20 tracking-widest">{code.code}</span>
                                             </div>
-                                            <span className="text-[11px] font-mono font-black text-white/30 tracking-widest">{code.code}</span>
-                                        </div>
-                                    ))}
-                                    {inactiveCodes.length === 0 && <p className="text-center py-10 text-[10px] font-black text-white/10 uppercase tracking-[0.4em] border border-dashed border-white/5 rounded-3xl">No records.</p>}
-                                </div>
-                            )}
+                                        ))}
+                                        {inactiveCodes.length === 0 && <p className="text-center py-8 text-[10px] font-bold text-white/5 uppercase tracking-widest">No archived records.</p>}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </div>
                     </div>
                 </div>
 
-                {/* --- RIGHT: THE PERMIT CARD --- */}
-                <div className="xl:col-span-5 flex flex-col">
-                    <div className="bg-[#0F1116] border border-white/5 rounded-[2.5rem] flex flex-col shadow-[0_12px_30px_rgba(0,0,0,0.45)] relative overflow-hidden h-full ring-1 ring-white/5">
+                {/* --- 3. HERO PROTOCOL CARD (Right) --- */}
+                <div className="xl:col-span-5 flex flex-col group/hero">
+                    <div className="bg-[#0c0d12] border border-white/5 rounded-[3.5rem] flex flex-col shadow-[0_48px_96px_-24px_rgba(0,0,0,1)] relative overflow-hidden h-full ring-1 ring-white/10 transition-all duration-500 group-hover/hero:border-white/20">
                         
+                        {/* Background Layering */}
+                        <div className="absolute inset-0 opacity-[0.02] pointer-events-none z-0" style={{ backgroundImage: `radial-gradient(circle at 2px 2px, rgba(255,255,255,0.2) 1px, transparent 0)`, backgroundSize: '32px 32px' }}></div>
+
                         {focusedPermit ? (
-                            <div className="h-full flex flex-col animate-in fade-in duration-700 relative">
-                                {/* Header Section */}
-                                <div className="p-8 pb-6 flex items-center justify-between z-20">
-                                    <div className="flex items-center gap-4">
-                                        <PremiumAvatar 
-                                            src={focusedPermit.profile_photo_url} 
-                                            name={focusedPermit.applicant_name || 'User'} 
-                                            size="sm" 
-                                            className="shadow-xl border border-white/10" 
-                                        />
+                            <motion.div 
+                                initial={{ opacity: 0, scale: 0.98 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                className="h-full flex flex-col relative z-10"
+                            >
+                                {/* Hero Header */}
+                                <div className="p-10 md:p-12 pb-6 flex items-center justify-between relative">
+                                    <div className="flex items-center gap-5">
+                                        <PremiumAvatar src={focusedPermit.profile_photo_url} name={focusedPermit.applicant_name} size="sm" className="shadow-2xl border-2 border-white/10 rounded-2xl" />
                                         <div className="min-w-0">
-                                            <h4 className="text-[15px] font-semibold text-white truncate leading-tight uppercase tracking-tight">{focusedPermit.applicant_name}</h4>
-                                            <p className="text-[11px] text-[#9AA3B2] uppercase font-bold tracking-widest mt-1">Identity Node Trace</p>
+                                            <h4 className="text-2xl font-bold text-white truncate leading-none uppercase tracking-tight mb-2">{focusedPermit.applicant_name}</h4>
+                                            <p className="text-[11px] text-white/30 uppercase font-bold tracking-[0.2em]">Institutional Access Node</p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shadow-sm animate-in zoom-in-95">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse"></div>
-                                        <span className="text-[10px] font-black text-[#22C55E] uppercase tracking-widest">Active</span>
+                                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 shadow-xl backdrop-blur-xl">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]"></div>
+                                        <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Authorized</span>
                                     </div>
                                 </div>
 
-                                {/* Main Permit Code Section */}
-                                <div className="px-8 flex-shrink-0">
+                                {/* Main Token Area */}
+                                <div className="px-10 md:px-12 flex-shrink-0">
                                     <div 
-                                        className="bg-[#141726] border border-dashed border-white/10 rounded-2xl p-10 md:p-14 text-center group cursor-pointer active:scale-95 transition-all relative overflow-hidden ring-1 ring-inset ring-white/5"
+                                        className="bg-black/40 backdrop-blur-3xl border border-dashed border-white/10 rounded-[3rem] p-12 md:p-16 text-center group/token cursor-pointer active:scale-[0.98] transition-all relative overflow-hidden ring-1 ring-white/5 shadow-2xl"
                                         onClick={() => handleCopy(focusedPermit.code)}
                                     >
-                                        <p className="text-[11px] font-black text-[#9AA3B2] uppercase tracking-[0.4em] mb-8 relative z-10">Access Permit Code</p>
+                                        <div className="absolute inset-0 bg-gradient-to-tr from-primary/5 to-transparent opacity-0 group-hover/token:opacity-100 transition-opacity duration-1000"></div>
+                                        <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.4em] mb-10 relative z-10 group-hover/token:text-primary/40 transition-colors">Digital Permit Artifact</p>
                                         
-                                        <div className="relative inline-block">
-                                            <span className={`font-mono font-black text-[38px] md:text-[46px] tracking-[0.25em] transition-all duration-700 relative z-10 select-all block ${copyFeedback ? 'text-[#22C55E] scale-110' : 'text-[#F2F4F8] group-hover:text-primary'}`}>
+                                        <div className="relative inline-block mb-10">
+                                            <span className={`font-mono font-black text-5xl md:text-6xl tracking-[0.3em] transition-all duration-500 relative z-10 select-all block drop-shadow-2xl ${copyFeedback ? 'text-emerald-500 scale-105' : 'text-white group-hover/token:text-primary'}`}>
                                                 {focusedPermit.code}
                                             </span>
-                                            <div className={`absolute inset-0 blur-[60px] opacity-10 transition-opacity duration-1000 ${copyFeedback ? 'bg-[#22C55E] opacity-40' : 'bg-primary/20 group-hover:opacity-40'}`}></div>
+                                            <div className={`absolute -inset-10 blur-[60px] opacity-10 transition-all duration-1000 ${copyFeedback ? 'bg-emerald-500 opacity-30' : 'bg-primary/20 group-hover/token:opacity-20'}`}></div>
                                         </div>
 
-                                        <div className="mt-10 flex items-center justify-center gap-3 relative z-10">
+                                        <div className="flex items-center justify-center gap-3 relative z-10">
                                              <button 
-                                                className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${copyFeedback ? 'bg-[#22C55E] text-white shadow-lg' : 'bg-white/5 hover:bg-white/10 text-white/50 hover:text-white border border-white/5'}`}
+                                                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-all duration-300 ${copyFeedback ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-500/30' : 'bg-white/5 hover:bg-white/10 text-white/40 hover:text-white border border-white/10'}`}
                                             >
                                                 {copyFeedback ? <CheckCircleIcon className="w-4 h-4" /> : <CopyIcon className="w-4 h-4"/>}
-                                                {copyFeedback ? 'Copied Artifact' : 'Copy Access Code'}
+                                                {copyFeedback ? 'Copied' : 'Copy Artifact'}
                                             </button>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Metadata Grid */}
-                                <div className="p-8 md:p-10 flex-grow grid grid-cols-2 gap-x-10 gap-y-8 relative z-10">
+                                {/* Security Metadata */}
+                                <div className="p-10 md:p-12 flex-grow grid grid-cols-2 gap-x-10 gap-y-10 relative z-10">
                                     <div className="space-y-1.5">
-                                        <p className="text-[11px] font-black text-[#9AA3B2] uppercase tracking-[0.2em]">Permit Mode</p>
-                                        <p className="text-sm font-medium text-[#F2F4F8] uppercase tracking-wide">{focusedPermit.code_type} Verification</p>
+                                        <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Protocol Sync</p>
+                                        <p className="text-base font-bold text-white uppercase tracking-wider">{focusedPermit.code_type} Console</p>
+                                    </div>
+                                    <div className="space-y-1.5 text-right">
+                                        <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Encryption</p>
+                                        <p className="text-base font-bold text-white uppercase tracking-wider">AES-256-GCM</p>
                                     </div>
                                     <div className="space-y-1.5">
-                                        <p className="text-[11px] font-black text-[#9AA3B2] uppercase tracking-[0.2em]">Data Scope</p>
-                                        <p className="text-sm font-medium text-[#F2F4F8] uppercase tracking-wide">{focusedPermit.code_type === 'Admission' ? 'Vault Access' : 'Enquiry Context'}</p>
+                                        <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Issued On</p>
+                                        <p className="text-[15px] font-medium text-white/50 font-mono tracking-tighter uppercase">{new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                                     </div>
-                                    <div className="space-y-1.5">
-                                        <p className="text-[11px] font-black text-[#9AA3B2] uppercase tracking-[0.2em]">Issued On</p>
-                                        <p className="text-sm font-medium text-[#F2F4F8]">{new Date().toLocaleDateString()}</p>
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <p className="text-[11px] font-black text-[#9AA3B2] uppercase tracking-[0.2em]">Expiry Date</p>
-                                        <p className="text-sm font-medium text-[#F2F4F8]">{new Date(focusedPermit.expires_at).toLocaleString()}</p>
+                                    <div className="space-y-1.5 text-right">
+                                        <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Expiration</p>
+                                        <p className="text-[15px] font-medium text-indigo-400/80 font-mono tracking-tighter uppercase">{new Date(focusedPermit.expires_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                                     </div>
                                     
-                                    <div className="col-span-full pt-4 flex flex-col gap-3">
-                                        <div className="flex items-center gap-2 text-[11px] text-[#6B7280] font-medium italic">
-                                            <ShieldCheckIcon className="w-4 h-4 opacity-50" />
-                                            <span>Token encrypted using AES-256 protocol.</span>
-                                        </div>
-                                        <div className="flex items-center gap-2 text-[11px] text-[#6B7280] font-medium italic">
-                                            <ClockIcon className="w-4 h-4 opacity-50" />
-                                            <span>Artifact auto-expires in 7 days or upon redemption.</span>
+                                    <div className="col-span-full pt-8 flex flex-col gap-4 border-t border-white/5">
+                                        <div className="flex items-center gap-4 text-[12px] text-white/20 font-medium italic group/dis">
+                                            <ShieldCheckIcon className="w-5 h-5 opacity-30 group-hover/dis:text-emerald-500 transition-colors shrink-0" />
+                                            <span className="leading-relaxed">Artifact integrity verified by Gurukul Institutional Matrix. Handshake node synchronized via secure tunnel.</span>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Footer Actions */}
-                                <div className="p-8 border-t border-white/5 bg-[#0A0A0E] flex flex-col sm:flex-row gap-4 shrink-0">
+                                {/* Destructive Control */}
+                                <div className="p-8 md:p-10 border-t border-white/5 bg-black/20 flex flex-col sm:flex-row gap-4 shrink-0 z-20">
                                     <button 
                                         onClick={() => handleRevoke(focusedPermit.id)}
                                         disabled={actionLoading}
-                                        className="flex-1 py-4 rounded-xl border border-[#EF4444]/20 text-[#EF4444] text-[11px] font-black uppercase tracking-[0.2em] hover:bg-[#EF4444] hover:text-white transition-all flex items-center justify-center gap-3 active:scale-[0.98] disabled:opacity-30"
+                                        className="flex-1 h-14 rounded-2xl border border-red-500/10 text-red-500/40 text-[10px] font-bold uppercase tracking-[0.4em] hover:bg-red-500 hover:text-white hover:border-red-500 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-30 shadow-2xl"
                                     >
-                                        {actionLoading ? <Spinner size="sm" className="text-current" /> : <><LockIcon className="w-4 h-4" /> Decommission Permit</>}
+                                        {actionLoading ? <Spinner size="sm" className="text-current" /> : <><LockIcon className="w-4 h-4" /> Terminate Permit</>}
                                     </button>
                                 </div>
-                            </div>
+                            </motion.div>
                         ) : (
-                            <div className="h-full flex flex-col items-center justify-center p-12 text-center opacity-30 relative">
-                                <div className="absolute inset-0 bg-primary/5 rounded-full blur-[120px] animate-pulse pointer-events-none"></div>
-                                <div className="relative mb-12">
-                                    <div className="absolute -inset-4 bg-white/5 rounded-full blur-2xl animate-spin-slow"></div>
-                                    <KeyIcon className="w-24 h-24 text-white/40 relative z-10" />
+                            <div className="h-full flex flex-col items-center justify-center p-20 text-center relative">
+                                <div className="absolute inset-0 bg-primary/5 rounded-full blur-[160px] animate-slow-pulse pointer-events-none"></div>
+                                <div className="relative mb-16">
+                                    <div className="absolute -inset-10 bg-white/5 rounded-full blur-[60px]"></div>
+                                    <div className="w-28 h-28 rounded-[2.8rem] bg-white/[0.02] border border-white/10 flex items-center justify-center shadow-[0_0_80px_rgba(255,255,255,0.05)] relative z-10 transition-transform group-hover/hero:scale-105 duration-1000">
+                                        <KeyIcon className="w-12 h-12 text-white/10" />
+                                    </div>
                                 </div>
-                                <h3 className="text-3xl font-black uppercase tracking-[0.6em] text-white relative z-10 leading-none">Registry Standby</h3>
-                                <p className="text-lg mt-8 font-serif italic text-white/60 max-w-sm leading-relaxed relative z-10">
-                                    Select an artifact from the registry to inspect security context and operational handshake status.
-                                </p>
+                                <div className="space-y-6 relative z-10 max-w-xs">
+                                    <h3 className="text-2xl font-bold uppercase tracking-[0.4em] text-white/20 leading-tight">Registry<br/>Standby</h3>
+                                    <p className="text-base font-serif italic text-white/10 leading-relaxed">
+                                        Select an active permit from the registry to inspect security context and handshake status.
+                                    </p>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -461,10 +453,11 @@ export default function ShareCodesTab() {
             </div>
 
             <style>{`
-                .animate-spin-slow { animation: spin 15s linear infinite; }
-                @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-                .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+                .animate-slow-pulse { animation: pulse 8s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+                @keyframes pulse { 0%, 100% { opacity: 0.1; transform: scale(1); } 50% { opacity: 0.2; transform: scale(1.05); } }
+                .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.05); border-radius: 20px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(var(--primary), 0.5); }
             `}</style>
         </div>
     );

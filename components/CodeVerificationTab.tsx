@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase, formatError } from '../services/supabase';
 import { EnquiryService } from '../services/enquiry';
@@ -55,6 +54,7 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
         setVerifiedData(null);
 
         try {
+            // Step 1: Verify token context and node state
             const { data, error: rpcError } = await supabase.rpc('admin_verify_share_code', { 
                 p_code: cleanCode 
             });
@@ -67,6 +67,7 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
                 setError(data?.error || "Invalid or expired protocol token.");
             }
         } catch (err: any) {
+            console.error("Identity Handshake Error:", err);
             setError(formatError(err));
         } finally {
             setVerifying(false);
@@ -80,20 +81,18 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
         setError(null);
         
         try {
-            // Correctly handle null branchId (Head Office) or missing context
             const branchToLink = branchId === undefined || branchId === null ? null : branchId;
 
             if (verifiedData.code_type === 'Enquiry') {
-                // Enquiry Handshake flow
+                // Enquiry Domain Integration
                 const result = await EnquiryService.verifyAndLinkEnquiry(code, branchToLink);
                 if (result.success) {
                     setImportSuccess(true);
-                    setTimeout(() => onNavigate?.(result.targetModule), 1500);
+                    setTimeout(() => onNavigate?.('Enquiries'), 1500);
                 }
             } else {
-                // Admission Import flow
+                // Admission Node Integration
                 const { data, error: impError } = await supabase.rpc('admin_import_record_from_share_code', {
-                    p_code: code.trim().toUpperCase(),
                     p_admission_id: verifiedData.admission_id,
                     p_code_type: verifiedData.code_type,
                     p_branch_id: branchToLink,
@@ -101,8 +100,12 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
                 });
                 if (impError) throw impError;
                 
-                setImportSuccess(true);
-                setTimeout(() => onNavigate?.('Admissions'), 1500);
+                if (data && data.success) {
+                    setImportSuccess(true);
+                    setTimeout(() => onNavigate?.('Admissions'), 1500);
+                } else {
+                    throw new Error(data?.message || "Import protocol rejected.");
+                }
             }
         } catch (err: any) {
             setError(formatError(err));
@@ -149,26 +152,22 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
                 <div className="mt-8">
                     {error && (
                         <div className="bg-red-500/10 border border-red-500/20 text-red-500 px-8 py-6 rounded-[2rem] text-sm font-bold flex items-center gap-5 animate-in shake">
-                            <AlertTriangleIcon className="w-6 h-6 shrink-0"/>
-                            {error}
+                            <AlertTriangleIcon className="w-6 h-6 flex-shrink-0" />
+                            <span>{error}</span>
                         </div>
                     )}
                     {importSuccess && (
                         <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 px-8 py-6 rounded-[2rem] text-sm font-bold flex items-center gap-4 animate-in zoom-in-95">
                             <CheckCircleIcon className="w-6 h-6" /> 
-                            Node Identity Synchronized. Redirecting to workspace...
+                            <span>Node Identity Synchronized. Redirecting to {verifiedData?.code_type === 'Enquiry' ? 'Enquiry Desk' : 'Admission Vault'}...</span>
                         </div>
                     )}
                 </div>
             </div>
 
             {verifiedData && !error && !importSuccess && (
-                <div className="bg-[#0c0e14] border border-white/5 rounded-[4rem] p-16 shadow-2xl animate-in slide-in-from-bottom-12 duration-1000 relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-12 opacity-[0.02] pointer-events-none group-hover:scale-110 transition-transform duration-1000">
-                        <ShieldCheckIcon className="w-64 h-64 text-white" />
-                    </div>
-                    
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 relative z-10">
+                <div className="bg-[#0c0e14] border border-white/5 rounded-[4rem] p-16 shadow-2xl animate-in slide-in-from-bottom-12 duration-1000 ring-1 ring-white/5">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                         <div className="space-y-12">
                             <TechnicalInfoRow label="Subject Identity" value={verifiedData.applicant_name} valueClassName="text-4xl font-serif font-black text-white" />
                             <div className="grid grid-cols-2 gap-8">
@@ -176,20 +175,18 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
                                 <TechnicalInfoRow label="Token Type" value={verifiedData.code_type} valueClassName="text-primary font-black uppercase" />
                             </div>
                         </div>
-                        <div className="flex flex-col justify-center items-center lg:items-end">
-                             <button 
-                                onClick={handleImport} 
-                                disabled={loading} 
-                                className="w-full max-w-sm py-6 bg-primary hover:bg-primary/90 text-white font-black text-xs uppercase tracking-[0.4em] rounded-[2rem] shadow-2xl transition-all transform hover:-translate-y-1 active:scale-95 disabled:opacity-50"
-                             >
+                        <div className="flex flex-col justify-center">
+                             <button onClick={handleImport} disabled={loading} className="w-full py-6 bg-primary hover:bg-primary/90 text-white font-black text-sm uppercase tracking-[0.4em] rounded-[2rem] shadow-2xl shadow-primary/20 transition-all transform active:scale-95 group">
                                  {loading ? <Spinner size="sm" className="text-white"/> : (
-                                     <span className="flex items-center justify-center gap-3">
-                                         <ActivityIcon className="w-5 h-5"/>
-                                         Synchronize as {verifiedData.code_type}
-                                     </span>
+                                    <div className="flex items-center justify-center gap-4">
+                                        <span>Synchronize as {verifiedData.code_type}</span>
+                                        <ChevronRightIcon className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                                    </div>
                                  )}
                              </button>
-                             <p className="mt-6 text-[10px] font-black text-white/20 uppercase tracking-[0.3em]">Institutional Handshake Required</p>
+                             <p className="text-[10px] text-white/20 text-center mt-6 font-bold uppercase tracking-widest leading-relaxed">
+                                Proceeding will bind this identity node to your current branch context.
+                             </p>
                         </div>
                     </div>
                 </div>

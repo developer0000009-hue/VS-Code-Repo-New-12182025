@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Role, BuiltInRoles, UserProfile } from '../types';
 import { supabase } from '../services/supabase';
@@ -13,6 +12,7 @@ import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { XIcon } from './icons/XIcon';
 import { ChevronLeftIcon } from './icons/ChevronLeftIcon';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const formatError = (err: any): string => {
     if (!err) return "Synchronization failed.";
@@ -158,37 +158,50 @@ export const ProfileCreationPage: React.FC<ProfileCreationPageProps> = ({ profil
     if (isFetchingInitialData) return <div className="flex justify-center p-20"><Spinner size="lg" /></div>;
 
     return (
-        <div className="w-full max-w-4xl mx-auto space-y-12 animate-in fade-in duration-700 pb-32">
-            <div className="relative bg-[#0d0f14] rounded-[3rem] overflow-hidden border border-white/5 shadow-2xl ring-1 ring-white/10">
-                <div className="p-10 md:p-14 flex flex-col items-center relative z-10">
-                    <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-[#1a1d23] border-4 border-primary/20 flex items-center justify-center text-5xl md:text-7xl font-serif font-black text-white/90 shadow-2xl mb-8">
-                        {(formData.display_name || 'U').charAt(0).toUpperCase()}
+        <div className="w-full max-w-2xl mx-auto space-y-8 pb-32 font-sans">
+            {/* Main Header Identity Card */}
+            <div 
+                className="relative bg-slate-900/60 backdrop-blur-xl rounded-3xl overflow-hidden border border-white/5 shadow-2xl transition-all duration-500 animate-in fade-in slide-in-from-bottom-4"
+            >
+                <div className="p-8 md:p-10 flex flex-col items-center relative z-10">
+                    <div className="w-24 h-24 rounded-full bg-gradient-to-b from-white/10 to-transparent border border-white/10 flex items-center justify-center text-3xl font-semibold text-white shadow-xl mb-6 relative group overflow-hidden">
+                        <span className="relative z-10">{(formData.display_name || 'U').charAt(0).toUpperCase()}</span>
+                        <div className="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
-                    <h2 className="text-4xl md:text-5xl font-serif font-black text-white tracking-tighter text-center">
-                        {formData.display_name || 'Identity Node'}
+                    <h2 className="text-2xl md:text-3xl font-bold text-white tracking-tight text-center">
+                        {formData.display_name || 'New Identity'}
                     </h2>
-                    <p className="text-primary text-xs font-black uppercase tracking-[0.3em] mt-4">{role}</p>
+                    <p className="text-primary/70 text-[10px] font-bold uppercase tracking-[0.3em] mt-3 flex items-center gap-2">
+                        <ShieldCheckIcon className="w-3 h-3" />
+                        {role}
+                    </p>
                 </div>
 
-                <div className="px-10 border-t border-white/5 flex justify-center gap-12 bg-white/[0.01]">
-                    <button onClick={() => setActiveTab('details')} className={`py-6 text-[10px] font-black uppercase tracking-[0.2em] relative transition-all ${activeTab === 'details' ? 'text-primary' : 'text-white/30'}`}>
-                        Core Registry {activeTab === 'details' && <div className="absolute bottom-0 left-0 w-full h-1 bg-primary rounded-t-full shadow-[0_0_10px_rgba(var(--primary),0.5)]"></div>}
+                <div className="px-8 border-t border-white/5 flex justify-center gap-10 bg-black/20">
+                    <button 
+                        onClick={() => setActiveTab('details')} 
+                        className={`py-4 text-[11px] font-bold uppercase tracking-widest relative transition-all duration-300 ${activeTab === 'details' ? 'text-primary' : 'text-white/30 hover:text-white/50'}`}
+                    >
+                        Core Registry {activeTab === 'details' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary rounded-t-full shadow-[0_0_12px_rgba(var(--primary),0.6)]"></div>}
                     </button>
-                    <button onClick={() => setActiveTab('contact')} className={`py-6 text-[10px] font-black uppercase tracking-[0.2em] relative transition-all ${activeTab === 'contact' ? 'text-primary' : 'text-white/30'}`}>
-                        Contact & Node {activeTab === 'contact' && <div className="absolute bottom-0 left-0 w-full h-1 bg-primary rounded-t-full shadow-[0_0_10px_rgba(var(--primary),0.5)]"></div>}
+                    <button 
+                        onClick={() => setActiveTab('contact')} 
+                        className={`py-4 text-[11px] font-bold uppercase tracking-widest relative transition-all duration-300 ${activeTab === 'contact' ? 'text-primary' : 'text-white/30 hover:text-white/50'}`}
+                    >
+                        Contact & Node {activeTab === 'contact' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-primary rounded-t-full shadow-[0_0_12px_rgba(var(--primary),0.6)]"></div>}
                     </button>
                 </div>
             </div>
 
             {error && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-6 rounded-[2rem] flex items-center gap-5 animate-in shake">
-                    <XIcon className="w-6 h-6 shrink-0" />
-                    <span className="text-sm font-bold">{error}</span>
+                <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-5 rounded-2xl flex items-center gap-4 animate-in shake">
+                    <XIcon className="w-5 h-5 shrink-0" />
+                    <span className="text-xs font-semibold uppercase tracking-wider">{error}</span>
                 </div>
             )}
 
-            <form onSubmit={handleSubmit}>
-                <div className="bg-[#0a0c10]/60 backdrop-blur-3xl border border-white/5 rounded-[3.5rem] p-10 md:p-16 shadow-2xl">
+            <form onSubmit={handleSubmit} className="space-y-10">
+                <div className="bg-slate-900/60 backdrop-blur-xl border border-white/5 rounded-3xl p-8 md:p-10 shadow-2xl space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
                     {role === BuiltInRoles.PARENT_GUARDIAN ? (
                         <ParentForm formData={formData} handleChange={handleFormChange} activeTab={activeTab} />
                     ) : role === BuiltInRoles.TEACHER ? (
@@ -196,34 +209,49 @@ export const ProfileCreationPage: React.FC<ProfileCreationPageProps> = ({ profil
                     ) : role === BuiltInRoles.SCHOOL_ADMINISTRATION ? (
                         <SchoolAdminForm formData={formData} handleChange={handleFormChange} isInitialCreation={false} />
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                            <FloatingPremiumInput label="Legal Name" name="display_name" value={formData.display_name} onChange={handleFormChange} icon={<UserIcon className="w-5 h-5"/>} />
-                            <FloatingPremiumInput label="Contact Number" name="phone" value={formData.phone} onChange={handleFormChange} icon={<PhoneIcon className="w-5 h-5"/>} />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <FloatingPremiumInput label="Full Legal Name" name="display_name" value={formData.display_name} onChange={handleFormChange} icon={<UserIcon className="w-4 h-4"/>} />
+                            <FloatingPremiumInput label="Contact Number" name="phone" value={formData.phone} onChange={handleFormChange} icon={<PhoneIcon className="w-4 h-4"/>} />
                         </div>
                     )}
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-8 mt-16 px-4">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-8 mt-12 px-2 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-200">
                     {showBackButton ? (
-                        <button type="button" onClick={onBack} className="text-[10px] font-black text-white/30 hover:text-white transition-all uppercase tracking-[0.3em] flex items-center gap-3">
-                            <ChevronLeftIcon className="w-4 h-4" /> Exit Setup
+                        <button type="button" onClick={onBack} className="group text-[11px] font-bold text-white/30 hover:text-white transition-all uppercase tracking-widest flex items-center gap-2.5">
+                            <ChevronLeftIcon className="w-4 h-4 transition-transform group-hover:-translate-x-1" /> Return to Selection
                         </button>
                     ) : <div/>}
                     
-                    <button type="submit" disabled={loading || !isFormValid} className={`px-14 py-6 rounded-[2rem] font-black text-sm uppercase tracking-[0.3em] transition-all flex items-center gap-4 ${!isFormValid || loading ? 'bg-white/5 text-white/10 cursor-not-allowed' : 'bg-primary text-white shadow-2xl shadow-primary/20 hover:-translate-y-1 active:scale-95'}`}>
-                        {loading ? <Spinner size="sm" className="text-white"/> : <><CheckCircleIcon className="w-6 h-6"/> Complete Onboarding</>}
+                    <button 
+                        type="submit" 
+                        disabled={loading || !isFormValid} 
+                        className={`h-[48px] px-10 rounded-xl font-bold text-[12px] uppercase tracking-[0.15em] transition-all flex items-center gap-3 group ${!isFormValid || loading ? 'bg-white/5 text-white/10 cursor-not-allowed border border-white/5' : 'bg-primary text-primary-foreground shadow-xl shadow-primary/20 hover:scale-[1.02] hover:shadow-primary/40 active:scale-[0.98]'}`}
+                    >
+                        {loading ? <Spinner size="sm" className="text-white"/> : <><CheckCircleIcon className="w-4 h-4"/> Complete Setup</>}
                     </button>
                 </div>
             </form>
+            
+            <div className="text-center py-4 opacity-40 animate-in fade-in duration-1000 delay-300">
+                <p className="text-[11px] font-medium tracking-wide flex items-center justify-center gap-2 text-white/60">
+                    <ShieldCheckIcon className="w-3.5 h-3.5" />
+                    Your information is encrypted and used only for institutional verification.
+                </p>
+            </div>
         </div>
     );
 };
 
 const FloatingPremiumInput = ({ label, icon, ...props }: any) => (
     <div className="relative group w-full">
-        <div className="absolute top-1/2 -translate-y-1/2 left-5 text-white/20 group-focus-within:text-primary transition-colors duration-300 z-10 pointer-events-none">{icon}</div>
-        <input {...props} placeholder=" " className="peer block w-full h-[68px] rounded-2xl border border-white/10 bg-black/40 px-6 pl-14 text-sm text-white font-medium focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none" />
-        <label className="absolute left-14 top-0 -translate-y-1/2 bg-[#0d0f14] px-2 text-[10px] font-black uppercase text-white/40 tracking-[0.2em] peer-placeholder-shown:top-1/2 peer-placeholder-shown:text-sm peer-placeholder-shown:font-medium peer-placeholder-shown:normal-case peer-focus:top-0 peer-focus:text-[10px] peer-focus:font-black peer-focus:uppercase peer-focus:text-primary transition-all duration-300 pointer-events-none">
+        <div className="absolute top-1/2 -translate-y-1/2 left-4 text-white/20 group-focus-within:text-primary transition-colors duration-300 z-10 pointer-events-none">{icon}</div>
+        <input 
+            {...props} 
+            placeholder=" " 
+            className="peer block w-full h-[48px] rounded-xl border border-white/10 bg-black/20 px-5 pl-12 text-[15px] text-white font-medium focus:ring-4 focus:ring-primary/5 focus:border-primary/40 transition-all outline-none" 
+        />
+        <label className="absolute left-12 top-0 -translate-y-1/2 bg-slate-900/90 px-1.5 text-[10px] font-bold uppercase text-white/30 tracking-[0.2em] peer-placeholder-shown:top-1/2 peer-placeholder-shown:text-[14px] peer-placeholder-shown:font-normal peer-placeholder-shown:normal-case peer-focus:top-0 peer-focus:text-[10px] peer-focus:font-bold peer-focus:uppercase peer-focus:text-primary transition-all duration-300 pointer-events-none">
             {label}
         </label>
     </div>
