@@ -1,9 +1,8 @@
-
 import { supabase } from './supabase';
 
 export const BUCKETS = {
     PROFILES: 'profile-images',
-    DOCUMENTS: 'student-documents' // Standardized for Admissions
+    DOCUMENTS: 'guardian-documents'
 } as const;
 
 export type BucketName = typeof BUCKETS[keyof typeof BUCKETS];
@@ -19,20 +18,19 @@ export const StorageService = {
 
     /**
      * Standardizes document paths for Admission Sync
-     * Pattern: {admission_id}/{artifact_type}/{filename}
+     * Pattern: parent/{parent_id}/adm-{admission_id}/req-{requirement_id}_{timestamp}
      */
-    getDocumentPath: (admissionId: string, type: string, fileName: string) => {
-        const cleanType = type.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+    getDocumentPath: (parentId: string, admissionId: string, requirementId: number, fileName: string) => {
         const ext = fileName.split('.').pop() || 'dat';
-        return `${admissionId}/${cleanType}/${crypto.randomUUID()}.${ext}`;
+        return `parent/${parentId}/adm-${admissionId}/req-${requirementId}_${Date.now()}.${ext}`;
     },
 
-    async upload(bucket: BucketName, path: string, file: File) {
+    async upload(bucket: BucketName, path: string, file: File, onProgress?: (progress: number) => void) {
         const { data, error } = await supabase.storage
             .from(bucket)
             .upload(path, file, {
                 cacheControl: '3600',
-                upsert: true
+                upsert: true,
             });
 
         if (error) throw error;

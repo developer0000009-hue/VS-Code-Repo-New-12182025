@@ -1,236 +1,383 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../../services/supabase';
-import { AdmissionApplication } from '../../types';
+import { supabase, formatError } from '../../services/supabase';
+import { StorageService, BUCKETS } from '../../services/storage';
+import { UserProfile, DocumentRequirement as RequirementWithDocs, AdmissionApplication } from '../../types';
 import Spinner from '../common/Spinner';
 import { DocumentTextIcon } from '../icons/DocumentTextIcon';
 import { CheckCircleIcon } from '../icons/CheckCircleIcon';
-import { XCircleIcon } from '../icons/XCircleIcon';
-import { ClockIcon } from '../icons/ClockIcon';
 import { ChevronDownIcon } from '../icons/ChevronDownIcon';
 import { UploadIcon } from '../icons/UploadIcon';
 import { EyeIcon } from '../icons/EyeIcon';
 import { ShieldCheckIcon } from '../icons/ShieldCheckIcon';
 import { PlusIcon } from '../icons/PlusIcon';
+import { AlertTriangleIcon } from '../icons/AlertTriangleIcon';
 import PremiumAvatar from '../common/PremiumAvatar';
 import { motion, AnimatePresence } from 'framer-motion';
+import { XIcon } from '../icons/XIcon';
+import { PaperClipIcon } from '../icons/PaperClipIcon';
+import { DownloadIcon } from '../icons/DownloadIcon';
+import { FileTextIcon } from '../icons/FileTextIcon';
 
-// --- Internal Types ---
-
-interface DocumentFile {
-    id: number;
-    file_name: string;
-    storage_path: string;
-    uploaded_at: string;
-}
-
-interface RequirementWithDocs {
-    id: number;
-    admission_id: string;
-    document_name: string;
-    status: 'Pending' | 'Submitted' | 'Verified' | 'Rejected';
-    is_mandatory: boolean;
-    notes_for_parent: string;
-    rejection_reason: string;
-    applicant_name: string;
-    profile_photo_url: string | null;
-    admission_documents: DocumentFile[];
-}
-
+// --- Types ---
 interface GroupedRequirementData {
     admissionId: string;
     applicantName: string;
     profilePhotoUrl: string | null;
+    grade: string;
     requirements: RequirementWithDocs[];
 }
 
+interface DocumentsTabProps {
+    profile: UserProfile;
+    focusOnAdmissionId?: string | null;
+    onClearFocus: () => void;
+    setActiveComponent?: (id: string) => void;
+}
+
+const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
 // --- Sub-Components ---
 
-const DocumentCard: React.FC<{ 
+const CollapsibleDocumentCard: React.FC<{ 
     req: RequirementWithDocs; 
-    onUpload: (file: File, reqId: number, admId: string) => Promise<void>;
+    onUpload: (file: File, reqId: number, admId: string, onProgress: (progress: number) => void) => Promise<void>;
 }> = ({ req, onUpload }) => {
-    const [isUploading, setIsUploading] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(false);
+    const [isDragOver, setIsDragOver] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [isDownloading, setIsDownloading] = useState(false);
+    
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const latestDoc = req.admission_documents?.[0];
-    const isLocked = req.status === 'Verified';
+    const isVerified = req.status === 'Verified';
     const isRejected = req.status === 'Rejected';
-    const hasFile = !!latestDoc || req.status === 'Submitted';
+    const hasSubmission = (req.admission_documents && req.admission_documents.length > 0) || req.status === 'Submitted';
+    const docFile = req.admission_documents?.[0];
 
-    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files?.length) return;
-        setIsUploading(true);
+    const toggleExpand = () => setIsExpanded(!isExpanded);
+
+    const handleFileSelect = async (files: FileList | null) => {
+        if (!files?.length || uploadProgress !== null) return;
+        const selectedFile = files[0];
+        if (selectedFile.size > 10 * 1024 * 1024) { 
+            setError("File size exceeds 10MB limit.");
+            return;
+        }
+
+        setError(null);
+        setUploadProgress(0);
         try {
-            await onUpload(e.target.files[0], req.id, req.admission_id);
+            await onUpload(selectedFile, req.id, req.admission_id, (progress) => setUploadProgress(progress));
         } catch (err: any) {
-            console.error("Sync Failure", err);
+            setError(formatError(err));
         } finally {
-            setIsUploading(false);
+            setUploadProgress(null);
+            if(fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+    
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(false);
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            handleFileSelect(e.dataTransfer.files);
+        }
+    };
+
+    const handleDownload = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!docFile?.storage_path) return;
+        setIsDownloading(true);
+        try {
+            const { data, error } = await supabase.storage.from(BUCKETS.DOCUMENTS).download(docFile.storage_path);
+            if (error) throw error;
+            const url = window.URL.createObjectURL(data);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = docFile.file_name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            alert("Download failed. Please try again.");
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+
+    const handleView = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!docFile?.storage_path) return;
+        try {
+            const url = await StorageService.getSignedUrl(docFile.storage_path);
+            window.open(url, '_blank');
+        } catch (err) {
+            alert("Unable to open file preview.");
         }
     };
 
     return (
         <motion.div 
-            variants={{
-                hidden: { opacity: 0, y: 10 },
-                visible: { opacity: 1, y: 0 }
-            }}
-            className={`relative rounded-[1.5rem] border transition-all duration-500 group overflow-hidden bg-slate-900/40 shadow-inner flex flex-col min-h-[320px] ${isLocked ? 'border-emerald-500/10' : isRejected ? 'border-rose-500/20' : 'border-white/5 hover:border-primary/20'}`}
+            layout
+            className={`group relative rounded-[2rem] border transition-all duration-300 overflow-hidden ${
+                isVerified 
+                    ? 'bg-emerald-950/10 border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.05)]' 
+                    : isRejected 
+                        ? 'bg-red-950/10 border-red-500/20' 
+                        : 'bg-[#13151a] border-white/5 hover:border-white/10 hover:bg-[#16181d]'
+            }`}
         >
-            {/* Subtle Inner Gradient */}
-            <div className={`absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent pointer-events-none ${isLocked ? 'from-emerald-500/[0.03]' : ''}`}></div>
-            
-            <div className="p-7 md:p-8 flex flex-col h-full z-10">
-                <div className="flex justify-between items-start mb-10">
-                    <div className={`p-3.5 rounded-2xl shadow-inner transition-all duration-500 ${isLocked ? 'bg-emerald-500/10 text-emerald-400/80' : 'bg-white/5 text-white/20 group-hover:text-primary group-hover:bg-primary/10 border border-white/5'}`}>
-                        <DocumentTextIcon className="w-6 h-6" />
+            {/* --- Header --- */}
+            <div 
+                onClick={toggleExpand}
+                className="p-5 flex items-center justify-between cursor-pointer"
+            >
+                <div className="flex items-center gap-4">
+                    <div className={`p-2.5 rounded-xl transition-colors ${
+                        isVerified ? 'bg-emerald-500/10 text-emerald-400' : 
+                        isRejected ? 'bg-red-500/10 text-red-400' : 
+                        hasSubmission ? 'bg-blue-500/10 text-blue-400' :
+                        'bg-white/5 text-white/30'
+                    }`}>
+                        {isVerified ? <CheckCircleIcon className="w-5 h-5" /> : 
+                         isRejected ? <AlertTriangleIcon className="w-5 h-5" /> :
+                         <DocumentTextIcon className="w-5 h-5" />}
                     </div>
-                    <div className="flex flex-col items-end gap-1.5">
-                        <span className={`px-3 py-1 rounded-lg text-[9px] font-bold uppercase tracking-[0.15em] border backdrop-blur-md transition-colors duration-500 ${isLocked ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5' : isRejected ? 'text-rose-400 border-rose-500/20 bg-rose-500/5' : hasFile ? 'text-blue-400 border-blue-500/20 bg-blue-500/5' : 'text-white/20 border-white/5 bg-white/5'}`}>
-                            {req.status}
-                        </span>
-                        {isLocked && <span className="text-[8px] font-medium text-white/20 uppercase tracking-widest">System Sealed</span>}
+                    <div>
+                        <h4 className="text-sm font-bold text-white leading-tight">{req.document_name}</h4>
+                        <div className="flex items-center gap-2 mt-1">
+                            {req.is_mandatory && <span className="text-[9px] font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">MANDATORY</span>}
+                            {docFile && <span className="text-[9px] font-mono text-white/30">{formatFileSize(docFile.file_size || 0)}</span>}
+                        </div>
                     </div>
                 </div>
 
-                <div className="flex-grow">
-                    <h4 className="font-sans font-bold text-white/90 text-[16px] mb-2 transition-colors uppercase tracking-tight leading-snug">{req.document_name}</h4>
-                    <p className="text-[10px] text-white/30 font-bold uppercase tracking-widest">{req.is_mandatory ? 'Institutional Requirement' : 'Supplemental Asset'}</p>
-                    
-                    {isRejected && (
-                        <div className="mt-5 p-4 bg-rose-500/5 border border-rose-500/10 rounded-2xl animate-in slide-in-from-top-2">
-                            <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                                <AlertTriangleIcon className="w-3 h-3" /> Correction Needed
-                            </p>
-                            <p className="text-[12px] text-rose-200/50 italic leading-relaxed font-serif">"{req.rejection_reason}"</p>
+                <div className="flex items-center gap-3">
+                    {/* Primary Action Buttons (Visible if uploaded) */}
+                    {hasSubmission && !isRejected && (
+                        <div className="flex items-center gap-1 mr-2">
+                             <button 
+                                onClick={handleDownload}
+                                disabled={isDownloading}
+                                className="p-2 rounded-lg text-white/30 hover:text-primary hover:bg-white/5 transition-colors"
+                                title="Download"
+                             >
+                                 {isDownloading ? <Spinner size="sm"/> : <DownloadIcon className="w-4 h-4"/>}
+                             </button>
+                             <button 
+                                onClick={handleView}
+                                className="p-2 rounded-lg text-white/30 hover:text-primary hover:bg-white/5 transition-colors"
+                                title="Preview"
+                             >
+                                 <EyeIcon className="w-4 h-4"/>
+                             </button>
                         </div>
                     )}
-                </div>
-
-                <div className="mt-8 pt-6 border-t border-white/[0.03]">
-                    {hasFile && !isRejected ? (
-                        <button 
-                            className="w-full h-11 flex items-center justify-center gap-3 rounded-xl text-[10px] font-bold bg-white/[0.03] border border-white/5 text-white/40 hover:text-white/90 hover:bg-white/10 transition-all uppercase tracking-widest shadow-sm active:scale-[0.98]"
-                        >
-                            <EyeIcon className="w-4 h-4 opacity-40" /> Inspect Artifact
-                        </button>
-                    ) : (
-                        <button 
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={isUploading}
-                            className="w-full h-11 flex items-center justify-center gap-3 rounded-xl text-[10px] font-black text-white bg-primary hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 active:scale-[1.02] active:shadow-primary/30 uppercase tracking-[0.15em] group/btn"
-                        >
-                            {isUploading ? <Spinner size="sm" className="text-white"/> : <><UploadIcon className="w-4 h-4 group-hover/btn:-translate-y-0.5 transition-transform duration-300" /> Secure Upload</>}
-                        </button>
-                    )}
-                    <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} />
+                    
+                    <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-sm ${
+                        isVerified ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
+                        isRejected ? 'bg-red-500/10 border-red-500/20 text-red-400' :
+                        hasSubmission ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' :
+                        'bg-white/5 border-white/10 text-white/30'
+                    }`}>
+                        {uploadProgress !== null ? 'Uploading...' : req.status}
+                    </div>
+                    <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                        <ChevronDownIcon className="w-4 h-4 text-white/20 group-hover:text-white/50" />
+                    </motion.div>
                 </div>
             </div>
-            {/* Background Texture */}
-            <div className="absolute inset-0 opacity-[0.02] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
+
+            {/* --- Expanded Content --- */}
+            <AnimatePresence>
+                {isExpanded && (
+                    <motion.div 
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                        className="border-t border-white/5 bg-black/20"
+                    >
+                        <div className="p-6 pt-4">
+                            {isRejected && (
+                                <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                                    <p className="text-[9px] font-black uppercase text-red-500 mb-1">Attention Needed</p>
+                                    <p className="text-xs text-red-300/80 font-medium leading-relaxed">{req.rejection_reason || 'Document does not meet criteria.'}</p>
+                                </div>
+                            )}
+
+                            {hasSubmission && docFile && !isRejected ? (
+                                <div className="space-y-4">
+                                     <div className="flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/5">
+                                        <div className="p-2 bg-black/40 rounded-xl text-white/40 border border-white/5">
+                                            {docFile.mime_type?.includes('pdf') ? <FileTextIcon className="w-4 h-4"/> : <PaperClipIcon className="w-4 h-4"/>}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-xs text-white/80 font-bold truncate" title={docFile.file_name}>{docFile.file_name}</p>
+                                            <p className="text-[9px] text-white/30 font-mono mt-0.5 uppercase tracking-wider">{new Date(docFile.uploaded_at).toLocaleString()}</p>
+                                        </div>
+                                    </div>
+                                    {!isVerified && (
+                                        <button onClick={() => fileInputRef.current?.click()} className="w-full py-3 rounded-xl border border-dashed border-white/10 text-xs font-bold text-white/40 hover:text-white hover:border-white/20 hover:bg-white/5 transition-all">Replace File</button>
+                                    )}
+                                </div>
+                            ) : (
+                                <div 
+                                    onClick={() => fileInputRef.current?.click()}
+                                    onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                                    onDragLeave={(e) => { e.preventDefault(); setIsDragOver(false); }}
+                                    onDrop={handleDrop}
+                                    className={`
+                                        relative h-32 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-3 cursor-pointer transition-all duration-300
+                                        ${isDragOver ? 'border-primary bg-primary/5' : 'border-white/10 hover:border-white/20 hover:bg-white/[0.02]'}
+                                    `}
+                                >
+                                    <div className={`p-2.5 rounded-full ${isDragOver ? 'bg-primary/20 text-primary' : 'bg-white/5 text-white/30'} transition-colors`}>
+                                        <UploadIcon className="w-5 h-5" />
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-[11px] font-bold text-white/60 uppercase tracking-wider">Click or Drop to Upload</p>
+                                        <p className="text-[9px] text-white/20 font-bold uppercase tracking-widest mt-1">Max 10MB</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {uploadProgress !== null && (
+                                <div className="mt-4 relative h-8 w-full bg-black/40 rounded-xl overflow-hidden border border-white/5">
+                                    <motion.div 
+                                        className="absolute top-0 left-0 bottom-0 bg-primary/20"
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${uploadProgress}%` }}
+                                        transition={{ duration: 0.2 }}
+                                    />
+                                    <div className="absolute inset-0 flex items-center justify-center text-[9px] font-black text-primary uppercase tracking-widest">
+                                        Encrypting & Uploading {uploadProgress.toFixed(0)}%
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {error && (
+                                 <p className="text-[10px] text-red-400 font-bold mt-3 text-center bg-red-500/10 p-2 rounded-lg border border-red-500/20">{error}</p>
+                            )}
+                            <input ref={fileInputRef} type="file" className="hidden" onChange={e => handleFileSelect(e.target.files)} />
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </motion.div>
     );
 };
 
-const AlertTriangleIcon = ({ className }: { className?: string }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-);
-
-// --- Main Container ---
-
-const DocumentsTab: React.FC<{ focusOnAdmissionId?: string | null; onClearFocus?: () => void }> = ({ focusOnAdmissionId }) => {
+const DocumentsTab: React.FC<DocumentsTabProps> = ({ profile, focusOnAdmissionId, onClearFocus, setActiveComponent }) => {
     const [loading, setLoading] = useState(true);
-    const [groupedRequirements, setGroupedRequirements] = useState<Record<string, GroupedRequirementData>>({});
-    const [expandedChildIds, setExpandedChildIds] = useState<Set<string>>(new Set());
-    const [isFirstLoad, setIsFirstLoad] = useState(true);
+    const [groupedData, setGroupedData] = useState<Record<string, GroupedRequirementData>>({});
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+    const [error, setError] = useState<string | null>(null);
 
     const fetchData = useCallback(async (isSilent = false) => {
         if (!isSilent) setLoading(true);
+        setError(null);
         try {
-            const { data: ads, error: adsErr } = await supabase.rpc('get_my_children_profiles');
-            if (adsErr) throw adsErr;
-
-            if (ads?.length) {
-                await Promise.all(ads.map((child: any) => 
-                    supabase.rpc('parent_initialize_vault_slots', { p_admission_id: child.id })
-                ));
-            }
-
-            const { data: reqs, error: rpcError } = await supabase.rpc('parent_get_document_requirements');
-            if (rpcError) throw rpcError;
+            await supabase.rpc('parent_initialize_vault_slots_all');
+            const { data: children, error: childError } = await supabase.rpc('get_my_children_profiles');
+            if (childError) throw childError;
+            const { data: reqs, error: reqsErr } = await supabase.rpc('parent_get_document_requirements', { p_user_id: profile.id });
+            if (reqsErr) throw reqsErr;
 
             const grouped: Record<string, GroupedRequirementData> = {};
-            (reqs || []).forEach((req: RequirementWithDocs) => {
-                if (!grouped[req.admission_id]) {
-                    grouped[req.admission_id] = {
-                        admissionId: req.admission_id,
-                        applicantName: req.applicant_name,
-                        profilePhotoUrl: req.profile_photo_url,
-                        requirements: []
-                    };
-                }
-                grouped[req.admission_id].requirements.push(req);
+            
+            (children || []).forEach((child: AdmissionApplication) => {
+                grouped[child.id] = {
+                    admissionId: child.id,
+                    applicantName: child.applicant_name,
+                    profilePhotoUrl: child.profile_photo_url,
+                    grade: child.grade,
+                    requirements: []
+                };
             });
 
-            setGroupedRequirements(grouped);
-
-            if (isFirstLoad && !isSilent) {
-                if (focusOnAdmissionId) {
-                    setExpandedChildIds(new Set([focusOnAdmissionId]));
-                } else if (Object.keys(grouped).length > 0) {
-                    setExpandedChildIds(new Set([Object.keys(grouped)[0]]));
+            (reqs || []).forEach((req: RequirementWithDocs) => {
+                if (grouped[req.admission_id]) {
+                    grouped[req.admission_id].requirements.push(req);
                 }
-                setIsFirstLoad(false);
-            }
+            });
 
-        } catch (err) {
-            console.error("Registry Sync Fail", err);
+            // Sort requirements
+            Object.values(grouped).forEach(group => {
+                group.requirements.sort((a, b) => {
+                    if (a.is_mandatory && !b.is_mandatory) return -1;
+                    if (!a.is_mandatory && b.is_mandatory) return 1;
+                    return a.document_name.localeCompare(b.document_name);
+                });
+            });
+
+            setGroupedData(grouped);
+            
+            if (!isSilent) {
+                if (focusOnAdmissionId && grouped[focusOnAdmissionId]) {
+                    setExpandedIds(new Set([focusOnAdmissionId]));
+                    onClearFocus();
+                } else if (Object.keys(grouped).length > 0 && expandedIds.size === 0) {
+                    setExpandedIds(new Set([Object.keys(grouped)[0]]));
+                }
+            }
+        } catch (err: any) {
+            setError(formatError(err));
         } finally {
             if (!isSilent) setLoading(false);
         }
-    }, [focusOnAdmissionId, isFirstLoad]);
+    }, [profile.id, focusOnAdmissionId, onClearFocus, expandedIds.size]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
-    const handleUpload = async (file: File, reqId: number, admId: string) => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+    const handleUpload = async (file: File, reqId: number, admId: string, onProgress: (progress: number) => void) => {
+        if (!profile.id) throw new Error("Identity context missing.");
         
-        const filePath = `parent/${user.id}/adm-${admId}/req-${reqId}_${Date.now()}`;
-        const { error: upErr } = await supabase.storage.from('guardian-documents').upload(filePath, file);
-        if (upErr) throw upErr;
+        // Simulating upload progress for better UX
+        const interval = setInterval(() => {
+           onProgress(Math.random() * 50 + 20); 
+        }, 300);
 
-        setGroupedRequirements(prev => {
-            const next = { ...prev };
-            const group = next[admId];
-            if (group) {
-                const reqIndex = group.requirements.findIndex(r => r.id === reqId);
-                if (reqIndex !== -1) {
-                    group.requirements[reqIndex] = {
-                        ...group.requirements[reqIndex],
-                        status: 'Submitted'
-                    };
-                }
-            }
-            return next;
-        });
+        try {
+            const path = StorageService.getDocumentPath(profile.id, admId, reqId, file.name);
+            const { error: upErr } = await supabase.storage.from(BUCKETS.DOCUMENTS).upload(path, file, { upsert: true });
+            
+            clearInterval(interval);
+            onProgress(100);
 
-        const { error: dbErr } = await supabase.rpc('parent_complete_document_upload', {
-            p_requirement_id: reqId,
-            p_admission_id: admId,
-            p_file_name: file.name,
-            p_storage_path: filePath,
-            p_file_size: file.size,
-            p_mime_type: file.type
-        });
-        
-        if (dbErr) throw dbErr;
-        fetchData(true);
+            if (upErr) throw upErr;
+
+            const { error: dbErr } = await supabase.rpc('parent_complete_document_upload', {
+                p_requirement_id: reqId,
+                p_admission_id: admId,
+                p_file_name: file.name,
+                p_storage_path: path,
+                p_file_size: file.size,
+                p_mime_type: file.type
+            });
+            
+            if (dbErr) throw dbErr;
+            
+            await new Promise(resolve => setTimeout(resolve, 500)); 
+            await fetchData(true);
+        } catch (error) {
+            clearInterval(interval);
+            throw error;
+        }
     };
 
-    const toggleChild = (id: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        setExpandedChildIds(prev => {
+    const toggleExpand = (id: string) => {
+        setExpandedIds(prev => {
             const next = new Set(prev);
             if (next.has(id)) next.delete(id);
             else next.add(id);
@@ -238,166 +385,125 @@ const DocumentsTab: React.FC<{ focusOnAdmissionId?: string | null; onClearFocus?
         });
     };
 
-    if (loading && Object.keys(groupedRequirements).length === 0) return (
-        <div className="flex flex-col items-center justify-center py-40 gap-6">
+    if (loading) return (
+        <div className="py-40 flex flex-col items-center justify-center gap-6">
             <Spinner size="lg" className="text-primary"/>
-            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/20 animate-pulse">Establishing Secure Context</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white/20 animate-pulse">Synchronizing Security Vault</p>
         </div>
     );
-
-    const childIds = Object.keys(groupedRequirements);
+    
+    if (error) return <div className="p-6 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-center font-bold">{error}</div>;
 
     return (
-        <div className="max-w-7xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-2 duration-700 pb-32">
-            
-            {/* --- MASTER HEADER --- */}
-            <div className="relative p-8 md:p-12 rounded-[2rem] border border-white/5 overflow-hidden">
-                {/* Subtle Hero Wash */}
-                <div className="absolute top-0 right-0 w-[40%] h-full bg-gradient-to-l from-primary/5 to-transparent pointer-events-none"></div>
-                
-                <div className="relative z-10 max-w-2xl">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="p-3 bg-primary/10 rounded-2xl text-primary border border-primary/10 shadow-inner">
-                            <ShieldCheckIcon className="w-6 h-6"/>
-                        </div>
-                        <span className="text-[10px] font-black uppercase text-primary tracking-[0.4em] border-l border-primary/20 pl-4">Institutional Integrity</span>
+        <div className="max-w-7xl mx-auto space-y-12 pb-32 animate-in fade-in duration-700">
+            {/* Module Header */}
+            <div className="relative p-10 md:p-16 rounded-[3rem] bg-[#0c0e12] border border-white/5 overflow-hidden shadow-2xl ring-1 ring-white/5">
+                <div className="absolute -right-40 -top-40 w-[600px] h-[600px] bg-primary/5 rounded-full blur-[120px] pointer-events-none opacity-40"></div>
+                <div className="relative z-10">
+                    <div className="flex items-center gap-4 mb-6">
+                        <div className="p-3 bg-emerald-500/10 rounded-2xl text-emerald-500 border border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.15)]"><ShieldCheckIcon className="w-6 h-6"/></div>
+                        <span className="text-[11px] font-black uppercase text-emerald-500 tracking-[0.4em] drop-shadow-sm">Integrity Center</span>
                     </div>
-                    <h2 className="text-3xl md:text-5xl font-serif font-black text-white/90 tracking-tighter uppercase leading-tight mb-6">
-                        Verification <span className="text-white/20 italic">Vault.</span>
-                    </h2>
-                    <p className="text-white/40 text-[15px] leading-relaxed font-serif italic border-l border-white/10 pl-8 max-width-[90%]">
-                        Central repository for verified credentials, academic records, and institutional proofs. Finalize node synchronization through secure artifact submission.
+                    <h2 className="text-4xl md:text-5xl font-serif font-black text-white tracking-tighter uppercase leading-none">Artifact <span className="text-white/20 italic">Vault.</span></h2>
+                    <p className="text-white/40 text-lg font-serif italic border-l border-white/10 pl-8 max-w-lg leading-relaxed mt-6">
+                        Finalize institutional identity synchronization by providing verified artifacts for enrollment nodes.
                     </p>
                 </div>
             </div>
 
-            {/* --- REGISTRY NODES --- */}
+            {/* Students List */}
             <div className="space-y-8 px-2">
-                {childIds.map(admId => {
-                    const group = groupedRequirements[admId];
-                    const isExpanded = expandedChildIds.has(admId);
-                    const verifiedCount = group.requirements.filter(r => r.status === 'Verified').length;
-                    const totalCount = group.requirements.length;
-                    const completion = totalCount > 0 ? Math.round((verifiedCount / totalCount) * 100) : 0;
-                    const isFullySealed = completion === 100;
+                {Object.keys(groupedData).map(admId => {
+                    const node = groupedData[admId];
+                    const isExpanded = expandedIds.has(admId);
+                    const verifiedCount = node.requirements.filter(r => r.status === 'Verified').length;
+                    const total = node.requirements.length;
+                    const percent = total > 0 ? Math.round((verifiedCount / total) * 100) : 0;
 
                     return (
-                        <div 
-                            key={admId} 
-                            className={`group relative bg-[#0d1017]/60 backdrop-blur-xl border transition-all duration-700 rounded-[2.5rem] overflow-hidden shadow-2xl ${isExpanded ? 'border-primary/20 ring-1 ring-white/5 shadow-primary/5' : 'border-white/5 hover:border-white/10'}`}
-                        >
-                            <div 
-                                className={`p-8 md:p-10 flex flex-col lg:flex-row justify-between items-center gap-8 cursor-pointer transition-all duration-500 ${isExpanded ? 'bg-white/[0.01]' : 'hover:bg-white/[0.01]'}`}
-                                onClick={(e) => toggleChild(admId, e)}
-                            >
-                                <div className="flex items-center gap-8 w-full lg:w-auto">
-                                    <div className="relative shrink-0">
-                                        <div className={`absolute -inset-2 rounded-full blur-2xl opacity-10 transition-all duration-1000 ${isFullySealed ? 'bg-emerald-500' : 'bg-primary'}`}></div>
-                                        <PremiumAvatar src={group.profilePhotoUrl} name={group.applicantName} size="sm" className={`shadow-xl border-2 transition-all duration-700 ${isFullySealed ? 'border-emerald-500/40' : 'border-white/10'}`} />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <h3 className="font-sans font-bold text-2xl md:text-3xl text-white/90 tracking-tight truncate leading-none mb-3 group-hover:text-primary transition-colors duration-500 uppercase">{group.applicantName}</h3>
-                                        <div className="flex flex-wrap items-center gap-4">
-                                            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/5 border border-emerald-500/10">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/60 shadow-[0_0_8px_#10b981]"></div>
-                                                <span className="text-[9px] font-bold text-emerald-500/80 uppercase tracking-widest">Active Link</span>
-                                            </div>
-                                            <span className="text-[10px] font-mono font-medium text-white/10 uppercase tracking-widest bg-white/[0.03] px-2 py-0.5 rounded-md">ID_{admId.substring(0, 8).toUpperCase()}</span>
-                                        </div>
-                                    </div>
-                                </div>
+                        <motion.div layout key={admId} className={`group bg-[#0f1116] border transition-all duration-700 rounded-[3rem] overflow-hidden shadow-xl ${isExpanded ? 'border-primary/20 ring-1 ring-primary/5 shadow-2xl shadow-primary/5' : 'border-white/5 hover:border-white/10'}`}>
+                            {/* Student Header */}
+                            <header className="p-8 flex flex-col md:flex-row items-center justify-between cursor-pointer gap-6 relative" onClick={() => toggleExpand(admId)}>
+                                <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
 
-                                <div className="flex flex-col sm:flex-row items-center gap-10 w-full lg:w-auto">
-                                    <div className="flex-grow lg:w-64 w-full">
-                                        <div className="flex justify-between items-end mb-3 px-1">
-                                            <span className="text-[10px] font-black uppercase text-white/20 tracking-[0.25em]">Integrity Level</span>
-                                            <span className={`text-[12px] font-black tracking-widest ${isFullySealed ? 'text-emerald-500' : 'text-primary'}`}>{completion}% <span className="text-[8px] opacity-40 uppercase ml-0.5">Sealed</span></span>
+                                <div className="flex items-center gap-6 w-full md:w-auto relative z-10">
+                                    <PremiumAvatar src={node.profilePhotoUrl} name={node.applicantName} size="sm" className="shadow-2xl border border-white/10 w-16 h-16 rounded-2xl" />
+                                    <div>
+                                        <h3 className="text-2xl font-bold text-white group-hover:text-primary transition-colors tracking-tight">{node.applicantName}</h3>
+                                        <div className="flex items-center gap-3 mt-1.5">
+                                            <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em]">Grade {node.grade}</span>
+                                            {total === 0 && <span className="text-[9px] bg-white/5 px-2 py-0.5 rounded text-white/20 font-bold uppercase tracking-wider">Empty Node</span>}
                                         </div>
-                                        <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden p-[1px] border border-white/5 shadow-inner">
-                                            <div 
-                                                className={`h-full rounded-full transition-all duration-1000 ease-[cubic-bezier(0.23,1,0.32,1)] relative overflow-hidden ${isFullySealed ? 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.4)]' : 'bg-primary shadow-[0_0_15px_rgba(var(--primary),0.2)]'}`} 
-                                                style={{ width: `${completion}%` }}
-                                            >
-                                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full animate-[shimmer_3s_infinite]"></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div 
-                                        className={`p-3.5 rounded-2xl transition-all duration-500 ${isExpanded ? 'rotate-180 bg-primary text-white shadow-xl' : 'text-white/20 bg-white/[0.03] border border-white/5'}`}
-                                    >
-                                        <ChevronDownIcon className="w-6 h-6" />
                                     </div>
                                 </div>
-                            </div>
-                            
-                            {/* --- EXPANDED GRID --- */}
+                                <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end relative z-10">
+                                    <div className="flex items-center gap-6">
+                                        <div className="w-36 text-right">
+                                            <div className="flex justify-between items-end mb-2">
+                                                <span className="text-[9px] font-black text-white/30 uppercase tracking-widest">Vault Sync</span>
+                                                <span className={`text-sm font-black ${percent === 100 ? 'text-emerald-500' : 'text-primary'}`}>{percent}%</span>
+                                            </div>
+                                            <div className="h-1.5 bg-black/40 rounded-full overflow-hidden border border-white/5"><div className={`h-full rounded-full transition-all duration-1000 ease-out ${percent === 100 ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : 'bg-primary shadow-[0_0_10px_rgba(var(--primary),0.5)]'}`} style={{width: `${percent}%`}}></div></div>
+                                        </div>
+                                    </div>
+                                    <div className={`p-4 rounded-full bg-white/5 border border-white/10 transition-all duration-500 ${isExpanded ? 'rotate-180 bg-primary/10 text-primary border-primary/20' : 'text-white/30 group-hover:text-white group-hover:bg-white/10'}`}>
+                                        <ChevronDownIcon className="w-5 h-5"/>
+                                    </div>
+                                </div>
+                            </header>
+
+                            {/* Collapsible Content */}
                             <AnimatePresence>
                                 {isExpanded && (
-                                    <motion.div 
-                                        initial={{ height: 0, opacity: 0 }}
-                                        animate={{ height: 'auto', opacity: 1 }}
-                                        exit={{ height: 0, opacity: 0 }}
-                                        transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-                                        className="overflow-hidden"
+                                    <motion.section 
+                                        initial={{ height: 0, opacity: 0 }} 
+                                        animate={{ height: 'auto', opacity: 1 }} 
+                                        exit={{ height: 0, opacity: 0 }} 
+                                        transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }} 
+                                        className="overflow-hidden bg-[#0a0c10]/50 shadow-inner"
                                     >
-                                        <div className="p-8 md:p-12 border-t border-white/[0.03] bg-black/20">
-                                            <motion.div 
-                                                initial="hidden"
-                                                animate="visible"
-                                                variants={{
-                                                    visible: { transition: { staggerChildren: 0.05 } }
-                                                }}
-                                                className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 max-w-full mx-auto"
-                                            >
-                                                {group.requirements.map(req => (
-                                                    <DocumentCard 
-                                                        key={req.id} 
-                                                        req={req} 
-                                                        onUpload={handleUpload} 
-                                                    />
-                                                ))}
-                                                
-                                                <motion.button 
-                                                    variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0 } }}
-                                                    className="rounded-[1.5rem] border-2 border-dashed border-white/5 hover:border-primary/40 hover:bg-primary/[0.01] transition-all duration-700 flex flex-col items-center justify-center p-10 bg-white/[0.01] group/plus cursor-pointer min-h-[320px] shadow-inner"
+                                        <div className="p-8 md:p-10 border-t border-white/[0.04]">
+                                            {node.requirements.length === 0 ? (
+                                                <div className="text-center py-16 text-white/20 border-2 border-dashed border-white/5 rounded-[2rem] flex flex-col items-center">
+                                                    <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4"><DocumentTextIcon className="w-8 h-8 opacity-40"/></div>
+                                                    <p className="font-bold text-sm uppercase tracking-widest mb-1">Vault Empty</p>
+                                                    <p className="text-xs opacity-50">Upload a custom document to initialize.</p>
+                                                </div>
+                                            ) : (
+                                                <motion.div 
+                                                    initial="hidden" 
+                                                    animate="visible" 
+                                                    variants={{ visible: { transition: { staggerChildren: 0.06 } } }} 
+                                                    className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
                                                 >
-                                                    <div className="w-16 h-16 rounded-2xl bg-white/[0.02] flex items-center justify-center mb-6 transition-all duration-700 group-hover/plus:scale-105 group-hover/plus:bg-primary/5 border border-white/5 shadow-xl relative overflow-hidden">
-                                                        <PlusIcon className="w-7 h-7 text-white/10 group-hover/plus:text-primary transition-colors relative z-10" />
-                                                        <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover/plus:opacity-100 transition-opacity"></div>
-                                                    </div>
-                                                    <div className="text-center">
-                                                        <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/20 group-hover/plus:text-white/40 transition-colors">Attach Evidence</p>
-                                                        <p className="text-[9px] text-white/5 mt-1 font-medium group-hover/plus:text-white/10 transition-colors">Supplemental Artifact Slot</p>
-                                                    </div>
-                                                </motion.button>
-                                            </motion.div>
+                                                    {node.requirements.map(req => (
+                                                        <CollapsibleDocumentCard key={req.id} req={req} onUpload={handleUpload} />
+                                                    ))}
+                                                </motion.div>
+                                            )}
                                         </div>
-                                    </motion.div>
+                                    </motion.section>
                                 )}
                             </AnimatePresence>
-                        </div>
+                        </motion.div>
                     );
                 })}
             </div>
-
-            {childIds.length === 0 && !loading && (
-                <div className="p-24 text-center border-2 border-dashed border-white/5 rounded-[4rem] bg-black/10 animate-in zoom-in-95 duration-1000 shadow-2xl">
-                    <div className="w-32 h-32 bg-white/[0.01] rounded-full flex items-center justify-center mx-auto mb-10 border border-white/5 shadow-inner group">
-                        <DocumentTextIcon className="w-14 h-14 text-white/5 group-hover:text-primary/10 transition-colors duration-1000" />
-                    </div>
-                    <h3 className="text-2xl font-serif font-black text-white/60 uppercase tracking-tighter mb-4">Vault Dormant.</h3>
-                    <p className="text-white/20 max-w-sm mx-auto font-serif italic text-lg leading-relaxed">No active institutional identities identified. Establish a node in the children directory to activate the secure vault.</p>
+            
+             {Object.keys(groupedData).length === 0 && !loading && (
+                <div className="py-32 text-center border-2 border-dashed border-white/10 rounded-[4rem] shadow-2xl flex flex-col items-center bg-[#0c0d12]">
+                    <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-6 shadow-inner"><DocumentTextIcon className="w-10 h-10 text-white/20" /></div>
+                    <h3 className="text-xl font-bold text-white/60">No Active Enrollments</h3>
+                    <p className="text-white/20 max-w-sm mx-auto mt-2 text-sm leading-relaxed">No active institutional identities linked to this profile. Register a child to activate the document vault.</p>
+                    <button
+                        onClick={() => setActiveComponent?.('My Children')}
+                        className="mt-8 px-10 py-4 bg-primary text-white font-black text-[11px] uppercase tracking-widest rounded-2xl shadow-xl shadow-primary/20 hover:bg-primary/90 transition-all flex items-center justify-center gap-3 group transform hover:-translate-y-1 active:scale-95"
+                    >
+                        <PlusIcon className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
+                        Register a Child
+                    </button>
                 </div>
             )}
-            
-            <style>{`
-                @keyframes shimmer {
-                    100% { transform: translateX(100%); }
-                }
-                .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.03); border-radius: 10px; }
-                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(139, 92, 246, 0.2); }
-            `}</style>
         </div>
     );
 };

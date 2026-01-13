@@ -14,6 +14,8 @@ import { RefreshIcon } from './icons/RefreshIcon';
 import AdmissionDetailsModal from './admin/AdmissionDetailsModal';
 import PremiumAvatar from './common/PremiumAvatar';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const statusColors: Record<string, string> = {
   'Registered': 'bg-slate-500/10 text-slate-400 border-white/5',
   'Pending Review': 'bg-amber-500/10 text-amber-500 border-amber-500/20',
@@ -186,11 +188,15 @@ const AdmissionsTab: React.FC<{ branchId?: number | null }> = ({ branchId }) => 
         setLoading(true);
         setFetchError(null);
         try {
-            const { data, error } = await supabase.rpc('get_admissions', { p_branch_id: branchId });
+            // FIX: Using versioned RPC to resolve signature overloading and PostgREST binding
+            const { data, error } = await supabase.rpc('get_admissions_v2', { p_branch_id: branchId });
             if (error) throw error;
             
-            const admissionOnlyRoster = (data || []).filter((a: any) => 
-                !['Enquiry Active', 'ENQUIRY_ACTIVE', 'ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONVERTED'].includes(a.status)
+            // FIX: Filter for valid UUIDs to prevent downstream errors from legacy data.
+            const validData = (data || []).filter((a: any) => a.id && UUID_REGEX.test(String(a.id)));
+
+            const admissionOnlyRoster = validData.filter((a: any) => 
+                !['ENQUIRY_ACTIVE', 'ENQUIRY_VERIFIED', 'ENQUIRY_IN_REVIEW', 'ENQUIRY_CONTACTED', 'ENQUIRY_CONVERTED'].includes(a.status)
             );
             setApplicants(admissionOnlyRoster as AdmissionApplication[]);
         } catch (err) {

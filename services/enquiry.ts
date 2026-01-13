@@ -22,7 +22,7 @@ export const EnquiryService = {
             });
 
             if (error) throw error;
-            if (!data.success) throw new Error(data.message);
+            if (!data.success) throw new Error(data.message || "Invalid or expired enquiry token.");
 
             return {
                 success: true,
@@ -33,6 +33,27 @@ export const EnquiryService = {
         } catch (err) {
             const formatted = formatError(err);
             console.error("Enquiry Link Failure:", formatted);
+            throw new Error(formatted);
+        }
+    },
+
+    /**
+     * Updates an enquiry's status using a secure system-level protocol.
+     */
+    async updateStatus(enquiryId: string, status: string, notes?: string | null) {
+        try {
+            if (!enquiryId) throw new Error("Node ID required for status update.");
+            
+            const { error } = await supabase.rpc('admin_update_enquiry_status', {
+                p_enquiry_id: enquiryId,
+                p_status: status,
+                p_notes: notes || null
+            });
+            if (error) throw error;
+            return { success: true };
+        } catch (err) {
+            const formatted = formatError(err);
+            console.error("Enquiry Status Update Failure:", formatted);
             throw new Error(formatted);
         }
     },
@@ -49,7 +70,7 @@ export const EnquiryService = {
             });
 
             if (error) throw error;
-            if (!data.success) throw new Error(data.message);
+            if (!data.success) throw new Error(data.message || "Enrollment conversion rejected.");
 
             return {
                 success: true,

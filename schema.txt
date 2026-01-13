@@ -1,0 +1,172 @@
+
+-- ===============================================================================================
+--  GURUKUL OS - v20.3.2 REGISTRY PATCH (Identity Mismatch & Function Signature Fix)
+-- ===============================================================================================
+
+BEGIN;
+
+-- 0. Schema Fix: Add missing columns
+-- Fix for: column "purpose" of relation "share_codes" does not exist
+ALTER TABLE public.share_codes ADD COLUMN IF NOT EXISTS purpose TEXT;
+
+-- 1. Safe Conversion of Admissions Table ID to UUID
+-- This resolves the "operator does not exist: uuid = bigint" error
+DO $$ 
+DECLARE
+    col_type text;
+BEGIN 
+    SELECT data_type INTO col_type FROM information_schema.columns 
+    WHERE table_name = 'admissions' AND column_name = 'id';
+
+    IF col_type = 'bigint' THEN
+        -- Drop constraints temporarily to allow type change
+        ALTER TABLE public.admission_documents DROP CONSTRAINT IF EXISTS admission_documents_admission_id_fkey;
+        ALTER TABLE public.document_requirements DROP CONSTRAINT IF EXISTS document_requirements_admission_id_fkey;
+        
+        -- Convert Admission ID to UUID
+        -- WARNING: This uses gen_random_uuid() for existing rows. 
+        ALTER TABLE public.admissions ALTER COLUMN id TYPE UUID USING gen_random_uuid();
+        
+        -- Convert Foreign Keys in related tables
+        -- We must drop the old column and add a new one or cast it if data matches. 
+        ALTER TABLE public.admission_documents ALTER COLUMN admission_id TYPE UUID USING gen_random_uuid();
+        ALTER TABLE public.document_requirements ALTER COLUMN admission_id TYPE UUID USING gen_random_uuid();
+        
+        -- Restore Constraints
+        ALTER TABLE public.admission_documents 
+        ADD CONSTRAINT admission_documents_admission_id_fkey FOREIGN KEY (admission_id) REFERENCES public.admissions(id);
+        
+        ALTER TABLE public.document_requirements 
+        ADD CONSTRAINT document_requirements_admission_id_fkey FOREIGN KEY (admission_id) REFERENCES public.admissions(id);
+    END IF;
+END $$;
+
+-- 2. Update Document Upload Function
+-- DROP to prevent "cannot change return type" errors if it exists with different signature
+DROP FUNCTION IF EXISTS public.parent_complete_document_upload(bigint, uuid, text, text, bigint, text);
+DROP FUNCTION IF EXISTS public.parent_complete_document_upload(bigint, bigint, text, text, bigint, text);
+
+CREATE OR REPLACE FUNCTION public.parent_complete_document_upload(
+    p_requirement_id BIGINT,
+    p_admission_id UUID,
+    p_file_name TEXT,
+    p_storage_path TEXT,
+    p_file_size BIGINT,
+    p_mime_type TEXT
+)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+    -- Verify ownership
+    IF NOT EXISTS (SELECT 1 FROM public.admissions WHERE id = p_admission_id AND parent_id = auth.uid()) THEN
+        RAISE EXCEPTION 'Unauthorized access to admission record';
+    END IF;
+
+    -- Update requirement status
+    UPDATE public.document_requirements
+    SET status = 'Submitted', updated_at = NOW()
+    WHERE id = p_requirement_id;
+
+    -- Insert document record
+    INSERT INTO public.admission_documents (
+        admission_id, 
+        requirement_id, 
+        file_name, 
+        storage_path, 
+        file_size, 
+        mime_type, 
+        uploaded_at
+    ) VALUES (
+        p_admission_id, 
+        p_requirement_id, 
+        p_file_name, 
+        p_storage_path, 
+        p_file_size, 
+        p_mime_type, 
+        uploaded_at
+    );
+
+    RETURN jsonb_build_object('success', true);
+END;
+$$;
+
+-- 3. Ensure Requirement Generation handles UUIDs
+CREATE OR REPLACE FUNCTION public.parent_initialize_vault_slots_all()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    adm RECORD;
+    doc_name text;
+    v_category text;
+    required_docs text[] := ARRAY[
+        'Birth Certificate', 
+        'Transfer Certificate', 
+        'Previous Marksheet', 
+        'Aadhar Card', 
+        'Passport Photo'
+    ];
+BEGIN
+    FOR adm IN SELECT id FROM public.admissions WHERE parent_id = auth.uid()
+    LOOP
+        FOREACH doc_name IN ARRAY required_docs
+        LOOP
+            IF doc_name = 'Birth Certificate' OR doc_name = 'Aadhar Card' OR doc_name = 'Passport Photo' THEN
+                v_category := 'Identity';
+            ELSIF doc_name = 'Transfer Certificate' OR doc_name = 'Previous Marksheet' THEN
+                v_category := 'Academic';
+            ELSE
+                v_category := 'General';
+            END IF;
+
+            IF NOT EXISTS (
+                SELECT 1 FROM public.document_requirements 
+                WHERE admission_id = adm.id AND document_name = doc_name
+            ) THEN
+                INSERT INTO public.document_requirements (
+                    admission_id, document_name, is_mandatory, status, notes_for_parent, created_at, updated_at
+                ) VALUES (
+                    adm.id, doc_name, true, 'Pending', v_category, NOW(), NOW()
+                );
+            END IF;
+        END LOOP;
+    END LOOP;
+END;
+$$;
+
+-- 4. Update Share Code Generation for UUID
+-- Fix for 42P13: Explicitly drop conflicting signatures to avoid "cannot change return type" error
+DROP FUNCTION IF EXISTS public.generate_admission_share_code(uuid, text, text);
+DROP FUNCTION IF EXISTS public.generate_admission_share_code(bigint, text, text);
+
+CREATE OR REPLACE FUNCTION public.generate_admission_share_code(
+    p_admission_id UUID,
+    p_purpose TEXT,
+    p_code_type TEXT
+)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    v_code TEXT;
+    v_id BIGINT;
+    v_exists BOOLEAN;
+BEGIN
+    -- Verify ownership
+    IF NOT EXISTS (SELECT 1 FROM public.admissions WHERE id = p_admission_id AND parent_id = auth.uid()) THEN
+        RAISE EXCEPTION 'Unauthorized access to admission record';
+    END IF;
+
+    -- Generate a unique 8-char code
+    LOOP
+        v_code := upper(substring(md5(random()::text) from 1 for 8));
+        SELECT EXISTS(SELECT 1 FROM public.share_codes WHERE code = v_code) INTO v_exists;
+        EXIT WHEN NOT v_exists;
+    END LOOP;
+
+    INSERT INTO public.share_codes (
+        admission_id, code, purpose, code_type, expires_at, created_by
+    ) VALUES (
+        p_admission_id, v_code, p_purpose, p_code_type, NOW() + INTERVAL '24 hours', auth.uid()
+    ) RETURNING id INTO v_id;
+
+    RETURN jsonb_build_object('code', v_code, 'id', v_id);
+END;
+$$;
+
+COMMIT;

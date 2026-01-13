@@ -45,12 +45,10 @@
       ::-webkit-scrollbar-thumb:hover { background: rgba(139, 92, 246, 0.4); }
 
       @keyframes scanner-move {
-        0% { top: -10%; opacity: 0; }
-        20% { opacity: 0.5; }
-        80% { opacity: 0.5; }
-        100% { top: 110%; opacity: 0; }
+        0% { transform: translateY(-100%); }
+        100% { transform: translateY(calc(100vh + 100%)); }
       }
-      .animate-scanner-move { animation: scanner-move 6s ease-in-out infinite; }
+      .animate-scanner-move { animation: scanner-move 3s linear infinite; }
       
       @keyframes aurora {
         0%, 100% { transform: translate(0, 0) scale(1); }

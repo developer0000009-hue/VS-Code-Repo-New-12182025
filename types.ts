@@ -1,4 +1,3 @@
-
 // Fix: Added React import to resolve 'Cannot find namespace React' errors when using React.FC and React.SVGProps.
 import React from 'react';
 
@@ -19,19 +18,14 @@ export enum BuiltInRoles {
     SUPER_ADMIN = 'Super Admin'
 }
 
-// Unified EnquiryStatus to handle both DB and UI variations including new states
+// Unified EnquiryStatus to strictly follow the institutional lifecycle protocol
 export type EnquiryStatus = 
     | 'ENQUIRY_ACTIVE' 
     | 'ENQUIRY_VERIFIED' 
-    | 'ENQUIRY_IN_PROGRESS' 
-    | 'CONTACTED'
-    | 'REJECTED'
-    | 'CONVERTED' 
-    | 'New' 
-    | 'Contacted' 
-    | 'Verified' 
-    | 'In Review' 
-    | 'Completed';
+    | 'ENQUIRY_IN_REVIEW' 
+    | 'ENQUIRY_CONTACTED'
+    | 'ENQUIRY_REJECTED'
+    | 'ENQUIRY_CONVERTED';
 
 export type AdmissionStatus = 'Registered' | 'Pending Review' | 'Verified' | 'Approved' | 'Rejected' | 'Cancelled';
 
@@ -228,6 +222,7 @@ export interface ShareCode {
     code_type: ShareCodeType;
     expires_at: string;
     profile_photo_url?: string | null;
+    purpose?: string;
 }
 
 export interface VerifiedShareCodeData {
@@ -572,12 +567,21 @@ export interface TeacherSubjectMapping {
 }
 
 export interface DocumentRequirement {
+  id: number;
+  admission_id: string;
+  document_name: string;
+  status: 'Pending' | 'Submitted' | 'Verified' | 'Rejected';
+  is_mandatory: boolean;
+  notes_for_parent?: string;
+  rejection_reason?: string;
+  applicant_name: string;
+  profile_photo_url?: string | null;
+  admission_documents?: {
     id: number;
-    document_name: string;
-    status: 'Pending' | 'Submitted' | 'Verified' | 'Rejected';
-    is_mandatory: boolean;
-    rejection_reason?: string;
-    admission_documents?: any[];
+    file_name: string;
+    storage_path: string;
+    uploaded_at: string;
+  }[];
 }
 
 export interface TeacherDocument {

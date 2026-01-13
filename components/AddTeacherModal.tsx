@@ -173,7 +173,7 @@ const AddTeacherModal: React.FC<AddTeacherModalProps> = ({ onClose, onSuccess, b
                 return (
                     <div className="space-y-5 animate-in slide-in-from-right-4 duration-300">
                         <h3 className="text-lg font-bold text-foreground">Basic Information</h3>
-                        <FloatingInput label="Full Name" name="display_name" value={formData.display_name} onChange={handleChange} icon={<UserIcon className="w-4 h-4"/>} autoFocus />
+                        <FloatingInput label="Full Name" name="display_name" value={formData.display_name} onChange={handleChange} required icon={<UserIcon className="w-4 h-4"/>} autoFocus />
                         <FloatingInput label="Email Address" type="email" name="email" value={formData.email} onChange={handleChange} icon={<MailIcon className="w-4 h-4"/>} />
                         <div className="grid grid-cols-2 gap-4">
                             <FloatingInput label="Phone Number" type="tel" name="phone" value={formData.phone} onChange={handleChange} icon={<PhoneIcon className="w-4 h-4"/>} />
@@ -356,8 +356,8 @@ const AddTeacherModal: React.FC<AddTeacherModalProps> = ({ onClose, onSuccess, b
         return (
             <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[200] p-4 animate-in fade-in">
                 <div className="bg-card w-full max-w-md rounded-2xl shadow-2xl border border-border p-8 text-center animate-in zoom-in-95">
-                    <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg animate-bounce">
-                        <CheckCircleIcon className="w-10 h-10" />
+                    <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+                        <CheckCircleIcon animate className="w-10 h-10" />
                     </div>
                     <h2 className="text-2xl font-bold text-foreground">Teacher Onboarded!</h2>
                     <p className="text-muted-foreground mt-2 mb-6">
@@ -382,20 +382,21 @@ const AddTeacherModal: React.FC<AddTeacherModalProps> = ({ onClose, onSuccess, b
                 <div className="p-6 border-b border-border bg-muted/10 flex justify-between items-center">
                     <div>
                         <h2 className="text-xl font-bold">New Teacher Onboarding</h2>
-                        <p className="text-xs text-muted-foreground mt-1">Complete all steps to register faculty.</p>
+                        <p className="text-xs text-muted-foreground mt-1">Step {currentStep + 1}: {STEPS[currentStep]}</p>
                     </div>
                     <button onClick={onClose} className="p-2 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"><XIcon className="w-5 h-5"/></button>
                 </div>
                 <div className="px-6 pt-4">
                     <Stepper steps={STEPS} currentStep={currentStep} />
                 </div>
-                <div className="p-8 overflow-y-auto flex-grow custom-scrollbar bg-background">
+                <div className="p-8 overflow-y-auto flex-grow bg-background">
                     {renderStepContent()}
                 </div>
                 <div className="p-6 border-t border-border bg-muted/10 flex justify-between items-center">
                     <button 
                         onClick={currentStep === 0 ? onClose : handleBack} 
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-muted-foreground hover:bg-background hover:text-foreground transition-colors border border-transparent hover:border-border text-sm hover:shadow-sm"
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-muted-foreground hover:bg-background hover:text-foreground transition-colors border border-transparent hover:border-border text-sm"
+                        disabled={loading}
                     >
                         {currentStep === 0 ? 'Cancel' : <><ChevronLeftIcon className="w-4 h-4"/> Back</>}
                     </button>
@@ -403,7 +404,7 @@ const AddTeacherModal: React.FC<AddTeacherModalProps> = ({ onClose, onSuccess, b
                     <button 
                         onClick={currentStep === STEPS.length - 1 ? handleSubmit : handleNext} 
                         disabled={loading || (currentStep === 0 && (!formData.display_name || !formData.email))}
-                        className="flex items-center gap-2 px-8 py-2.5 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg hover:shadow-primary/30 hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+                        className="flex items-center gap-2 px-8 py-2.5 bg-primary text-primary-foreground rounded-xl font-bold shadow-lg hover:shadow-primary/30 hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
                     >
                         {loading ? <Spinner size="sm" className="text-white"/> : (
                             currentStep === STEPS.length - 1 ? 'Create Account' : <>Next <ChevronRightIcon className="w-4 h-4"/></>

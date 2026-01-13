@@ -20,17 +20,25 @@ import PremiumAvatar from '../common/PremiumAvatar';
 
 const resolveSyncError = (err: any): string => {
     if (!err) return "Identity synchronization protocol failed.";
+    
+    let message = '';
     if (typeof err === 'string') {
-        if (err.toLowerCase().includes('bucket not found')) {
-            return "Critical Configuration Mismatch: The institutional cloud bucket 'profile-images' has not been initialized. Please contact the system architect to run the infrastructure sync script.";
-        }
-        return err;
+        message = err;
+    } else {
+        message = err.message || err.error_description || err.details || err.hint || err.error || '';
     }
-    const msg = err.message || err.error_description || err.details || err.hint || err.error;
-    if (typeof msg === 'string' && msg.toLowerCase().includes('bucket not found')) {
+
+    const lowerMessage = message.toLowerCase();
+
+    if (lowerMessage.includes('bucket not found')) {
         return "Critical Configuration Mismatch: The institutional cloud bucket 'profile-images' has not been initialized. Please contact the system architect to run the infrastructure sync script.";
     }
-    return typeof msg === 'string' ? msg : "Institutional node exception.";
+
+    if (lowerMessage.includes('invalid input syntax for type bigint') && /[\da-f]{8}-[\da-f]{4}/.test(lowerMessage)) {
+        return "Identity Type Mismatch: The admissions registry uses an outdated numeric ID. Please apply the latest `schema.txt` update via the Supabase SQL Editor to resolve this protocol exception.";
+    }
+    
+    return typeof message === 'string' ? message : "Institutional node exception.";
 };
 
 const PremiumFloatingInput: React.FC<React.InputHTMLAttributes<HTMLInputElement | HTMLTextAreaElement> & { label: string; icon?: React.ReactNode; isTextArea?: boolean; isSynced?: boolean }> = ({ label, icon, isTextArea, isSynced, className, ...props }) => (
@@ -102,7 +110,7 @@ const ChildRegistrationModal: React.FC<ChildRegistrationModalProps> = ({ child, 
         const fetchParent = async () => {
             const { data } = await supabase.from('profiles').select('display_name, email, phone').eq('id', currentUserId).maybeSingle();
             if (data) {
-                setParentProfile({ name: data.display_name, email: data.email, phone: data.phone || '' });
+                setParentProfile({ name: data.display_name || '', email: data.email, phone: data.phone || '' });
             }
         };
         fetchParent();
@@ -110,7 +118,7 @@ const ChildRegistrationModal: React.FC<ChildRegistrationModalProps> = ({ child, 
 
     // Draggable Logic
     const handleMouseDown = (e: React.MouseEvent) => {
-        if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('input')) return;
+        if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('input') || (e.target as HTMLElement).closest('select')) return;
         
         setIsDragging(true);
         dragStartPos.current = {
@@ -200,7 +208,6 @@ const ChildRegistrationModal: React.FC<ChildRegistrationModalProps> = ({ child, 
                 medical_info: formData.medical_info,
                 emergency_contact: formData.emergency_contact,
                 profile_photo_url: finalPhotoPath,
-                submitted_by: currentUserId,
                 parent_id: currentUserId,
                 parent_name: parentProfile?.name || '',
                 parent_email: parentProfile?.email || '',
@@ -212,6 +219,10 @@ const ChildRegistrationModal: React.FC<ChildRegistrationModalProps> = ({ child, 
                 const { error } = await supabase.from('admissions').update(payload).eq('id', child.id);
                 if (error) throw error;
             } else {
+                // FIX: Explicitly generate a UUID on the client side.
+                // This hardens the application against database misconfigurations where the 'id' column
+                // might be missing its default value generator, thus resolving the "violates not-null constraint" error.
+                payload.id = crypto.randomUUID();
                 const { error } = await supabase.from('admissions').insert(payload);
                 if (error) throw error;
             }
@@ -345,7 +356,7 @@ const ChildRegistrationModal: React.FC<ChildRegistrationModalProps> = ({ child, 
                     <div className="p-10 md:p-20 text-center space-y-12 animate-in zoom-in-95 duration-1000 h-full flex flex-col items-center justify-center">
                         <div className="relative">
                             <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full"></div>
-                            <CheckCircleIcon className="w-24 h-24 md:w-32 md:h-32 text-emerald-500 relative z-10 animate-in zoom-in-50 duration-700" />
+                            <CheckCircleIcon animate className="w-24 h-24 md:w-32 md:h-32 text-emerald-500 relative z-10" />
                         </div>
                         <div className="space-y-4">
                             <h2 className="text-3xl md:text-5xl font-serif font-black text-white tracking-tighter uppercase leading-none">Registry <span className="text-white/20 italic">Updated.</span></h2>

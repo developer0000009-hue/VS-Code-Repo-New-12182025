@@ -18,22 +18,22 @@ import { SparklesIcon } from './components/icons/SparklesIcon';
 import { AlertTriangleIcon } from './components/icons/AlertTriangleIcon';
 import PremiumAvatar from './components/common/PremiumAvatar';
 
-const statusColors: Record<string, string> = {
+const statusColors: Record<EnquiryStatus, string> = {
   'ENQUIRY_ACTIVE': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   'ENQUIRY_VERIFIED': 'bg-teal-500/20 text-teal-400 border-teal-500/30 font-black shadow-[0_0_15px_rgba(45,212,191,0.1)]',
-  'ENQUIRY_IN_PROGRESS': 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-  'CONTACTED': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-  'REJECTED': 'bg-rose-500/10 text-red-400 border-red-500/20',
-  'CONVERTED': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+  'ENQUIRY_IN_REVIEW': 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+  'ENQUIRY_CONTACTED': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+  'ENQUIRY_REJECTED': 'bg-rose-500/10 text-red-400 border-red-500/20',
+  'ENQUIRY_CONVERTED': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
 };
 
-const statusLabels: Record<string, string> = {
+const statusLabels: Record<EnquiryStatus, string> = {
   'ENQUIRY_ACTIVE': 'Active',
   'ENQUIRY_VERIFIED': 'Verified',
-  'ENQUIRY_IN_PROGRESS': 'In Review',
-  'CONTACTED': 'Contacted',
-  'REJECTED': 'Rejected',
-  'CONVERTED': 'Converted',
+  'ENQUIRY_IN_REVIEW': 'In Review',
+  'ENQUIRY_CONTACTED': 'Contacted',
+  'ENQUIRY_REJECTED': 'Rejected',
+  'ENQUIRY_CONVERTED': 'Converted',
 };
 
 type SortableKeys = 'applicant_name' | 'grade' | 'status' | 'updated_at';
@@ -62,7 +62,8 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
         if (!isSilent) setLoading(true);
         setError(null);
         try {
-            const { data, error: rpcError } = await supabase.rpc('get_all_enquiries', { 
+            // FIX: Explicitly call get_all_enquiries_v2 to bypass schema cache ambiguity
+            const { data, error: rpcError } = await supabase.rpc('get_all_enquiries_v2', { 
                 p_branch_id: branchId 
             });
             
@@ -118,7 +119,7 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
         return {
             total: source.length,
             verified: source.filter(e => e.status === 'ENQUIRY_VERIFIED').length,
-            converted: source.filter(e => e.status === 'CONVERTED').length
+            converted: source.filter(e => e.status === 'ENQUIRY_CONVERTED').length
         };
     }, [enquiries]);
 
@@ -200,19 +201,23 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                 </div>
                 
                 <div className="flex bg-black/60 p-2 rounded-[1.8rem] border border-white/5 overflow-x-auto no-scrollbar w-full xl:w-auto shadow-inner">
-                    {['All', 'ENQUIRY_VERIFIED', 'ENQUIRY_IN_PROGRESS', 'CONTACTED', 'REJECTED', 'CONVERTED'].map(f => (
-                        <button 
-                            key={f}
-                            onClick={() => setFilterStatus(f === 'All' ? '' : f)}
-                            className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.25em] transition-all duration-700 whitespace-nowrap ${
-                                (filterStatus === f || (f === 'All' && !filterStatus)) 
-                                ? 'bg-[#1a1d24] text-primary shadow-2xl ring-1 ring-white/10 scale-[1.05] z-10' 
-                                : 'text-white/20 hover:text-white/40'
-                            }`}
-                        >
-                            {statusLabels[f] || f}
-                        </button>
-                    ))}
+                    {(['All', ...Object.keys(statusLabels)] as (keyof typeof statusLabels | 'All')[]).map(f => {
+                        const label = f === 'All' ? 'All' : statusLabels[f as EnquiryStatus];
+                        const key = f === 'All' ? '' : f;
+                        return (
+                            <button 
+                                key={f}
+                                onClick={() => setFilterStatus(key)}
+                                className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.25em] transition-all duration-700 whitespace-nowrap ${
+                                    (filterStatus === key) 
+                                    ? 'bg-[#1a1d24] text-primary shadow-2xl ring-1 ring-white/10 scale-[1.05] z-10' 
+                                    : 'text-white/20 hover:text-white/40'
+                                }`}
+                            >
+                                {label}
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -220,7 +225,7 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
             <div className="bg-[#0a0a0c]/80 backdrop-blur-3xl border border-white/5 rounded-[3.5rem] shadow-[0_64px_128px_-24px_rgba(0,0,0,1)] overflow-hidden flex flex-col min-h-[600px] ring-1 ring-white/5 relative group">
                 <div className="absolute inset-0 bg-gradient-to-tr from-primary/[0.01] to-transparent pointer-events-none"></div>
                 
-                {loading && enquiries.length === 0 ? (
+                {loading && (enquiries || []).length === 0 ? (
                     <div className="flex flex-col justify-center items-center py-48 gap-8">
                         <Spinner size="lg" className="text-primary" />
                         <p className="text-[11px] font-black uppercase text-white/20 tracking-[0.5em] animate-pulse">Syncing Lifecycle Protocol</p>
@@ -281,8 +286,8 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                                         </td>
                                         <td className="p-10">
                                             <div className="relative inline-block group/status">
-                                                <span className={`px-5 py-2.5 inline-flex text-[10px] font-black uppercase tracking-[0.25em] rounded-2xl border shadow-2xl transition-all duration-1000 ${statusColors[enq.status] || 'bg-white/5 text-white/20 border-white/5'}`}>
-                                                    {statusLabels[enq.status] || enq.status}
+                                                <span className={`px-5 py-2.5 inline-flex text-[10px] font-black uppercase tracking-[0.25em] rounded-2xl border shadow-2xl transition-all duration-1000 ${statusColors[enq.status as EnquiryStatus] || 'bg-white/5 text-white/20 border-white/5'}`}>
+                                                    {statusLabels[enq.status as EnquiryStatus] || enq.status}
                                                 </span>
                                             </div>
                                         </td>
@@ -324,7 +329,7 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
 };
 
 const StatCard: React.FC<{ title: string; value: number; icon: React.ReactNode; color: string; desc: string }> = ({ title, value, icon, color, desc }) => (
-    <div className="bg-[#0d0f14]/80 backdrop-blur-3xl border border-white/5 p-10 rounded-[3rem] shadow-2xl hover:shadow-primary/10 transition-all duration-700 group overflow-hidden relative ring-1 ring-white/5">
+    <div className="bg-[#0d0f14] p-10 rounded-[3rem] border border-white/5 shadow-2xl hover:shadow-primary/10 transition-all duration-700 group overflow-hidden relative ring-1 ring-white/5">
         <div className={`absolute -right-8 -top-8 w-48 h-48 ${color} opacity-[0.03] rounded-full blur-[100px] group-hover:opacity-[0.08] transition-opacity duration-1000`}></div>
         <div className="flex justify-between items-start relative z-10">
             <div className={`p-4 rounded-[1.25rem] bg-white/5 text-white/30 ring-1 ring-white/10 shadow-inner group-hover:scale-110 group-hover:text-primary transition-all duration-700`}>

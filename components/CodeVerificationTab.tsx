@@ -46,7 +46,7 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
 
     const handleVerify = async (e: React.FormEvent) => {
         e.preventDefault();
-        // Standardize: Remove all whitespace (handles "1 2 3" -> "123")
+        // Standardize: Remove all whitespace and handle formatting
         const cleanCode = code.replace(/\s+/g, '').toUpperCase();
         if (!cleanCode) return;
         
@@ -55,7 +55,7 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
         setVerifiedData(null);
 
         try {
-            // Step 1: Verify token context and node state
+            // Step 1: Verify token context and retrieve node metadata
             const { data, error: rpcError } = await supabase.rpc('admin_verify_share_code', { 
                 p_code: cleanCode 
             });
@@ -83,31 +83,24 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
         
         try {
             const branchToLink = branchId === undefined || branchId === null ? null : branchId;
-            const cleanCode = code.replace(/\s+/g, '').toUpperCase();
+            
+            // ARCHITECTURE FIX: Use unified ID-based RPC for all code types.
+            // This bypasses the redundant string lookups that cause 'invalid token' errors.
+            const { data, error: impError } = await supabase.rpc('admin_import_record_from_share_code', {
+                p_admission_id: verifiedData.admission_id,
+                p_code_type: verifiedData.code_type,
+                p_branch_id: branchToLink,
+                p_code_id: verifiedData.id
+            });
 
-            if (verifiedData.code_type === 'Enquiry') {
-                // Requirement Fix: Sync and display in Enquiry Desk
-                const result = await EnquiryService.verifyAndLinkEnquiry(cleanCode, branchToLink);
-                if (result.success) {
-                    setImportSuccess(true);
-                    setTimeout(() => onNavigate?.('Enquiries'), 1500);
-                }
+            if (impError) throw impError;
+            
+            if (data && data.success) {
+                setImportSuccess(true);
+                const targetTab = verifiedData.code_type === 'Enquiry' ? 'Enquiries' : 'Admissions';
+                setTimeout(() => onNavigate?.(targetTab), 1500);
             } else {
-                // Requirement Fix: Sync and display in Admission Vault
-                const { data, error: impError } = await supabase.rpc('admin_import_record_from_share_code', {
-                    p_admission_id: verifiedData.admission_id,
-                    p_code_type: verifiedData.code_type,
-                    p_branch_id: branchToLink,
-                    p_code_id: verifiedData.id
-                });
-                if (impError) throw impError;
-                
-                if (data && data.success) {
-                    setImportSuccess(true);
-                    setTimeout(() => onNavigate?.('Admissions'), 1500);
-                } else {
-                    throw new Error(data?.message || "Import protocol rejected.");
-                }
+                throw new Error(data?.message || "Import protocol rejected by node.");
             }
         } catch (err: any) {
             setError(formatError(err));
@@ -161,7 +154,7 @@ const CodeVerificationTab: React.FC<CodeVerificationTabProps> = ({ branchId, onN
                     {importSuccess && (
                         <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 px-8 py-6 rounded-[2rem] text-sm font-bold flex items-center gap-4 animate-in zoom-in-95">
                             <CheckCircleIcon className="w-6 h-6" /> 
-                            <span>Node Identity Synchronized. Redirecting to {verifiedData?.code_type === 'Enquiry' ? 'Enquiry Desk' : 'Admission Vault'}...</span>
+                            <span>Node Identity Synchronized. Redirecting...</span>
                         </div>
                     )}
                 </div>

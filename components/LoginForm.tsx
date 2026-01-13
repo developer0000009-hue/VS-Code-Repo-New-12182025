@@ -5,6 +5,7 @@ import { MailIcon } from './icons/MailIcon';
 import { LockIcon } from './icons/LockIcon';
 import { EyeIcon } from './icons/EyeIcon';
 import { EyeOffIcon } from './icons/EyeOffIcon';
+import { motion } from 'framer-motion';
 
 interface LoginFormProps {
     onSwitchToSignup: () => void;
@@ -37,20 +38,24 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToSignup, onForgotPasswor
     };
 
     return (
-        <div className="bg-[#0d0f14]/80 backdrop-blur-3xl p-8 sm:p-12 rounded-[3.5rem] border border-white/10 space-y-12 shadow-2xl relative overflow-hidden ring-1 ring-white/5 font-sans">
+        <div className="bg-[#0d0f14]/80 backdrop-blur-3xl p-8 sm:p-12 rounded-[3.5rem] border border-white/10 space-y-10 shadow-[0_32px_64px_-16px_rgba(0,0,0,1)] relative overflow-hidden ring-1 ring-white/5 font-sans">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-transparent animate-scanner-move pointer-events-none"></div>
             
-            <div className="text-center space-y-4 relative z-10">
+            <div className="text-center space-y-3 relative z-10">
                 <h2 className="text-4xl md:text-5xl font-serif font-black text-white tracking-tighter leading-none uppercase">Initialize.</h2>
                 <p className="text-white/30 text-xs md:text-sm font-serif italic tracking-tight">Secure access to the institutional node.</p>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-6 md:space-y-10 relative z-10">
+            <form onSubmit={handleLogin} className="space-y-6 md:space-y-8 relative z-10">
                 {error && (
-                    <div className="bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] font-black uppercase tracking-widest p-4 rounded-2xl flex items-center gap-3 animate-in shake duration-500">
+                    <motion.div 
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className="bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] font-black uppercase tracking-widest p-4 rounded-2xl flex items-center gap-3"
+                    >
                         <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
                         <span className="flex-1">{error}</span>
-                    </div>
+                    </motion.div>
                 )}
 
                 <div className="space-y-3 group">

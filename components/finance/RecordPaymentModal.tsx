@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabase';
 import Spinner from '../common/Spinner';
@@ -53,6 +54,21 @@ const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({ studentId, stud
             setLoading(false);
         }
     };
+
+    if (success) {
+        return (
+            <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 animate-in fade-in">
+                <div className="bg-card w-full max-w-sm rounded-2xl shadow-2xl p-8 text-center border border-border">
+                    <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <CheckCircleIcon animate className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-xl font-bold mb-2">Payment Successful!</h3>
+                    <p className="text-muted-foreground text-sm mb-6">Transaction ID: TXN-{Math.floor(Math.random()*1000000)}</p>
+                    <button onClick={onClose} className="w-full py-3 bg-primary text-primary-foreground font-bold rounded-xl hover:bg-primary/90">Done</button>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in" onClick={onClose}>

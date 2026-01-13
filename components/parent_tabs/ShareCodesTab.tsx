@@ -1,464 +1,486 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase, formatError } from '../../services/supabase';
-import { ShareCode, AdmissionApplication, ShareCodeType } from '../../types';
+import { ShareCode, ShareCodeStatus, AdmissionApplication, ShareCodeType } from '../../types';
 import Spinner from '../common/Spinner';
-import { KeyIcon } from '../icons/KeyIcon';
-import { CheckCircleIcon } from '../icons/CheckCircleIcon';
-import { ClockIcon } from '../icons/ClockIcon';
-import { RefreshIcon } from '../icons/RefreshIcon';
-import { ShieldCheckIcon } from '../icons/ShieldCheckIcon';
-import { MailIcon } from '../icons/MailIcon';
-import { DocumentTextIcon } from '../icons/DocumentTextIcon';
-import { ChevronRightIcon } from '../icons/ChevronRightIcon';
-import { XCircleIcon } from '../icons/XCircleIcon';
-import { AlertTriangleIcon } from '../icons/AlertTriangleIcon';
-import { ChevronDownIcon } from '../icons/ChevronDownIcon';
-import { LockIcon } from '../icons/LockIcon';
-import { EyeIcon } from '../icons/EyeIcon';
-import { EyeOffIcon } from '../icons/EyeOffIcon';
-import { CopyIcon } from '../icons/CopyIcon';
 import PremiumAvatar from '../common/PremiumAvatar';
-import { motion, AnimatePresence } from 'framer-motion';
+import { CopyIcon } from '../icons/CopyIcon';
+import { CheckCircleIcon } from '../icons/CheckCircleIcon';
+import { RefreshIcon } from '../icons/RefreshIcon';
+import { KeyIcon } from '../icons/KeyIcon';
+import { TrashIcon } from '../icons/TrashIcon';
+import { UsersIcon } from '../icons/UsersIcon';
+import { FileTextIcon } from '../icons/FileTextIcon';
+import { ShieldCheckIcon } from '../icons/ShieldCheckIcon';
+import { InfoIcon } from '../icons/InfoIcon';
+import { ClockIcon } from '../icons/ClockIcon';
+import { RotateCcwIcon } from '../icons/RotateCcwIcon';
 
-export default function ShareCodesTab() {
-    const [codes, setCodes] = useState<ShareCode[]>([]);
-    const [myApplications, setMyApplications] = useState<AdmissionApplication[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [actionLoading, setActionLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [focusedPermitId, setFocusedPermitId] = useState<number | null>(null);
-    const [copyFeedback, setCopyFeedback] = useState(false);
-    const [showHistory, setShowHistory] = useState(false);
+// --- Types & Config ---
 
-    // Provisioning Flow State
-    const [selectedAdmissionId, setSelectedAdmissionId] = useState<string>('');
-    const [permitType, setPermitType] = useState<ShareCodeType | null>(null);
+const statusConfig: { [key: string]: { text: string; bg: string; border: string; icon: React.ReactNode } } = {
+  'Active': { 
+      text: 'text-emerald-400', 
+      bg: 'bg-emerald-500/10', 
+      border: 'border-emerald-500/20',
+      icon: <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]" />
+  },
+  'Expired': { 
+      text: 'text-slate-400', 
+      bg: 'bg-slate-500/10', 
+      border: 'border-slate-500/20',
+      icon: <div className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+  },
+  'Revoked': { 
+      text: 'text-red-400', 
+      bg: 'bg-red-500/10', 
+      border: 'border-red-500/20',
+      icon: <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+  },
+  'Redeemed': { 
+      text: 'text-blue-400', 
+      bg: 'bg-blue-500/10', 
+      border: 'border-blue-500/20',
+      icon: <CheckCircleIcon className="w-3 h-3 text-blue-500" />
+  },
+  // Fallback for unknown statuses
+  'default': {
+      text: 'text-gray-400',
+      bg: 'bg-gray-500/10',
+      border: 'border-gray-500/20',
+      icon: <div className="w-1.5 h-1.5 rounded-full bg-gray-500" />
+  }
+};
 
-    const fetchData = useCallback(async (isSilent = false) => {
-        if (!isSilent) setLoading(true);
-        setError(null);
-        try {
-            const [appsRes, codesRes] = await Promise.all([
-                supabase.rpc('get_my_children_profiles'),
-                supabase.rpc('get_my_share_codes')
-            ]);
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-            if (appsRes.error) throw appsRes.error;
-            if (codesRes.error) throw codesRes.error;
+interface ShareCodesTabProps {
+    onNavigate?: (tab: string) => void;
+}
 
-            const appsData = appsRes.data || [];
-            const codesData = codesRes.data || [];
+export default function ShareCodesTab({ onNavigate }: ShareCodesTabProps) {
+  // Data State
+  const [codes, setCodes] = useState<ShareCode[]>([]);
+  const [myApplications, setMyApplications] = useState<AdmissionApplication[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-            setMyApplications(appsData);
-            setCodes(codesData);
-            
-            if (!selectedAdmissionId && appsData.length > 0) {
-                setSelectedAdmissionId(appsData[0].id);
-            }
-        } catch (err: any) {
-            setError(formatError(err));
-        } finally {
-            setLoading(false);
-        }
-    }, [selectedAdmissionId]);
+  // Form State
+  const [selectedAdmission, setSelectedAdmission] = useState<string>('');
+  const [purpose, setPurpose] = useState('');
+  const [codeType, setCodeType] = useState<ShareCodeType>('Enquiry');
+  
+  // UI State
+  const [generating, setGenerating] = useState(false);
+  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+  const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
 
-    useEffect(() => { 
-        fetchData(); 
-    }, [fetchData]);
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+        // Use direct select for share_codes to avoid missing RPC errors
+        // get_my_children_profiles is complex so we keep RPC, but verify it exists
+        const [appsRes, codesRes] = await Promise.all([
+            supabase.rpc('get_my_children_profiles'),
+            supabase.from('share_codes').select('*').order('created_at', { ascending: false })
+        ]);
 
-    const handleGenerate = async () => {
-        if (!selectedAdmissionId || !permitType || actionLoading) return;
+        if (appsRes.error) throw appsRes.error;
+        if (codesRes.error) throw codesRes.error;
 
-        setActionLoading(true);
-        setError(null);
+        const apps = appsRes.data || [];
+        setMyApplications(apps);
         
-        try {
-            const { data, error: rpcError } = await supabase.rpc('generate_admission_share_code', {
-                p_admission_id: selectedAdmissionId, 
-                p_purpose: 'Institutional Handshake',
-                p_code_type: permitType, 
-            });
-
-            if (rpcError) throw rpcError;
-
-            const generatedCode = typeof data === 'string' ? data : (data?.code || data?.p_code);
-            
-            await fetchData(true);
-            
-            if (generatedCode) {
-                const { data: latestCodes } = await supabase.rpc('get_my_share_codes');
-                if (latestCodes && Array.isArray(latestCodes) && latestCodes.length > 0) {
-                    const newPermit = latestCodes.find((c: any) => c.code === generatedCode);
-                    if (newPermit) setFocusedPermitId(newPermit.id);
-                }
-            }
-            setPermitType(null); 
-        } catch (err: any) {
-            setError(formatError(err));
-        } finally {
-            setActionLoading(false);
+        // Auto-select first child if none selected and children exist
+        if (apps.length > 0 && !selectedAdmission) {
+            setSelectedAdmission(String(apps[0].id));
         }
-    };
 
-    const handleRevoke = async (id: number) => {
-        if (!confirm("Terminate this access permit artifact? This operation is irreversible.")) return;
-        setActionLoading(true);
-        setError(null);
-        try {
-            const { error: rpcError } = await supabase.rpc('revoke_my_share_code', { p_code_id: id });
-            if (rpcError) throw rpcError;
-            
-            await fetchData(true);
-            setFocusedPermitId(null);
-        } catch (err: any) {
-            setError(formatError(err));
-        } finally {
-            setActionLoading(false);
-        }
-    };
+        // Map share codes, ensure status fallback
+        const mappedCodes = (codesRes.data || []).map((c: any) => ({
+            ...c,
+            // Fallback for applicant_name if not joined (direct select doesn't join)
+            // We can match it from apps list manually for display
+            applicant_name: c.applicant_name || apps.find((a: any) => a.id === c.admission_id)?.applicant_name || 'Unknown Applicant'
+        }));
+        
+        setCodes(mappedCodes);
+    } catch (err: any) {
+        console.error("Share code fetch error:", err);
+        setError(formatError(err));
+    } finally {
+        setLoading(false);
+    }
+  }, [selectedAdmission]);
 
-    const handleCopy = (code: string) => {
-        if (!code) return;
-        navigator.clipboard.writeText(code).then(() => {
-            setCopyFeedback(true);
-            setTimeout(() => setCopyFeedback(false), 2000);
-        });
-    };
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
-    const { activeCodes, inactiveCodes } = useMemo(() => {
-        const sorted = [...codes].sort((a, b) => {
-            const dateB = b.expires_at ? new Date(b.expires_at).getTime() : 0;
-            const dateA = a.expires_at ? new Date(a.expires_at).getTime() : 0;
-            return dateB - dateA;
-        });
-        return {
-            activeCodes: sorted.filter(c => c.status === 'Active'),
-            inactiveCodes: sorted.filter(c => c.status !== 'Active')
-        };
-    }, [codes]);
-
-    const focusedPermit = useMemo(() => 
-        codes.find(c => c.id === focusedPermitId), 
-    [codes, focusedPermitId]);
-
-    const isReadyToActivate = !!(selectedAdmissionId && permitType);
-
-    if (loading && codes.length === 0) {
-        return (
-            <div className="flex flex-col items-center justify-center py-40 gap-6">
-                <Spinner size="lg" className="text-primary"/>
-                <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/20 animate-pulse font-sans">Syncing Handshake Center</p>
-            </div>
-        );
+  const handleGenerateCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAdmission) {
+      alert('Please select a child profile.');
+      return;
     }
 
-    return (
-        <div className="max-w-[1600px] mx-auto space-y-12 animate-in fade-in duration-700 pb-32 font-sans">
-            {/* --- MASTER HEADER SECTION --- */}
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-10 px-4">
-                <div className="max-w-4xl space-y-5">
-                    <div className="flex items-center gap-4">
-                        <div className="p-2.5 bg-primary/10 rounded-xl text-primary border border-primary/20 shadow-inner">
-                            <ShieldCheckIcon className="w-5 h-5"/>
+    if (!UUID_REGEX.test(selectedAdmission)) {
+        setError("Identity Mismatch: This profile uses a legacy ID format. Please contact support.");
+        return;
+    }
+    
+    setGenerating(true);
+    setGeneratedCode(null);
+    setError(null);
+
+    try {
+      const { data, error } = await supabase.rpc('generate_admission_share_code', {
+        p_admission_id: selectedAdmission,
+        p_purpose: purpose,
+        p_code_type: codeType,
+      });
+
+      if (error) {
+          if (error.code === '42883' || error.message?.includes('operator does not exist: uuid = bigint')) {
+              throw new Error("System Update Required: Please contact support regarding database schema migration.");
+          }
+          throw error;
+      }
+
+      // Handle response variation (object vs string)
+      const codeValue = typeof data === 'string' ? data : (data?.code || data?.p_code);
+      setGeneratedCode(codeValue);
+      setPurpose('');
+      await fetchData();
+
+    } catch (err: any) {
+      setError(formatError(err));
+    } finally {
+        setGenerating(false);
+    }
+  };
+  
+  const handleRevokeCode = async (id: number) => {
+    if (window.confirm('Are you sure you want to revoke this code? It will no longer be usable.')) {
+        const { error } = await supabase.rpc('revoke_my_share_code', { p_code_id: id });
+        if (error) {
+            alert(`Failed to revoke code: ${formatError(error)}`);
+        } else {
+            await fetchData();
+        }
+    }
+  };
+  
+  const handleRegenerate = (code: ShareCode) => {
+    if (code.admission_id) {
+        setSelectedAdmission(code.admission_id);
+    }
+    if (code.code_type) {
+        setCodeType(code.code_type);
+    }
+    setPurpose(code.purpose ? `Regenerated: ${code.purpose}` : 'Regenerated Code');
+    
+    // Smooth scroll to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setGeneratedCode(null);
+  };
+
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedCodeId(id);
+    setTimeout(() => setCopiedCodeId(null), 2000);
+  };
+
+  if (loading && myApplications.length === 0) {
+      return (
+          <div className="flex flex-col items-center justify-center py-40">
+              <Spinner size="lg" className="text-primary" />
+              <p className="mt-8 text-[11px] font-black uppercase text-white/20 tracking-[0.4em] animate-pulse">Retrieving Secure Keys</p>
+          </div>
+      );
+  }
+
+  return (
+    <div className="access-codes-module space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-32">
+        
+        {/* Header */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-white/5 pb-8">
+            <div className="space-y-1">
+                <h2 className="text-3xl font-serif font-bold text-white tracking-tight">Access Codes</h2>
+                <p className="text-sm text-white/40 font-medium">Generate and manage time-bound secure keys for school administrators.</p>
+            </div>
+            <button 
+                onClick={() => fetchData()} 
+                className="group flex items-center gap-2 px-5 py-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-white/60 hover:text-white transition-all border border-white/5 active:scale-95"
+            >
+                <RefreshIcon className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
+                <span>Refresh Ledger</span>
+            </button>
+        </div>
+        
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+            
+            {/* LEFT COLUMN: Generator Form */}
+            <div className="xl:col-span-5 space-y-6">
+                 <div className="bg-[#0c0d12] p-8 rounded-[2.5rem] shadow-2xl border border-white/5 ring-1 ring-white/5 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-12 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
+                    
+                    <div className="flex items-center gap-3 mb-8 relative z-10">
+                        <div className="p-3 bg-primary/10 rounded-xl text-primary border border-primary/20 shadow-inner">
+                            <KeyIcon className="w-5 h-5" />
                         </div>
-                        <span className="text-[11px] font-bold uppercase text-primary tracking-[0.5em] pl-3 border-l border-white/10">Authorized Gateway</span>
+                        <h3 className="font-bold text-lg text-white">Generate New Key</h3>
                     </div>
-                    <div>
-                        <h2 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight uppercase leading-none">
-                            Digital <span className="text-white/40 italic font-light">Permits.</span>
-                        </h2>
-                        <p className="text-white/40 text-lg leading-relaxed font-serif italic max-w-2xl mt-4 border-l border-white/10 pl-8">
-                            Provision temporary high-fidelity tokens for institutional verification and secure enrollment handshakes.
-                        </p>
-                    </div>
+
+                    <form onSubmit={handleGenerateCode} className="space-y-8 relative z-10">
+                        
+                        {/* 1. Child Selection (Custom UI to fix visibility bug) */}
+                        <div className="space-y-3">
+                            <label className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em] ml-1">Select Identity Node</label>
+                            {myApplications.length === 0 ? (
+                                <div className="p-8 rounded-[2rem] bg-red-500/5 border border-red-500/10 text-center animate-in fade-in">
+                                    <div className="w-12 h-12 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/20">
+                                        <UsersIcon className="w-6 h-6" />
+                                    </div>
+                                    <p className="text-xs font-bold text-white/80 mb-1.5 uppercase tracking-wide">No Identity Nodes</p>
+                                    <p className="text-[11px] text-white/40 mb-6 px-4 leading-relaxed font-medium">You must enroll a student profile before generating access keys.</p>
+                                    {onNavigate && (
+                                        <button 
+                                            type="button"
+                                            onClick={() => onNavigate('My Children')}
+                                            className="px-6 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-[10px] font-black uppercase tracking-widest rounded-xl border border-red-500/20 transition-all flex items-center gap-2 mx-auto hover:scale-105 active:scale-95 shadow-lg"
+                                        >
+                                            Enroll Student
+                                        </button>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 gap-2">
+                                    {myApplications.map(app => (
+                                        <button
+                                            key={app.id}
+                                            type="button"
+                                            onClick={() => setSelectedAdmission(String(app.id))}
+                                            className={`
+                                                flex items-center gap-4 p-3 rounded-2xl border transition-all text-left group
+                                                ${selectedAdmission === String(app.id) 
+                                                    ? 'bg-primary/10 border-primary/50 ring-1 ring-primary/20' 
+                                                    : 'bg-white/5 border-transparent hover:bg-white/10 hover:border-white/10'
+                                                }
+                                            `}
+                                        >
+                                            <PremiumAvatar name={app.applicant_name} size="sm" className={`w-10 h-10 rounded-xl transition-transform ${selectedAdmission === String(app.id) ? 'scale-110' : 'grayscale group-hover:grayscale-0'}`} />
+                                            <div>
+                                                <p className={`text-sm font-bold transition-colors ${selectedAdmission === String(app.id) ? 'text-white' : 'text-white/60 group-hover:text-white'}`}>{app.applicant_name}</p>
+                                                <p className="text-[10px] text-white/30 font-mono mt-0.5 uppercase tracking-wider">Grade {app.grade}</p>
+                                            </div>
+                                            {selectedAdmission === String(app.id) && (
+                                                <div className="ml-auto p-1 bg-primary text-black rounded-full shadow-lg animate-in zoom-in">
+                                                    <CheckCircleIcon className="w-3 h-3" />
+                                                </div>
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 2. Access Type Selection (Card Grid) */}
+                        <div className="space-y-3">
+                            <label className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em] ml-1">Access Protocol</label>
+                            <div className="grid grid-cols-2 gap-4">
+                                <button 
+                                    type="button" 
+                                    disabled={myApplications.length === 0}
+                                    onClick={() => setCodeType('Enquiry')} 
+                                    className={`relative p-5 rounded-2xl border transition-all text-left group flex flex-col justify-between h-32 disabled:opacity-50 disabled:cursor-not-allowed ${codeType === 'Enquiry' ? 'bg-blue-500/10 border-blue-500/50 ring-1 ring-blue-500/20' : 'bg-white/5 border-transparent hover:bg-white/10 hover:border-white/10'}`}
+                                >
+                                    <div className={`p-2 rounded-lg w-fit ${codeType === 'Enquiry' ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' : 'bg-white/10 text-white/40'}`}>
+                                        <InfoIcon className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <span className={`block font-bold text-sm ${codeType === 'Enquiry' ? 'text-white' : 'text-white/60'}`}>Enquiry</span>
+                                        <span className="block text-[10px] text-white/30 mt-1 leading-tight">Read-only view for initial assessment.</span>
+                                    </div>
+                                </button>
+                                
+                                <button 
+                                    type="button" 
+                                    disabled={myApplications.length === 0}
+                                    onClick={() => setCodeType('Admission')} 
+                                    className={`relative p-5 rounded-2xl border transition-all text-left group flex flex-col justify-between h-32 disabled:opacity-50 disabled:cursor-not-allowed ${codeType === 'Admission' ? 'bg-purple-500/10 border-purple-500/50 ring-1 ring-purple-500/20' : 'bg-white/5 border-transparent hover:bg-white/10 hover:border-white/10'}`}
+                                >
+                                    <div className={`p-2 rounded-lg w-fit ${codeType === 'Admission' ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/20' : 'bg-white/10 text-white/40'}`}>
+                                        <FileTextIcon className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <span className={`block font-bold text-sm ${codeType === 'Admission' ? 'text-white' : 'text-white/60'}`}>Admission</span>
+                                        <span className="block text-[10px] text-white/30 mt-1 leading-tight">Full document access for verification.</span>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        {/* 3. Purpose Input */}
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em] ml-1">Context Note</label>
+                            <input 
+                                type="text" 
+                                disabled={myApplications.length === 0}
+                                placeholder="e.g. Principal Meeting, Document Check..." 
+                                value={purpose} 
+                                onChange={(e) => setPurpose(e.target.value)} 
+                                className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-sm text-white placeholder:text-white/20 focus:ring-2 focus:ring-primary/20 focus:border-primary/50 outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed" 
+                            />
+                        </div>
+
+                        {/* Submit Button */}
+                        <button 
+                            type="submit" 
+                            disabled={generating || myApplications.length === 0} 
+                            className="w-full py-4 bg-gradient-to-r from-primary to-indigo-600 hover:from-primary/90 hover:to-indigo-600/90 text-white font-bold text-sm rounded-2xl shadow-xl shadow-primary/25 hover:shadow-primary/40 transition-all transform active:scale-[0.98] flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                        >
+                            {generating ? <Spinner size="sm" className="text-white" /> : <><ShieldCheckIcon className="w-4 h-4"/> Generate Secure Key</>}
+                        </button>
+                    </form>
+                    
+                    {error && !generatedCode && (
+                        <div className="mt-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-center animate-in fade-in slide-in-from-top-2">
+                            <p className="text-[10px] font-black uppercase text-red-500 tracking-wider mb-1">Error</p>
+                            <p className="text-xs text-red-400 font-medium">{error}</p>
+                        </div>
+                    )}
                 </div>
-                <button 
-                    onClick={() => fetchData()} 
-                    disabled={actionLoading}
-                    className="p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.08] text-white/40 hover:text-white transition-all border border-white/10 group active:scale-95 shadow-2xl backdrop-blur-md no-print"
-                >
-                    <RefreshIcon className={`w-6 h-6 ${actionLoading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-700'}`} />
-                </button>
             </div>
 
-            {error && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-500 p-8 rounded-[2.5rem] flex items-center gap-6 animate-in shake shadow-2xl ring-1 ring-red-500/20 mx-4">
-                    <AlertTriangleIcon className="w-8 h-8 shrink-0" />
-                    <div className="flex-1">
-                        <p className="text-[11px] font-black uppercase tracking-widest mb-1 opacity-60">System Interrupt</p>
-                        <p className="text-sm font-bold uppercase tracking-widest leading-relaxed">{error}</p>
-                    </div>
-                </div>
-            )}
-
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-10 items-stretch min-h-[800px] px-4">
+            {/* RIGHT COLUMN: Output & History */}
+            <div className="xl:col-span-7 space-y-8">
                 
-                {/* --- 1. PROVISIONING HUB (Left) --- */}
-                <div className="xl:col-span-4 flex flex-col group/panel">
-                    <div className="bg-slate-900/40 backdrop-blur-3xl border border-white/10 p-10 rounded-[2.8rem] shadow-2xl space-y-12 flex flex-col h-full ring-1 ring-white/5 relative overflow-hidden transition-all duration-500 group-hover/panel:border-primary/20">
-                        <div className="absolute -top-32 -left-32 w-80 h-80 bg-primary/5 rounded-full blur-[120px] pointer-events-none opacity-40"></div>
-                        
-                        {/* Section A: Target Identity */}
-                        <div className="space-y-8 relative z-10">
-                            <div className="flex items-center gap-5">
-                                <div className="w-9 h-9 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-[11px] font-black text-white/30 shadow-inner">01</div>
-                                <h3 className="text-[12px] font-bold text-white/40 uppercase tracking-[0.2em]">Target Identity Node</h3>
-                            </div>
-                            <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-3">
-                                {myApplications.map(app => (
-                                    <button
-                                        key={app.id} 
-                                        onClick={() => setSelectedAdmissionId(app.id)}
-                                        className={`w-full flex items-center gap-5 p-5 rounded-[2rem] border transition-all duration-300 group/item ${selectedAdmissionId === app.id ? 'bg-primary/10 border-primary ring-4 ring-primary/5 shadow-2xl' : 'bg-white/[0.02] border-white/5 hover:border-white/10 hover:bg-white/[0.05]'}`}
-                                    >
-                                        <PremiumAvatar src={app.profile_photo_url} name={app.applicant_name} size="xs" className="w-12 h-12 shadow-2xl" />
-                                        <div className="text-left min-w-0 flex-grow">
-                                            <p className={`font-bold text-base truncate transition-colors ${selectedAdmissionId === app.id ? 'text-white' : 'text-white/40 group-hover/item:text-white/60'}`}>{app.applicant_name}</p>
-                                            <p className="text-[9px] text-white/20 font-bold uppercase mt-1 tracking-widest">Grade {app.grade} Node</p>
-                                        </div>
-                                        {selectedAdmissionId === app.id && <CheckCircleIcon className="w-5 h-5 text-primary animate-in zoom-in duration-300" />}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Section B: Protocol Scope */}
-                        <div className="space-y-8 relative z-10">
-                            <div className="flex items-center gap-5">
-                                <div className="w-9 h-9 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-[11px] font-black text-white/30 shadow-inner">02</div>
-                                <h3 className="text-[12px] font-bold text-white/40 uppercase tracking-[0.2em]">Access Protocol Scope</h3>
-                            </div>
-                            <div className="grid grid-cols-1 gap-4">
-                                {[
-                                    { id: 'Enquiry', label: 'Enquiry Level', desc: 'Temporary metadata visibility only.', icon: <MailIcon className="w-5 h-5"/> },
-                                    { id: 'Admission', label: 'Admission Level', desc: 'Full document vault & ledger access.', icon: <DocumentTextIcon className="w-5 h-5"/> }
-                                ].map(type => (
-                                    <button
-                                        key={type.id} 
-                                        onClick={() => setPermitType(type.id as ShareCodeType)}
-                                        className={`p-6 rounded-[2.2rem] border transition-all duration-300 flex items-center gap-6 group/type ${permitType === type.id ? 'bg-primary/10 border-primary shadow-2xl ring-2 ring-primary/5' : 'bg-white/[0.01] border-white/5 hover:border-white/10 hover:bg-white/[0.03]'}`}
-                                    >
-                                        <div className={`p-3.5 rounded-xl transition-all duration-500 shadow-inner ${permitType === type.id ? 'bg-primary text-white scale-110 shadow-lg shadow-primary/20' : 'bg-white/5 text-white/10'}`}>{type.icon}</div>
-                                        <div className="text-left flex-grow">
-                                            <h4 className={`text-[12px] font-bold uppercase tracking-widest ${permitType === type.id ? 'text-primary' : 'text-white/40 group/type:text-white/60'}`}>{type.label}</h4>
-                                            <p className="text-[11px] text-white/20 mt-1 font-serif italic leading-relaxed">{type.desc}</p>
-                                        </div>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="mt-auto pt-6 relative z-10">
-                            <button 
-                                onClick={handleGenerate} 
-                                disabled={!isReadyToActivate || actionLoading}
-                                className={`w-full h-14 rounded-[1.4rem] text-[11px] font-bold uppercase tracking-[0.4em] transition-all duration-300 flex items-center justify-center gap-4 shadow-2xl ${isReadyToActivate && !actionLoading ? 'bg-primary text-primary-foreground shadow-primary/30 hover:shadow-primary/50 transform hover:-translate-y-0.5 active:scale-95' : 'bg-white/5 text-white/10 cursor-not-allowed border border-white/5'}`}
-                            >
-                                {actionLoading ? <Spinner size="sm" className="text-current" /> : 'Initialize Permit'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* --- 2. REGISTRY INDEX (Middle) --- */}
-                <div className="xl:col-span-3 flex flex-col space-y-8 group/registry">
-                    <div className="flex justify-between items-center px-6">
-                        <h3 className="text-sm font-bold text-white uppercase tracking-[0.2em]">Registry Index</h3>
-                        <div className="flex items-center gap-3">
-                             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]"></div>
-                             <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">LIVE</span>
-                        </div>
-                    </div>
-
-                    <div className="space-y-3 overflow-y-auto max-h-[800px] custom-scrollbar pr-3 flex-grow">
-                        {activeCodes.length === 0 ? (
-                            <div className="py-32 text-center border-2 border-dashed border-white/5 rounded-[3rem] flex flex-col items-center justify-center bg-white/[0.01] group-hover/registry:border-white/10 transition-colors">
-                                <KeyIcon className="w-12 h-12 text-white/5 mb-6" />
-                                <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-white/10 italic">IDLE.</p>
-                            </div>
-                        ) : (
-                            activeCodes.map(code => (
-                                <button 
-                                    key={code.id} 
-                                    onClick={() => setFocusedPermitId(code.id)}
-                                    className={`w-full text-left p-6 rounded-[2.2rem] border transition-all duration-500 group/artifact relative overflow-hidden ${focusedPermitId === code.id ? 'bg-slate-900 border-primary shadow-2xl z-10 scale-[1.02] ring-1 ring-primary/20' : 'bg-white/[0.02] border-white/5 hover:border-white/10'}`}
-                                >
-                                    <div className="flex items-center gap-5 relative z-10">
-                                        <div className="relative shrink-0">
-                                            <PremiumAvatar src={code.profile_photo_url} name={code.applicant_name} size="xs" className="w-14 h-14 rounded-[1.2rem] shadow-xl border border-white/10" />
-                                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-[#09090b] shadow-2xl"></div>
-                                        </div>
-                                        <div className="min-w-0">
-                                            <h4 className={`font-bold text-base text-white transition-colors duration-500 leading-tight mb-1 truncate ${focusedPermitId === code.id ? 'text-primary' : 'group-hover/artifact:text-primary'}`}>{code.applicant_name}</h4>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest">{code.code_type}</span>
-                                                <span className="w-1 h-1 rounded-full bg-white/10"></span>
-                                                <span className="text-[9px] font-mono text-white/10">ID_{code.id}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {focusedPermitId === code.id && (
-                                        <div className="absolute right-0 top-0 bottom-0 w-1 bg-primary shadow-[0_0_15px_rgba(var(--primary),0.8)]"></div>
-                                    )}
-                                </button>
-                            ))
-                        )}
-
-                        <div className="pt-8 border-t border-white/5 mt-auto">
-                            <button 
-                                onClick={() => setShowHistory(!showHistory)}
-                                className={`w-full flex items-center justify-between px-8 py-5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.05] transition-all group border border-white/5 ${showHistory ? 'border-primary/20 bg-primary/5' : ''}`}
-                            >
-                                <span className={`text-[10px] font-bold uppercase tracking-[0.2em] transition-colors ${showHistory ? 'text-primary' : 'text-white/20 group-hover:text-white/40'}`}>Registry Archives</span>
-                                <ChevronDownIcon className={`w-4 h-4 transition-all duration-500 ${showHistory ? 'rotate-180 text-primary' : 'text-white/20'}`} />
-                            </button>
+                {/* 1. Generated Code Hero */}
+                {generatedCode && (
+                    <div className="animate-in fade-in slide-in-from-top-8 duration-700">
+                        <div className="bg-gradient-to-br from-[#13151b] to-black rounded-[3rem] shadow-2xl border border-white/10 relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-[80px] pointer-events-none opacity-50"></div>
                             
-                            <AnimatePresence>
-                                {showHistory && (
-                                    <motion.div 
-                                        initial={{ height: 0, opacity: 0 }}
-                                        animate={{ height: 'auto', opacity: 1 }}
-                                        exit={{ height: 0, opacity: 0 }}
-                                        className="mt-4 space-y-2 overflow-hidden"
+                            <div className="p-10 md:p-12 text-center relative z-10">
+                                <div className="w-20 h-20 bg-emerald-500/10 text-emerald-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-emerald-500/10 border border-emerald-500/20 animate-bounce">
+                                    <CheckCircleIcon className="w-10 h-10" />
+                                </div>
+                                <h3 className="text-3xl md:text-4xl font-serif font-black text-white tracking-tight mb-2">Protocol Active</h3>
+                                <p className="text-white/40 text-sm font-medium">Share this key with the school admin.</p>
+
+                                <div 
+                                    className="mt-10 mb-8 p-8 bg-black/40 border-2 border-dashed border-white/10 rounded-[2rem] relative group/code cursor-pointer hover:border-white/20 transition-all"
+                                    onClick={() => copyToClipboard(generatedCode, 'generated')}
+                                >
+                                     <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em] mb-4">Verification Token</p>
+                                     <div className="text-5xl md:text-6xl font-mono font-black text-primary tracking-widest drop-shadow-lg select-all">
+                                         {generatedCode}
+                                     </div>
+                                     <div className={`absolute inset-0 flex items-center justify-center bg-slate-900/90 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl backdrop-blur-sm`}>
+                                         <span className="text-white font-bold text-sm flex items-center gap-2">
+                                             {copiedCodeId === 'generated' ? <CheckCircleIcon className="w-5 h-5 text-emerald-500"/> : <CopyIcon className="w-5 h-5"/>}
+                                             {copiedCodeId === 'generated' ? 'Copied to Clipboard' : 'Click to Copy'}
+                                         </span>
+                                     </div>
+                                </div>
+                                
+                                <div className="flex justify-center gap-4">
+                                     <button 
+                                        type="button" 
+                                        onClick={() => copyToClipboard(generatedCode, 'generated_btn')}
+                                        className="px-8 py-3 bg-white text-black font-black text-xs uppercase tracking-widest rounded-xl hover:bg-white/90 transition-all flex items-center gap-2 shadow-lg active:scale-95"
                                     >
-                                        {inactiveCodes.map(code => (
-                                            <div key={code.id} className="flex items-center justify-between p-5 rounded-xl bg-white/[0.01] border border-white/5 opacity-40 hover:opacity-60 transition-all shadow-inner">
-                                                <div className="flex items-center gap-4">
-                                                    <PremiumAvatar src={code.profile_photo_url} name={code.applicant_name} size="xs" className="w-10 h-10 border border-white/5 grayscale" />
-                                                    <p className="text-[11px] font-bold text-white uppercase tracking-wider truncate max-w-[120px]">{code.applicant_name}</p>
-                                                </div>
-                                                <span className="text-[11px] font-mono text-white/20 tracking-widest">{code.code}</span>
-                                            </div>
-                                        ))}
-                                        {inactiveCodes.length === 0 && <p className="text-center py-8 text-[10px] font-bold text-white/5 uppercase tracking-widest">No archived records.</p>}
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
+                                        {copiedCodeId === 'generated_btn' ? <CheckCircleIcon className="w-4 h-4"/> : <CopyIcon className="w-4 h-4"/>}
+                                        {copiedCodeId === 'generated_btn' ? 'Copied' : 'Copy Key'}
+                                    </button>
+                                </div>
+                                <p className="text-[10px] text-white/20 font-black uppercase tracking-[0.2em] mt-8">Expires in 24 Hours • One-time Use</p>
+                            </div>
                         </div>
                     </div>
-                </div>
+                )}
 
-                {/* --- 3. HERO PROTOCOL CARD (Right) --- */}
-                <div className="xl:col-span-5 flex flex-col group/hero">
-                    <div className="bg-[#0c0d12] border border-white/5 rounded-[3.5rem] flex flex-col shadow-[0_48px_96px_-24px_rgba(0,0,0,1)] relative overflow-hidden h-full ring-1 ring-white/10 transition-all duration-500 group-hover/hero:border-white/20">
-                        
-                        {/* Background Layering */}
-                        <div className="absolute inset-0 opacity-[0.02] pointer-events-none z-0" style={{ backgroundImage: `radial-gradient(circle at 2px 2px, rgba(255,255,255,0.2) 1px, transparent 0)`, backgroundSize: '32px 32px' }}></div>
-
-                        {focusedPermit ? (
-                            <motion.div 
-                                initial={{ opacity: 0, scale: 0.98 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                className="h-full flex flex-col relative z-10"
-                            >
-                                {/* Hero Header */}
-                                <div className="p-10 md:p-12 pb-6 flex items-center justify-between relative">
-                                    <div className="flex items-center gap-5">
-                                        <PremiumAvatar src={focusedPermit.profile_photo_url} name={focusedPermit.applicant_name} size="sm" className="shadow-2xl border-2 border-white/10 rounded-2xl" />
-                                        <div className="min-w-0">
-                                            <h4 className="text-2xl font-bold text-white truncate leading-none uppercase tracking-tight mb-2">{focusedPermit.applicant_name}</h4>
-                                            <p className="text-[11px] text-white/30 uppercase font-bold tracking-[0.2em]">Institutional Access Node</p>
+                {/* 2. History List */}
+                <div className="space-y-6">
+                    <div className="flex items-center gap-4 px-2">
+                        <h3 className="text-lg font-bold text-white">Active Keys</h3>
+                        <div className="h-px bg-white/10 flex-grow"></div>
+                        <span className="text-xs font-medium text-white/40">{codes.length} Total</span>
+                    </div>
+                    
+                    {codes.length === 0 ? (
+                        <div className="text-center py-20 bg-white/[0.02] rounded-[2.5rem] border border-white/5 flex flex-col items-center">
+                            <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4 border border-white/5">
+                                <UsersIcon className="w-8 h-8 text-white/20" />
+                            </div>
+                            <p className="font-bold text-white/60">No active keys found</p>
+                            <p className="text-xs text-white/30 mt-1 max-w-xs leading-relaxed">Generate a code to grant temporary access to your child's records.</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {codes.map(code => {
+                                // Safety: Fallback for unexpected status strings from DB
+                                const status = statusConfig[code.status] || statusConfig['default'];
+                                
+                                return (
+                                <div key={code.id} className="bg-[#13151b] border border-white/5 hover:border-white/10 rounded-3xl p-6 transition-all group hover:shadow-lg relative overflow-hidden flex flex-col animate-in fade-in slide-in-from-bottom-2">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white/40 font-bold border border-white/5">
+                                                {code.applicant_name.charAt(0)}
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-white text-sm truncate max-w-[120px]">{code.applicant_name}</p>
+                                                <p className="text-[10px] text-white/30 font-medium uppercase tracking-wider">{code.code_type}</p>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 shadow-xl backdrop-blur-xl">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]"></div>
-                                        <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Authorized</span>
-                                    </div>
-                                </div>
-
-                                {/* Main Token Area */}
-                                <div className="px-10 md:px-12 flex-shrink-0">
-                                    <div 
-                                        className="bg-black/40 backdrop-blur-3xl border border-dashed border-white/10 rounded-[3rem] p-12 md:p-16 text-center group/token cursor-pointer active:scale-[0.98] transition-all relative overflow-hidden ring-1 ring-white/5 shadow-2xl"
-                                        onClick={() => handleCopy(focusedPermit.code)}
-                                    >
-                                        <div className="absolute inset-0 bg-gradient-to-tr from-primary/5 to-transparent opacity-0 group-hover/token:opacity-100 transition-opacity duration-1000"></div>
-                                        <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.4em] mb-10 relative z-10 group-hover/token:text-primary/40 transition-colors">Digital Permit Artifact</p>
-                                        
-                                        <div className="relative inline-block mb-10">
-                                            <span className={`font-mono font-black text-5xl md:text-6xl tracking-[0.3em] transition-all duration-500 relative z-10 select-all block drop-shadow-2xl ${copyFeedback ? 'text-emerald-500 scale-105' : 'text-white group-hover/token:text-primary'}`}>
-                                                {focusedPermit.code}
-                                            </span>
-                                            <div className={`absolute -inset-10 blur-[60px] opacity-10 transition-all duration-1000 ${copyFeedback ? 'bg-emerald-500 opacity-30' : 'bg-primary/20 group-hover/token:opacity-20'}`}></div>
-                                        </div>
-
-                                        <div className="flex items-center justify-center gap-3 relative z-10">
-                                             <button 
-                                                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-all duration-300 ${copyFeedback ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-500/30' : 'bg-white/5 hover:bg-white/10 text-white/40 hover:text-white border border-white/10'}`}
-                                            >
-                                                {copyFeedback ? <CheckCircleIcon className="w-4 h-4" /> : <CopyIcon className="w-4 h-4"/>}
-                                                {copyFeedback ? 'Copied' : 'Copy Artifact'}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Security Metadata */}
-                                <div className="p-10 md:p-12 flex-grow grid grid-cols-2 gap-x-10 gap-y-10 relative z-10">
-                                    <div className="space-y-1.5">
-                                        <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Protocol Sync</p>
-                                        <p className="text-base font-bold text-white uppercase tracking-wider">{focusedPermit.code_type} Console</p>
-                                    </div>
-                                    <div className="space-y-1.5 text-right">
-                                        <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Encryption</p>
-                                        <p className="text-base font-bold text-white uppercase tracking-wider">AES-256-GCM</p>
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Issued On</p>
-                                        <p className="text-[15px] font-medium text-white/50 font-mono tracking-tighter uppercase">{new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                                    </div>
-                                    <div className="space-y-1.5 text-right">
-                                        <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Expiration</p>
-                                        <p className="text-[15px] font-medium text-indigo-400/80 font-mono tracking-tighter uppercase">{new Date(focusedPermit.expires_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                                        <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border flex items-center gap-1.5 ${status.bg} ${status.text} ${status.border}`}>
+                                            {status.icon} {code.status}
+                                        </span>
                                     </div>
                                     
-                                    <div className="col-span-full pt-8 flex flex-col gap-4 border-t border-white/5">
-                                        <div className="flex items-center gap-4 text-[12px] text-white/20 font-medium italic group/dis">
-                                            <ShieldCheckIcon className="w-5 h-5 opacity-30 group-hover/dis:text-emerald-500 transition-colors shrink-0" />
-                                            <span className="leading-relaxed">Artifact integrity verified by Gurukul Institutional Matrix. Handshake node synchronized via secure tunnel.</span>
-                                        </div>
+                                    <div className="bg-black/30 p-3 rounded-xl border border-white/5 flex justify-between items-center mb-4 group/mini">
+                                        <span className={`font-mono font-bold tracking-widest text-lg ${code.status === 'Active' ? 'text-primary' : 'text-white/30 decoration-white/20'}`}>{code.code}</span>
+                                        <button 
+                                            onClick={() => copyToClipboard(code.code, String(code.id))}
+                                            className="p-1.5 hover:bg-white/10 rounded-lg text-white/30 hover:text-white transition-colors"
+                                        >
+                                            {copiedCodeId === String(code.id) ? <CheckCircleIcon className="w-4 h-4 text-emerald-500"/> : <CopyIcon className="w-4 h-4"/>}
+                                        </button>
+                                    </div>
+                                    
+                                    <div className="flex justify-between items-center pt-2 border-t border-white/5 mt-auto">
+                                         <div className="flex items-center gap-1.5 text-[10px] font-medium text-white/30">
+                                             <ClockIcon className="w-3 h-3"/> Exp: {new Date(code.expires_at).toLocaleDateString()}
+                                         </div>
+                                         <div className="flex items-center gap-2">
+                                             {code.status === 'Active' ? (
+                                                 <button 
+                                                    onClick={() => handleRevokeCode(code.id)}
+                                                    className="flex items-center gap-1.5 text-[10px] font-bold text-red-500/60 hover:text-red-500 transition-colors uppercase tracking-wider"
+                                                >
+                                                    <TrashIcon className="w-3 h-3"/> Revoke
+                                                </button>
+                                             ) : (
+                                                <button 
+                                                    onClick={() => handleRegenerate(code)}
+                                                    className="flex items-center gap-1.5 text-[10px] font-bold text-blue-400/60 hover:text-blue-400 transition-colors uppercase tracking-wider"
+                                                >
+                                                    <RotateCcwIcon className="w-3 h-3"/> Regenerate
+                                                </button>
+                                             )}
+                                         </div>
                                     </div>
                                 </div>
-
-                                {/* Destructive Control */}
-                                <div className="p-8 md:p-10 border-t border-white/5 bg-black/20 flex flex-col sm:flex-row gap-4 shrink-0 z-20">
-                                    <button 
-                                        onClick={() => handleRevoke(focusedPermit.id)}
-                                        disabled={actionLoading}
-                                        className="flex-1 h-14 rounded-2xl border border-red-500/10 text-red-500/40 text-[10px] font-bold uppercase tracking-[0.4em] hover:bg-red-500 hover:text-white hover:border-red-500 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-30 shadow-2xl"
-                                    >
-                                        {actionLoading ? <Spinner size="sm" className="text-current" /> : <><LockIcon className="w-4 h-4" /> Terminate Permit</>}
-                                    </button>
-                                </div>
-                            </motion.div>
-                        ) : (
-                            <div className="h-full flex flex-col items-center justify-center p-20 text-center relative">
-                                <div className="absolute inset-0 bg-primary/5 rounded-full blur-[160px] animate-slow-pulse pointer-events-none"></div>
-                                <div className="relative mb-16">
-                                    <div className="absolute -inset-10 bg-white/5 rounded-full blur-[60px]"></div>
-                                    <div className="w-28 h-28 rounded-[2.8rem] bg-white/[0.02] border border-white/10 flex items-center justify-center shadow-[0_0_80px_rgba(255,255,255,0.05)] relative z-10 transition-transform group-hover/hero:scale-105 duration-1000">
-                                        <KeyIcon className="w-12 h-12 text-white/10" />
-                                    </div>
-                                </div>
-                                <div className="space-y-6 relative z-10 max-w-xs">
-                                    <h3 className="text-2xl font-bold uppercase tracking-[0.4em] text-white/20 leading-tight">Registry<br/>Standby</h3>
-                                    <p className="text-base font-serif italic text-white/10 leading-relaxed">
-                                        Select an active permit from the registry to inspect security context and handshake status.
-                                    </p>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                            )})}
+                        </div>
+                    )}
                 </div>
             </div>
-
-            <style>{`
-                .animate-slow-pulse { animation: pulse 8s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-                @keyframes pulse { 0%, 100% { opacity: 0.1; transform: scale(1); } 50% { opacity: 0.2; transform: scale(1.05); } }
-                .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.05); border-radius: 20px; }
-                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(var(--primary), 0.5); }
-            `}</style>
         </div>
-    );
+    </div>
+  );
 }
