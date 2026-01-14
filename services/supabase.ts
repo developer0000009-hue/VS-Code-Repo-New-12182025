@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://jforwngnlqyvlpqzuqpz.supabase.co';
@@ -18,46 +19,51 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 /**
  * Institutional Error Protocol
  * Translates low-level SQL/API errors into actionable user guidance.
+ * Strengthened to strictly prevent [object Object] fallbacks.
  */
 export const formatError = (err: any): string => {
     if (!err) return "Synchronization error.";
-    if (typeof err === 'string') return err;
-
-    // Check for nested error object (Supabase sometimes nests it)
-    if (err.error && typeof err.error === 'object') return formatError(err.error);
-
-    const errorMessage = (err.message || '').toLowerCase();
     
-    // Handle specific missing column errors
-    if (errorMessage.includes('column "purpose" of relation "share_codes" does not exist')) {
-        return "Schema Mismatch: 'share_codes' table is missing the 'purpose' column. Please run the latest SQL migration from schema.txt.";
+    // 1. Handle String Inputs
+    if (typeof err === 'string') {
+        const isJunk = err === "[object Object]" || err === "{}" || err === "null" || err === "undefined";
+        return isJunk ? "Institutional protocol failure." : err;
     }
 
-    if (errorMessage.includes('invalid login credentials') || errorMessage.includes('invalid api key')) {
-        return "Invalid Node Identifier or Access Key.";
-    }
-
-    // Handle the specific 'uuid = bigint' casting error (Postgres 42883)
-    if (err.code === '42883' || (errorMessage && errorMessage.includes('operator does not exist: uuid = bigint'))) {
-        return "Identity Mismatch: Your database registry uses numeric IDs instead of secure tokens. Please apply the 'v20.3.0 Registry Fix' from schema.txt via the Supabase SQL Editor.";
-    }
-
-    if (err.code === 'PGRST116') return "Node not found in registry.";
-    if (err.code === '23505') return "Duplicate record detected in the vault.";
-    if (err.code === '42P01') return "Table missing. Please initialize schema.txt.";
+    // 2. Primary Key Extraction (Standard Supabase/PostgREST)
+    let candidate = err.message || err.error_description || err.details || err.hint;
     
-    // Handle generic column missing error
-    if (err.code === '42703') return `Database Schema Error: ${err.message}. Please update your database schema.`;
-
-    const message = err.message || err.error_description || err.details || err.hint;
-    if (message && typeof message === 'string' && !message.includes("[object Object]")) {
-        return message;
+    // 3. Nested Auth/Error Object Probing
+    if (!candidate || typeof candidate !== 'string' || candidate === "[object Object]") {
+        if (err.error) {
+            if (typeof err.error === 'string') candidate = err.error;
+            else if (typeof err.error === 'object') {
+                candidate = err.error.message || err.error.description || err.error.details;
+            }
+        }
     }
 
+    // 4. Array Flattening
+    if (Array.isArray(err) && err.length > 0) {
+        return formatError(err[0]);
+    }
+
+    // 5. Final String Validation
+    if (candidate && typeof candidate === 'string' && candidate !== "[object Object]" && candidate !== "{}") {
+        return candidate;
+    }
+
+    // 6. Safe JSON Stringification Fallback
     try {
         const str = JSON.stringify(err);
-        if (str && str !== '{}' && str !== '[]' && !str.includes("[object Object]")) return str;
+        if (str && str !== '{}' && str !== '[]' && !str.includes("[object Object]")) {
+            return str.length > 250 ? str.substring(0, 247) + "..." : str;
+        }
     } catch { }
 
-    return "System encountered an unreadable error.";
+    // 7. Last Resort
+    const finalFallback = String(err);
+    return (finalFallback === '[object Object]' || finalFallback === '{}') 
+        ? "Identity synchronization exception." 
+        : finalFallback;
 };

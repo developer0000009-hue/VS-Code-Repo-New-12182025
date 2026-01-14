@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { UserProfile, Role } from './types';
 import Header from './components/parent/Header';
@@ -47,7 +48,7 @@ const ParentDashboard: React.FC<ParentDashboardProps> = ({ profile, onSelectRole
         'My Children': <MyChildrenTab onManageDocuments={handleManageDocuments} profile={profile} />,
         'Documents': <DocumentsTab profile={profile} focusOnAdmissionId={focusedAdmissionId} onClearFocus={() => setFocusedAdmissionId(null)} setActiveComponent={setActiveComponent} />,
         'Messages': <MessagesTab />,
-        'Share Codes': <ShareCodesTab />,
+        'Share Codes': <ShareCodesTab onNavigate={setActiveComponent} />,
         'My Profile': <ProfileCreationPage 
                             profile={profile} 
                             role={profile.role!} 

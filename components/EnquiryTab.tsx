@@ -17,20 +17,19 @@ import { UsersIcon } from './icons/UsersIcon';
 import { SparklesIcon } from './icons/SparklesIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import PremiumAvatar from './common/PremiumAvatar';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// FIX: The component was using legacy string literals for `EnquiryStatus`. Updated to use the unified `ENQUIRY_*` format.
 const statusColors: Record<string, string> = {
-  'ENQUIRY_ACTIVE': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-  'ENQUIRY_VERIFIED': 'bg-teal-500/20 text-teal-400 border-teal-500/30 font-black shadow-[0_0_15px_rgba(45,212,191,0.1)]',
-  'ENQUIRY_IN_REVIEW': 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-  'ENQUIRY_CONTACTED': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-  'ENQUIRY_REJECTED': 'bg-rose-500/10 text-red-400 border-red-500/20',
-  'ENQUIRY_CONVERTED': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+  'ENQUIRY_ACTIVE': 'bg-blue-500/5 text-blue-400/80 border-blue-500/10',
+  'ENQUIRY_VERIFIED': 'bg-emerald-500/5 text-emerald-400 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.05)]',
+  'ENQUIRY_IN_REVIEW': 'bg-purple-500/5 text-purple-400/80 border-purple-500/10',
+  'ENQUIRY_CONTACTED': 'bg-amber-500/5 text-amber-400/80 border-amber-500/10',
+  'ENQUIRY_REJECTED': 'bg-rose-500/5 text-rose-400/80 border-rose-500/10',
+  'ENQUIRY_CONVERTED': 'bg-indigo-500/5 text-indigo-400/80 border-indigo-500/10',
 };
 
-// FIX: The component was using legacy string literals for `EnquiryStatus`. Updated to use the unified `ENQUIRY_*` format.
 const statusLabels: Record<string, string> = {
   'ENQUIRY_ACTIVE': 'Active',
   'ENQUIRY_VERIFIED': 'Verified',
@@ -39,8 +38,6 @@ const statusLabels: Record<string, string> = {
   'ENQUIRY_REJECTED': 'Rejected',
   'ENQUIRY_CONVERTED': 'Converted',
 };
-
-type SortableKeys = 'applicant_name' | 'grade' | 'status' | 'updated_at';
 
 interface EnquiryTabProps {
     branchId?: number | null;
@@ -52,27 +49,21 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [viewingEnquiry, setViewingEnquiry] = useState<Enquiry | null>(null);
-    
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('');
-    const [sortConfig, setSortConfig] = useState<{ key: SortableKeys; direction: 'ascending' | 'descending' }>({ key: 'updated_at', direction: 'descending' });
 
     const fetchEnquiries = useCallback(async (isSilent = false) => {
-        if (branchId === undefined) {
-            setLoading(false);
-            return;
-        }
-        
+        if (branchId === undefined) return;
         if (!isSilent) setLoading(true);
         setError(null);
         try {
-            // FIX: Explicitly call get_all_enquiries_v2 to bypass schema cache ambiguity
+            // FIX: Explicitly pass BigInt castable branchId to resolve RPC ambiguity
+            const cleanBranchId = branchId === null ? null : Number(branchId);
             const { data, error: rpcError } = await supabase.rpc('get_all_enquiries_v2', { 
-                p_branch_id: branchId 
+                p_branch_id: cleanBranchId 
             });
             
             if (rpcError) throw rpcError;
-            // FIX: Filter for valid UUIDs to prevent legacy data from causing crashes
             const validData = (data || []).filter((e: Enquiry) => e.id && UUID_REGEX.test(String(e.id)));
             setEnquiries(validData || []);
         } catch (err: any) {
@@ -84,142 +75,106 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
 
     useEffect(() => {
         fetchEnquiries();
+    }, [fetchEnquiries]);
 
-        const channel = supabase.channel(`enquiries-desk-sync-${branchId || 'master'}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'enquiries' }, (payload) => {
-                const record = payload.new as any || payload.old as any;
-                if (branchId === null || branchId === undefined || record.branch_id === branchId) {
-                    fetchEnquiries(true);
-                }
-            })
-            .subscribe();
-
-        return () => { supabase.removeChannel(channel); };
-    }, [fetchEnquiries, branchId]);
-    
-    const processedEnquiries = useMemo(() => {
-        const source = Array.isArray(enquiries) ? enquiries : [];
-        let data = source.filter(enq => {
+    const filteredEnquiries = useMemo(() => {
+        return enquiries.filter(enq => {
             const matchesStatus = !filterStatus || enq.status === filterStatus;
-            const searchLower = (searchTerm || '').toLowerCase();
-            const matchesSearch = !searchTerm || 
-                (enq.applicant_name || '').toLowerCase().includes(searchLower) ||
-                (enq.parent_name || '').toLowerCase().includes(searchLower);
-            return matchesStatus && matchesSearch;
+            const searchLower = searchTerm.toLowerCase();
+            return matchesStatus && (
+                !searchTerm || 
+                enq.applicant_name.toLowerCase().includes(searchLower) ||
+                enq.parent_name.toLowerCase().includes(searchLower)
+            );
         });
+    }, [enquiries, searchTerm, filterStatus]);
 
-        data.sort((a, b) => {
-            const aVal = (a[sortConfig.key] || '').toString();
-            const bVal = (b[sortConfig.key] || '').toString();
-            const factor = sortConfig.direction === 'ascending' ? 1 : -1;
-            if (aVal < bVal) return -1 * factor;
-            if (aVal > bVal) return 1 * factor;
-            return 0;
-        });
-        
-        return data;
-    }, [enquiries, searchTerm, filterStatus, sortConfig]);
-
-    const stats = useMemo(() => {
-        const source = Array.isArray(enquiries) ? enquiries : [];
-        return {
-            total: source.length,
-            verified: source.filter(e => e.status === 'ENQUIRY_VERIFIED').length,
-            // FIX: The component was using 'CONVERTED' which is not a valid `EnquiryStatus`. Changed to 'ENQUIRY_CONVERTED'.
-            converted: source.filter(e => e.status === 'ENQUIRY_CONVERTED').length
-        };
-    }, [enquiries]);
-
-    const handleSort = (key: SortableKeys) => {
-        setSortConfig(prev => ({
-            key,
-            direction: prev.key === key && prev.direction === 'ascending' ? 'descending' : 'ascending'
-        }));
-    };
+    const stats = useMemo(() => ({
+        total: enquiries.length,
+        verified: enquiries.filter(e => e.status === 'ENQUIRY_VERIFIED').length,
+        converted: enquiries.filter(e => e.status === 'ENQUIRY_CONVERTED').length
+    }), [enquiries]);
 
     return (
-        <div className="space-y-12 animate-in fade-in slide-in-from-bottom-6 duration-1000 pb-32">
-            {/* Header */}
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-8">
-                <div className="max-w-3xl space-y-4">
-                    <div className="flex items-center gap-3">
-                         <div className="p-2 bg-primary/10 rounded-xl text-primary border border-primary/20 shadow-inner">
-                            <SparklesIcon className="w-5 h-5"/>
-                         </div>
-                         <span className="text-[10px] font-black uppercase text-primary tracking-[0.4em] pl-2 border-l border-primary/20">Operational Intelligence</span>
+        <div className="space-y-10 md:space-y-14 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-24 md:pb-12 max-w-[1600px] mx-auto px-4 md:px-0">
+            
+            {/* Header / Hero Area */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8">
+                <div className="max-w-2xl">
+                    <div className="flex items-center gap-4 mb-4">
+                        <div className="h-0.5 w-8 bg-primary/40 rounded-full"></div>
+                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/60">Administrative Console</span>
                     </div>
-                    <h2 className="text-[clamp(40px,4vw,64px)] font-serif font-black text-white tracking-tighter uppercase leading-[0.9]">
-                        ENQUIRY <span className="text-white/30 italic lowercase">desk.</span>
+                    <h2 className="text-4xl md:text-5xl font-serif font-extrabold text-white tracking-tighter leading-none mb-4 uppercase">
+                        ENQUIRY <span className="text-white/30 italic">desk.</span>
                     </h2>
-                    <p className="text-white/40 text-[18px] leading-relaxed font-serif italic border-l border-white/5 pl-8">
-                        Centralized workspace for managing inbound identity handshakes and verified institutional leads.
+                    <p className="text-[15px] md:text-16px text-white/40 font-medium leading-relaxed font-sans max-w-lg italic">
+                        Centralized operations for managing identity handshakes, enquiries, and institutional verifications.
                     </p>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 w-full md:w-auto">
                     <button 
-                        onClick={() => fetchEnquiries()} 
-                        disabled={loading}
-                        className="p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.08] text-white/40 hover:text-white transition-all border border-white/5 group active:scale-95 shadow-2xl"
+                        onClick={() => fetchEnquiries()}
+                        className="p-3.5 rounded-xl bg-white/[0.03] border border-white/5 text-white/30 hover:text-white hover:border-white/10 transition-all active:scale-95"
                     >
-                        <RefreshIcon className={`w-6 h-6 ${loading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-700'}`}/>
+                        <RefreshIcon className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
                     </button>
                     {onNavigate && (
                         <button 
                             onClick={() => onNavigate('Code Verification')}
-                            className="px-8 py-5 bg-primary text-white font-black text-[11px] uppercase tracking-[0.3em] rounded-2xl shadow-2xl shadow-primary/20 hover:bg-primary/90 transition-all flex items-center justify-center gap-3 transform hover:-translate-y-1 active:scale-95 ring-4 ring-primary/10"
+                            className="flex-grow md:flex-none h-12 md:h-14 px-8 bg-primary text-white font-bold text-[11px] uppercase tracking-[0.3em] rounded-2xl shadow-xl shadow-primary/10 transition-all hover:scale-[1.02] active:scale-95 border border-white/10 ring-4 ring-primary/5"
                         >
-                            <KeyIcon className="w-5 h-5" /> Start Verification
+                            Start Verification
                         </button>
                     )}
                 </div>
             </div>
 
-            {/* Stats Deck */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <StatCard title="Total Ledger" value={stats.total} icon={<MailIcon className="w-7 h-7"/>} color="bg-blue-500" desc="Total Nodes" />
-                <StatCard title="Verified Stream" value={stats.verified} icon={<ShieldCheckIcon className="h-7 w-7"/>} color="bg-teal-500" desc="Clearance Active" />
-                <StatCard title="Promoted" value={stats.converted} icon={<CheckCircleIcon className="w-7 h-7"/>} color="bg-emerald-500" desc="Converted nodes" />
+            {/* KPI Cards: Status Indicators */}
+            <div className="overflow-x-auto no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
+                <div className="flex md:grid md:grid-cols-3 gap-6 min-w-max md:min-w-full">
+                    <MetricCard title="Total Ledger" value={stats.total} icon={<MailIcon className="w-5 h-5"/>} color="text-blue-400" />
+                    <MetricCard title="Verified Stream" value={stats.verified} icon={<ShieldCheckIcon className="w-5 h-5"/>} color="text-emerald-400" />
+                    <MetricCard title="Promoted" value={stats.converted} icon={<CheckCircleIcon className="w-5 h-5"/>} color="text-indigo-400" />
+                </div>
             </div>
 
             {error && (
-                <div className="p-6 bg-red-500/10 border border-red-500/20 rounded-[2rem] flex items-center justify-between shadow-xl animate-in shake">
+                <div className="p-6 bg-red-500/5 border border-red-500/10 rounded-3xl flex items-center justify-between shadow-sm animate-in shake">
                     <div className="flex items-center gap-4">
-                        <AlertTriangleIcon className="w-8 h-8 text-red-500 shrink-0" />
+                        <AlertTriangleIcon className="w-6 h-6 text-red-500/60" />
                         <div>
-                            <p className="text-xs font-black uppercase text-red-500 tracking-widest">Fetch Failure</p>
-                            <p className="text-sm font-bold text-red-200/70 mt-1">{error}</p>
+                            <p className="text-[10px] font-black uppercase text-red-500/80 tracking-widest leading-none mb-1.5">Handshake Interrupted</p>
+                            <p className="text-sm font-medium text-white/60">{error}</p>
                         </div>
                     </div>
-                    <button onClick={() => fetchEnquiries()} className="px-6 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95">Retry Protocol</button>
+                    <button onClick={() => fetchEnquiries()} className="px-6 py-2.5 bg-white text-black font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-white/90 active:scale-95 transition-all">Retry Protocol</button>
                 </div>
             )}
-            
+
             {/* Filter Hub */}
-            <div className="flex flex-col xl:flex-row gap-8 justify-between items-center bg-[#0d0f14]/80 backdrop-blur-3xl p-6 rounded-[2.8rem] border border-white/5 shadow-2xl ring-1 ring-white/5">
-                <div className="relative w-full md:max-w-xl group">
-                    <SearchIcon className="absolute left-6 top-1/2 -translate-y-1/2 h-6 w-6 text-white/10 group-focus-within:text-primary transition-colors duration-500" />
+            <div className="flex flex-col lg:flex-row gap-6 justify-between items-center bg-white/[0.02] backdrop-blur-xl p-3 rounded-[2rem] border border-white/5">
+                <div className="relative w-full lg:max-w-md group">
+                    <SearchIcon className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/10 group-focus-within:text-primary transition-colors" />
                     <input
                         type="text"
-                        placeholder="SEARCH IDENTITIES OR PARENT NODES..."
+                        placeholder="Search identities or parent nodes..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-16 pr-6 py-5 bg-black/40 border border-white/5 rounded-3xl text-[14px] font-bold text-white focus:bg-black/60 focus:border-primary/50 outline-none transition-all placeholder:text-white/5 tracking-wider"
+                        className="w-full pl-12 pr-6 py-3.5 bg-black/20 border border-white/5 rounded-2xl text-sm font-medium text-white placeholder:text-white/10 focus:bg-black/40 outline-none transition-all focus:ring-4 focus:ring-primary/5"
                     />
                 </div>
                 
-                <div className="flex bg-black/60 p-2 rounded-[1.8rem] border border-white/5 overflow-x-auto no-scrollbar w-full xl:w-auto shadow-inner">
+                <div className="flex bg-black/40 p-1.5 rounded-2xl border border-white/5 overflow-x-auto no-scrollbar w-full lg:w-auto shadow-inner">
                     {(['All', ...Object.keys(statusLabels)] as (keyof typeof statusLabels | 'All')[]).map(f => {
                         const label = f === 'All' ? 'All' : statusLabels[f as EnquiryStatus];
                         const key = f === 'All' ? '' : f;
+                        const isActive = filterStatus === key;
                         return (
                             <button 
                                 key={f}
                                 onClick={() => setFilterStatus(key)}
-                                className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.25em] transition-all duration-700 whitespace-nowrap ${
-                                    (filterStatus === key) 
-                                    ? 'bg-[#1a1d24] text-primary shadow-2xl ring-1 ring-white/10 scale-[1.05] z-10' 
-                                    : 'text-white/20 hover:text-white/40'
-                                }`}
+                                className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-[0.25em] transition-all duration-300 whitespace-nowrap ${isActive ? 'bg-white/5 text-primary shadow-sm' : 'text-white/30 hover:text-white/50'}`}
                             >
                                 {label}
                             </button>
@@ -228,106 +183,126 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
                 </div>
             </div>
 
-            {/* Desktop Registry Table */}
-            <div className="bg-[#0a0a0c]/80 backdrop-blur-3xl border border-white/5 rounded-[3.5rem] shadow-[0_64px_128px_-24px_rgba(0,0,0,1)] overflow-hidden flex flex-col min-h-[600px] ring-1 ring-white/5 relative group">
-                <div className="absolute inset-0 bg-gradient-to-tr from-primary/[0.01] to-transparent pointer-events-none"></div>
-                
-                {loading && (enquiries || []).length === 0 ? (
-                    <div className="flex flex-col justify-center items-center py-48 gap-8">
-                        <Spinner size="lg" className="text-primary" />
-                        <p className="text-[11px] font-black uppercase text-white/20 tracking-[0.5em] animate-pulse">Syncing Lifecycle Protocol</p>
-                    </div>
-                ) : processedEnquiries.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-48 text-center px-12 animate-in fade-in duration-1000">
-                        <div className="w-32 h-32 bg-white/[0.01] rounded-[3rem] flex items-center justify-center mb-10 border border-white/5 shadow-inner">
-                            <KeyIcon className="h-14 w-14 text-white/10" />
-                        </div>
-                        <h3 className="text-3xl font-serif font-black text-white uppercase tracking-tighter leading-none mb-6">Desk <span className="text-white/20 italic">Standby.</span></h3>
-                        <p className="text-white/30 max-w-sm mx-auto font-serif italic text-lg leading-relaxed">
-                            Verified enquiries from the <strong className="text-primary">Handshake Center</strong> will appear here upon authorization.
-                        </p>
-                    </div>
-                ) : (
-                    <div className="overflow-x-auto custom-scrollbar">
-                        <table className="w-full text-left text-sm whitespace-nowrap">
-                            <thead className="bg-[#0f1115]/90 border-b border-white/5 text-[10px] font-black uppercase text-white/20 tracking-[0.3em] sticky top-0 z-20 backdrop-blur-3xl">
+            {/* Desktop Registry Ledger */}
+            <div className="hidden md:block bg-[#0c0d12] border border-white/5 rounded-[2.5rem] shadow-2xl overflow-hidden ring-1 ring-white/5 relative">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm whitespace-nowrap border-collapse">
+                        <thead className="bg-white/[0.01] border-b border-white/[0.04] text-[10px] font-black uppercase text-white/20 tracking-[0.3em]">
+                            <tr>
+                                <th className="p-6 pl-10 font-black">Identity Node</th>
+                                <th className="p-6 font-black">Placement</th>
+                                <th className="p-6 font-black">Status Protocol</th>
+                                <th className="p-6 font-black">Last Sync</th>
+                                <th className="p-6 text-right pr-10 font-black">Operations</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/[0.03]">
+                            {filteredEnquiries.length === 0 ? (
                                 <tr>
-                                    <th className="p-10 pl-12 cursor-pointer hover:text-white transition-colors" onClick={() => handleSort('applicant_name')}>Identity Node</th>
-                                    <th className="p-10">Placement Context</th>
-                                    <th className="p-10">Lifecycle Status</th>
-                                    <th className="p-10 cursor-pointer hover:text-white transition-colors" onClick={() => handleSort('updated_at')}>Registry Pulse</th>
-                                    <th className="p-10 text-right pr-12">Protocols</th>
+                                    <td colSpan={5} className="p-32 text-center">
+                                        <div className="flex flex-col items-center opacity-20">
+                                            <ShieldCheckIcon className="w-16 h-16 mb-4" />
+                                            <p className="text-[11px] font-black uppercase tracking-[0.4em]">Registry Silent</p>
+                                        </div>
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/5 relative z-10">
-                                {processedEnquiries.map((enq, idx) => (
+                            ) : (
+                                filteredEnquiries.map(enq => (
                                     <tr 
-                                        key={enq.id} 
-                                        onClick={() => setViewingEnquiry(enq)} 
-                                        style={{ animationDelay: `${idx * 40}ms` }}
-                                        className="group hover:bg-white/[0.015] transition-all duration-500 cursor-pointer relative overflow-hidden animate-in fade-in slide-in-from-bottom-2"
+                                        key={enq.id}
+                                        onClick={() => setViewingEnquiry(enq)}
+                                        className="group hover:bg-white/[0.015] transition-all duration-300 cursor-pointer"
                                     >
-                                        <td className="p-10 pl-12">
-                                            <div className="flex items-center gap-8">
-                                                <div className="relative shrink-0">
-                                                    <div className="absolute inset-0 bg-primary/20 blur-xl opacity-0 group-hover:opacity-40 transition-opacity duration-700"></div>
-                                                    <div className="w-[68px] h-[68px] rounded-[1.8rem] bg-gradient-to-br from-indigo-500/10 to-purple-600/10 flex items-center justify-center text-indigo-400 font-serif font-black text-2xl shadow-inner border border-white/5 group-hover:scale-110 group-hover:rotate-2 transition-all duration-700 relative z-10">
-                                                        {(enq.applicant_name || '?').charAt(0)}
-                                                    </div>
+                                        <td className="p-5 pl-10">
+                                            <div className="flex items-center gap-6">
+                                                <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center text-white/30 font-bold group-hover:text-primary group-hover:border-primary/20 transition-all">
+                                                    {(enq.applicant_name || '?').charAt(0)}
                                                 </div>
-                                                <div>
-                                                    <div className="text-xl font-serif font-black text-white group-hover:text-primary transition-colors duration-500 uppercase tracking-tight leading-tight mb-2">{enq.applicant_name}</div>
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="text-[10px] font-bold text-white/20 uppercase tracking-[0.2em]">{enq.parent_name}</span>
-                                                    </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-[15px] font-bold text-white/80 group-hover:text-white transition-colors">{enq.applicant_name}</p>
+                                                    <p className="text-[10px] text-white/20 font-bold uppercase tracking-widest mt-0.5">{enq.parent_name}</p>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="p-10">
-                                            <div className="flex flex-col gap-2">
-                                                <span className="inline-flex items-center px-4 py-1.5 rounded-xl text-[10px] font-black uppercase bg-white/5 text-white/30 border border-white/5 tracking-[0.1em] w-fit shadow-sm">
-                                                    Grade {enq.grade}
-                                                </span>
-                                                <span className="text-[8px] font-mono text-white/10 uppercase tracking-widest pl-1">CONTEXT_ACAD_PROT</span>
-                                            </div>
+                                        <td className="p-5">
+                                            <span className="px-3 py-1 rounded-lg bg-white/5 text-white/30 text-[10px] font-black uppercase tracking-widest border border-white/5">Grade {enq.grade}</span>
                                         </td>
-                                        <td className="p-10">
-                                            <div className="relative inline-block group/status">
-                                                <span className={`px-5 py-2.5 inline-flex text-[10px] font-black uppercase tracking-[0.25em] rounded-2xl border shadow-2xl transition-all duration-1000 ${statusColors[enq.status] || 'bg-white/5 text-white/20 border-white/5'}`}>
-                                                    {statusLabels[enq.status] || enq.status}
-                                                </span>
-                                            </div>
+                                        <td className="p-5">
+                                            <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] border transition-all ${statusColors[enq.status as EnquiryStatus] || 'bg-white/5 text-white/20'}`}>
+                                                {statusLabels[enq.status as EnquiryStatus] || enq.status}
+                                            </span>
                                         </td>
-                                        <td className="p-10">
-                                            <div className="flex flex-col gap-1">
-                                                <div className="flex items-center gap-2 text-[11px] font-mono font-bold text-white/40 uppercase tracking-widest">
-                                                    <ClockIcon className="w-3.5 h-3.5 opacity-40 group-hover:rotate-12 transition-transform" />
-                                                    {new Date(enq.updated_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()}
+                                        <td className="p-5 font-mono text-[11px] text-white/20 uppercase tracking-tighter">
+                                            {new Date(enq.updated_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}
+                                        </td>
+                                        <td className="p-5 text-right pr-10">
+                                            <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <div className="p-2.5 bg-white/5 rounded-xl text-white/30 hover:text-primary transition-colors border border-transparent hover:border-white/10">
+                                                    <ChevronRightIcon className="w-5 h-5" />
                                                 </div>
-                                                <span className="text-[9px] text-white/10 font-bold uppercase tracking-widest pl-5">Sync Logged</span>
                                             </div>
-                                        </td>
-                                        <td className="p-10 text-right pr-12">
-                                            <button className="p-5 rounded-[1.5rem] bg-white/5 text-white/10 group-hover:text-primary group-hover:bg-primary/10 border border-transparent group-hover:border-primary/20 transition-all shadow-2xl active:scale-90 group-hover:shadow-primary/5">
-                                                <ChevronRightIcon className="w-6 h-6 group-hover:translate-x-1 transition-transform"/>
-                                            </button>
                                         </td>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Mobile Ledger: Identity Cards */}
+            <div className="md:hidden space-y-4">
+                {filteredEnquiries.map(enq => (
+                    <div 
+                        key={enq.id}
+                        onClick={() => setViewingEnquiry(enq)}
+                        className="bg-card p-6 rounded-[2rem] border border-white/5 active:scale-[0.98] transition-all shadow-xl"
+                    >
+                        <div className="flex justify-between items-start mb-6">
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white/40 font-bold border border-white/5">
+                                    {(enq.applicant_name || '?').charAt(0)}
+                                </div>
+                                <div>
+                                    <h4 className="font-bold text-white text-base leading-tight">{enq.applicant_name}</h4>
+                                    <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mt-1">Grade {enq.grade} Node</p>
+                                </div>
+                            </div>
+                            <span className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase border tracking-widest ${statusColors[enq.status as EnquiryStatus]}`}>
+                                {statusLabels[enq.status as EnquiryStatus]}
+                            </span>
+                        </div>
+                        <div className="flex justify-between items-center pt-4 border-t border-white/[0.03]">
+                            <span className="text-[10px] text-white/20 font-bold uppercase tracking-widest">{enq.parent_name}</span>
+                            <span className="text-[10px] font-mono text-white/10">{new Date(enq.updated_at).toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                ))}
+                {filteredEnquiries.length === 0 && (
+                    <div className="py-20 text-center opacity-20">
+                        <p className="text-xs font-black uppercase tracking-widest">No nodes detected</p>
                     </div>
                 )}
             </div>
+
+            {/* Mobile Floating Action */}
+            {onNavigate && (
+                <div className="md:hidden fixed bottom-6 left-6 right-6 z-[100] animate-in slide-in-from-bottom-12 duration-700">
+                    <button 
+                        onClick={() => onNavigate('Code Verification')}
+                        className="w-full h-14 bg-primary text-white font-black text-[12px] uppercase tracking-[0.3em] rounded-2xl shadow-2xl shadow-primary/20 transition-all active:scale-95 border border-white/10 ring-4 ring-primary/5 flex items-center justify-center gap-3"
+                    >
+                        <KeyIcon className="w-5 h-5"/> Verify Node
+                    </button>
+                </div>
+            )}
 
             {viewingEnquiry && (
                 <EnquiryDetailsModal 
                     enquiry={viewingEnquiry} 
                     currentBranchId={branchId}
                     onClose={() => setViewingEnquiry(null)} 
-                    onUpdate={() => {
-                        fetchEnquiries(true);
-                    }}
+                    onUpdate={() => fetchEnquiries(true)}
                     onNavigate={onNavigate}
                 />
             )}
@@ -335,18 +310,17 @@ const EnquiryTab: React.FC<EnquiryTabProps> = ({ branchId, onNavigate }) => {
     );
 };
 
-const StatCard: React.FC<{ title: string; value: number; icon: React.ReactNode; color: string; desc: string }> = ({ title, value, icon, color, desc }) => (
-    <div className="bg-[#0d0f14] p-10 rounded-[3rem] border border-white/5 shadow-2xl hover:shadow-primary/10 transition-all duration-700 group overflow-hidden relative ring-1 ring-white/5">
-        <div className={`absolute -right-8 -top-8 w-48 h-48 ${color} opacity-[0.03] rounded-full blur-[100px] group-hover:opacity-[0.08] transition-opacity duration-1000`}></div>
-        <div className="flex justify-between items-start relative z-10">
-            <div className={`p-4 rounded-[1.25rem] bg-white/5 text-white/30 ring-1 ring-white/10 shadow-inner group-hover:scale-110 group-hover:text-primary transition-all duration-700`}>
+const MetricCard: React.FC<{ title: string; value: number; icon: React.ReactNode; color: string }> = ({ title, value, icon, color }) => (
+    <div className="bg-[#0c0d12] p-7 md:p-8 rounded-[1.8rem] border border-white/5 flex flex-col justify-between h-40 md:h-44 w-64 md:w-full group hover:border-white/10 transition-colors">
+        <div className="flex justify-between items-start">
+            <div className={`p-2.5 rounded-xl bg-white/[0.02] border border-white/5 ${color} shadow-inner`}>
                 {icon}
             </div>
-            <div className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[9px] font-black text-white/20 uppercase tracking-[0.2em]">{desc}</div>
+            <span className="text-[9px] font-black text-white/10 uppercase tracking-widest">Status Nom.</span>
         </div>
-        <div className="mt-12 relative z-10">
-            <p className="text-[11px] font-black text-white/20 uppercase tracking-[0.4em] mb-3">{title}</p>
-            <h3 className="text-6xl font-serif font-black text-white tracking-tighter leading-none">{value}</h3>
+        <div>
+            <p className="text-[10px] font-bold text-white/20 uppercase tracking-[0.3em] mb-2">{title}</p>
+            <h3 className="text-4xl md:text-5xl font-serif font-black text-white tracking-tighter leading-none">{value}</h3>
         </div>
     </div>
 );

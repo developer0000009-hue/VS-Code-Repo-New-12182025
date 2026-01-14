@@ -329,7 +329,8 @@ const DocumentsTab: React.FC = () => {
                                             <ClockIcon className="w-3.5 h-3.5"/>
                                             <span>{new Date(file.uploaded_at).toLocaleDateString()}</span>
                                             <span>•</span>
-                                            <span>{formatSize(file.file_size)}</span>
+                                            {/* Fix: Added a fallback to 0 to resolve type mismatch with formatSize parameter */}
+                                            <span>{formatSize(file.file_size || 0)}</span>
                                         </div>
                                     )}
                                 </div>

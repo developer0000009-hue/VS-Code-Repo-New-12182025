@@ -1,3 +1,4 @@
+
 // Fix: Added React import to resolve 'Cannot find namespace React' errors when using React.FC and React.SVGProps.
 import React from 'react';
 
@@ -581,6 +582,9 @@ export interface DocumentRequirement {
     file_name: string;
     storage_path: string;
     uploaded_at: string;
+    // Fix: Added missing properties to reflect database schema and resolve type errors in UI components
+    file_size?: number;
+    mime_type?: string;
   }[];
 }
 

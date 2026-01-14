@@ -1,34 +1,16 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import RoleSelectionPage from './RoleSelectionPage';
 import { BranchCreationPage } from './BranchCreationPage';
 import { ProfileCreationPage } from './ProfileCreationPage';
 import PricingSelectionPage from './PricingSelectionPage';
 import { Role, UserProfile, BuiltInRoles } from '../types';
-import { supabase } from '../services/supabase';
+import { supabase, formatError } from '../services/supabase';
 import Spinner from './common/Spinner';
 import ThemeSwitcher from './common/ThemeSwitcher';
 import { SchoolIcon } from './icons/SchoolIcon';
 import ProfileDropdown from './common/ProfileDropdown';
 import Stepper from './common/Stepper';
-
-const formatError = (err: any): string => {
-    if (!err) return "An unknown error occurred.";
-    if (typeof err === 'string') return err;
-    const message = err.message || err.error_description || err.details || err.hint;
-    if (message && typeof message === 'string' && !message.includes("[object Object]")) {
-        return message;
-    }
-    if (err.error) {
-        if (typeof err.error === 'string') return err.error;
-        if (err.error.message && typeof err.error.message === 'string') return err.error.message;
-    }
-    try {
-        const str = JSON.stringify(err);
-        if (str && str !== '{}' && str !== '[]') return str;
-    } catch { }
-    const stringified = String(err);
-    return stringified === '[object Object]' ? "Institutional system exception." : stringified;
-};
 
 interface OnboardingFlowProps {
     profile: UserProfile;
@@ -103,7 +85,6 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
                 if (error) throw error;
                 
                 // CRITICAL FIX: Explicitly set the next UI step immediately after DB success
-                // This prevents the button from staying in 'Provisioning' state if the Auth refresh is slow
                 if (isMounted.current) setStep('profile');
             } else {
                 const { error: updateError } = await supabase
@@ -132,7 +113,6 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ profile, onComplete, on
             }
         } finally {
             // Keep loading true for a moment while the component switches content
-            // The useEffect will eventually flip loading to false based on the new profile
         }
     };
 

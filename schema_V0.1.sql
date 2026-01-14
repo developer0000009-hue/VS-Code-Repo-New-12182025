@@ -4009,3 +4009,1193 @@ END;
 $$;
 
 NOTIFY pgrst, 'reload schema';
+-- ===============================================================================================
+--  GURUKUL OS - CONSOLIDATED MASTER SCHEMA
+--  Version: 20.3.2 (Admission Node Integrity & RLS Fix)
+-- ===============================================================================================
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- -----------------------------------------------------------------------------------------------
+-- 1. IDENTITY REGISTRY FIX (Solves ERROR: 42883: uuid = bigint)
+-- -----------------------------------------------------------------------------------------------
+
+DO $$ 
+BEGIN
+    -- Check if profiles table exists and if the ID is incorrectly typed as BIGINT
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'profiles' AND column_name = 'id' AND data_type != 'uuid'
+    ) THEN
+        -- Drop dependent policies first to avoid lock-ups
+        DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
+        DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+        
+        -- Create backup and migrate
+        CREATE TABLE profiles_temp_migration AS SELECT * FROM public.profiles;
+        DROP TABLE public.profiles CASCADE;
+        
+        CREATE TABLE public.profiles (
+            id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+            email TEXT NOT NULL,
+            display_name TEXT,
+            role TEXT,
+            phone TEXT,
+            is_active BOOLEAN DEFAULT true,
+            profile_completed BOOLEAN DEFAULT false,
+            created_at TIMESTAMPTZ DEFAULT now(),
+            branch_id INT
+        );
+
+        -- Attempt to restore data by matching email strings
+        INSERT INTO public.profiles (id, email, display_name, role, phone, is_active, profile_completed, created_at, branch_id)
+        SELECT u.id, b.email, b.display_name, b.role, b.phone, b.is_active, b.profile_completed, b.created_at, b.branch_id
+        FROM profiles_temp_migration b
+        JOIN auth.users u ON b.email = u.email;
+        
+        DROP TABLE profiles_temp_migration;
+    END IF;
+END $$;
+
+-- -----------------------------------------------------------------------------------------------
+-- 2. ADMISSIONS REGISTRY (Strict UUID nodes & Default Value Fix)
+-- Solves: "null value in column "id" ... violates not-null constraint"
+-- -----------------------------------------------------------------------------------------------
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'admissions') THEN
+        CREATE TABLE public.admissions (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            applicant_name TEXT NOT NULL,
+            parent_id UUID REFERENCES public.profiles(id),
+            parent_name TEXT,
+            parent_email TEXT NOT NULL,
+            parent_phone TEXT,
+            grade TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Registered',
+            submitted_at TIMESTAMPTZ DEFAULT now(),
+            registered_at TIMESTAMPTZ,
+            profile_photo_url TEXT,
+            medical_info TEXT,
+            emergency_contact TEXT,
+            application_number TEXT,
+            student_user_id UUID REFERENCES public.profiles(id),
+            date_of_birth DATE,
+            gender TEXT,
+            branch_id INT
+        );
+    ELSE
+        -- Ensure the ID column has its default value generator
+        IF NOT (SELECT column_default LIKE 'uuid_generate_v4%' FROM information_schema.columns WHERE table_name = 'admissions' AND column_name = 'id' AND table_schema = 'public') THEN
+            ALTER TABLE public.admissions ALTER COLUMN id SET DEFAULT uuid_generate_v4();
+        END IF;
+    END IF;
+END $$;
+
+-- -----------------------------------------------------------------------------------------------
+-- 3. GOVERNANCE PROTOCOLS (RLS)
+-- -----------------------------------------------------------------------------------------------
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.admissions ENABLE ROW LEVEL SECURITY;
+
+-- Profiles: Strict type-safe comparison
+CREATE POLICY "Public profiles are viewable by everyone" 
+ON public.profiles FOR SELECT USING (true);
+
+CREATE POLICY "Users can update own profile" 
+ON public.profiles FOR UPDATE USING (auth.uid() = id);
+
+-- Admissions: Type-safe comparison between UUIDs
+CREATE POLICY "Parents can view their own child applications" 
+ON public.admissions FOR SELECT USING (auth.uid() = parent_id);
+
+-- RLS FIX: Add INSERT policy for parents
+CREATE POLICY "Parents can create applications for themselves"
+ON public.admissions FOR INSERT
+WITH CHECK (auth.uid() = parent_id);
+
+CREATE POLICY "Admins have full control over admissions" 
+ON public.admissions FOR ALL 
+USING (EXISTS (
+    SELECT 1 FROM public.profiles 
+    WHERE id = auth.uid() 
+    AND role IN ('School Administration', 'Branch Admin', 'Super Admin')
+));
+
+-- -----------------------------------------------------------------------------------------------
+-- 4. RPC SERVICES
+-- -----------------------------------------------------------------------------------------------
+
+-- Atomic Role Switching with Handshake Verification
+CREATE OR REPLACE FUNCTION public.switch_active_role(p_target_role text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    v_profile_restored boolean := false;
+BEGIN
+    -- Update the primary identity node
+    UPDATE public.profiles 
+    SET role = p_target_role,
+        profile_completed = true
+    WHERE id = auth.uid();
+    
+    -- Verify if metadata exists in sub-registries (e.g., parent_profiles)
+    IF p_target_role = 'Parent/Guardian' THEN
+        IF EXISTS (SELECT 1 FROM public.parent_profiles WHERE user_id = auth.uid()) THEN
+            v_profile_restored := true;
+        END IF;
+    END IF;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'profile_restored', v_profile_restored
+    );
+END;
+$$;
+
+NOTIFY pgrst, 'reload schema';
+
+
+---- 
+
+-- ===============================================================================================
+--  GURUKUL OS - CONSOLIDATED MASTER SCHEMA
+--  Version: 20.3.5 (Parent Vault Enhancements)
+-- ===============================================================================================
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- -----------------------------------------------------------------------------------------------
+-- 1. IDENTITY REGISTRY FIX (Solves ERROR: 42883: uuid = bigint)
+-- -----------------------------------------------------------------------------------------------
+
+DO $$ 
+BEGIN
+    -- Check if profiles table exists and if the ID is incorrectly typed as BIGINT
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'profiles' AND column_name = 'id' AND data_type != 'uuid'
+    ) THEN
+        -- Drop dependent policies first to avoid lock-ups
+        DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
+        DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+        
+        -- Create backup and migrate
+        CREATE TABLE profiles_temp_migration AS SELECT * FROM public.profiles;
+        DROP TABLE public.profiles CASCADE;
+        
+        CREATE TABLE public.profiles (
+            id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+            email TEXT NOT NULL,
+            display_name TEXT,
+            role TEXT,
+            phone TEXT,
+            is_active BOOLEAN DEFAULT true,
+            profile_completed BOOLEAN DEFAULT false,
+            created_at TIMESTAMPTZ DEFAULT now(),
+            branch_id INT
+        );
+
+        -- Attempt to restore data by matching email strings
+        INSERT INTO public.profiles (id, email, display_name, role, phone, is_active, profile_completed, created_at, branch_id)
+        SELECT u.id, b.email, b.display_name, b.role, b.phone, b.is_active, b.profile_completed, b.created_at, b.branch_id
+        FROM profiles_temp_migration b
+        JOIN auth.users u ON b.email = u.email;
+        
+        DROP TABLE profiles_temp_migration;
+    END IF;
+END $$;
+
+-- -----------------------------------------------------------------------------------------------
+-- 2. ADMISSIONS REGISTRY (Data Type Migration & Idempotent Creation)
+-- Solves: "invalid input syntax for type bigint" AND "violates not-null constraint"
+-- -----------------------------------------------------------------------------------------------
+
+DO $$
+DECLARE
+    v_has_wrong_type boolean;
+BEGIN
+    -- If table doesn't exist, create it correctly from the start.
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'admissions') THEN
+        CREATE TABLE public.admissions (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            applicant_name TEXT NOT NULL,
+            parent_id UUID REFERENCES public.profiles(id),
+            parent_name TEXT,
+            parent_email TEXT NOT NULL,
+            parent_phone TEXT,
+            grade TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Registered',
+            submitted_at TIMESTAMPTZ DEFAULT now(),
+            registered_at TIMESTAMPTZ,
+            profile_photo_url TEXT,
+            medical_info TEXT,
+            emergency_contact TEXT,
+            application_number TEXT,
+            student_user_id UUID REFERENCES public.profiles(id),
+            date_of_birth DATE,
+            gender TEXT,
+            branch_id INT
+        );
+    ELSE
+        -- Check if ID column is NOT of type UUID
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'admissions' AND column_name = 'id' AND data_type != 'uuid' AND table_schema = 'public'
+        ) INTO v_has_wrong_type;
+
+        IF v_has_wrong_type THEN
+            -- Drop policies
+            DROP POLICY IF EXISTS "Parents can view their own child applications" ON public.admissions;
+            DROP POLICY IF EXISTS "Parents can create applications for themselves" ON public.admissions;
+            DROP POLICY IF EXISTS "Admins have full control over admissions" ON public.admissions;
+
+            -- Backup
+            CREATE TABLE admissions_temp_migration AS SELECT * FROM public.admissions;
+            DROP TABLE public.admissions CASCADE;
+
+            -- Recreate with UUID ID
+            CREATE TABLE public.admissions (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                applicant_name TEXT NOT NULL,
+                parent_id UUID REFERENCES public.profiles(id),
+                parent_name TEXT,
+                parent_email TEXT NOT NULL,
+                parent_phone TEXT,
+                grade TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'Registered',
+                submitted_at TIMESTAMPTZ DEFAULT now(),
+                registered_at TIMESTAMPTZ,
+                profile_photo_url TEXT,
+                medical_info TEXT,
+                emergency_contact TEXT,
+                application_number TEXT,
+                student_user_id UUID REFERENCES public.profiles(id),
+                date_of_birth DATE,
+                gender TEXT,
+                branch_id INT
+            );
+
+            -- Restore data, re-linking parent_id via email from the (now migrated) profiles table
+            INSERT INTO public.admissions (
+                applicant_name, parent_id, parent_name, parent_email, parent_phone, grade, status, 
+                submitted_at, registered_at, profile_photo_url, medical_info, emergency_contact, 
+                application_number, student_user_id, date_of_birth, gender, branch_id
+            )
+            SELECT 
+                b.applicant_name, 
+                p.id, -- This join gets the correct new parent_id UUID
+                b.parent_name, b.parent_email, b.parent_phone, b.grade, b.status, 
+                b.submitted_at, NULL, b.profile_photo_url, b.medical_info, b.emergency_contact, 
+                b.application_number, 
+                NULL, -- student_user_id is nullable and set post-admission; safer to nullify during migration
+                b.date_of_birth, b.gender, b.branch_id
+            FROM admissions_temp_migration b
+            LEFT JOIN public.profiles p ON b.parent_email = p.email;
+
+            -- Drop backup
+            DROP TABLE admissions_temp_migration;
+
+        -- If it exists and type is correct, just ensure the default generator is there.
+        ELSIF NOT (SELECT column_default LIKE 'uuid_generate_v4%' FROM information_schema.columns WHERE table_name = 'admissions' AND column_name = 'id' AND table_schema = 'public') THEN
+            ALTER TABLE public.admissions ALTER COLUMN id SET DEFAULT uuid_generate_v4();
+        END IF;
+    END IF;
+END $$;
+
+
+-- -----------------------------------------------------------------------------------------------
+-- 3. DOCUMENTATION REGISTRIES (Idempotent Creation & Migration)
+-- Solves: "operator does not exist: bigint = uuid"
+-- -----------------------------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS public.document_requirements (
+    id SERIAL PRIMARY KEY,
+    admission_id UUID REFERENCES public.admissions(id) ON DELETE CASCADE,
+    document_name TEXT NOT NULL,
+    status TEXT DEFAULT 'Pending',
+    is_mandatory BOOLEAN DEFAULT false,
+    notes_for_parent TEXT,
+    rejection_reason TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ,
+    UNIQUE (admission_id, document_name)
+);
+
+CREATE TABLE IF NOT EXISTS public.admission_documents (
+    id SERIAL PRIMARY KEY,
+    requirement_id INT REFERENCES public.document_requirements(id) ON DELETE CASCADE,
+    file_name TEXT NOT NULL,
+    storage_path TEXT NOT NULL,
+    uploaded_at TIMESTAMPTZ DEFAULT now(),
+    mime_type TEXT,
+    file_size BIGINT
+);
+
+DO $$
+BEGIN
+    -- Check if admission_id exists and is NOT of type UUID
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'document_requirements' 
+        AND column_name = 'admission_id' 
+        AND data_type != 'uuid' 
+        AND table_schema = 'public'
+    ) THEN
+        -- Drop dependent foreign key constraints first
+        ALTER TABLE public.document_requirements DROP CONSTRAINT IF EXISTS document_requirements_admission_id_fkey;
+        
+        -- This is a destructive data migration step for this specific column. The original link data will be lost.
+        -- This is necessary to align the schema after the 'admissions' table was migrated to use UUIDs.
+        -- A non-destructive migration would require a mapping of old BIGINT IDs to new UUIDs, which was not preserved.
+        ALTER TABLE public.document_requirements DROP COLUMN admission_id;
+        
+        -- Add the column back with the correct UUID type and reference
+        ALTER TABLE public.document_requirements ADD COLUMN admission_id UUID REFERENCES public.admissions(id) ON DELETE CASCADE;
+    END IF;
+END $$;
+
+
+-- -----------------------------------------------------------------------------------------------
+-- 4. GOVERNANCE PROTOCOLS (RLS)
+-- -----------------------------------------------------------------------------------------------
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.admissions ENABLE ROW LEVEL SECURITY;
+
+-- Profiles: Strict type-safe comparison
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
+CREATE POLICY "Public profiles are viewable by everyone" 
+ON public.profiles FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+CREATE POLICY "Users can update own profile" 
+ON public.profiles FOR UPDATE USING (auth.uid() = id);
+
+-- Admissions: Type-safe comparison between UUIDs
+DROP POLICY IF EXISTS "Parents can view their own child applications" ON public.admissions;
+CREATE POLICY "Parents can view their own child applications" 
+ON public.admissions FOR SELECT USING (auth.uid() = parent_id);
+
+-- RLS FIX: Add INSERT policy for parents
+DROP POLICY IF EXISTS "Parents can create applications for themselves" ON public.admissions;
+CREATE POLICY "Parents can create applications for themselves"
+ON public.admissions FOR INSERT
+WITH CHECK (auth.uid() = parent_id);
+
+DROP POLICY IF EXISTS "Admins have full control over admissions" ON public.admissions;
+CREATE POLICY "Admins have full control over admissions" 
+ON public.admissions FOR ALL 
+USING (EXISTS (
+    SELECT 1 FROM public.profiles 
+    WHERE id = auth.uid() 
+    AND role IN ('School Administration', 'Branch Admin', 'Super Admin')
+));
+
+
+-- -----------------------------------------------------------------------------------------------
+-- 5. RPC SERVICES
+-- -----------------------------------------------------------------------------------------------
+
+-- Idempotently create default document requirements for all of a parent's children
+CREATE OR REPLACE FUNCTION public.parent_initialize_vault_slots_all()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    child_admission RECORD;
+    doc_name TEXT;
+    mandatory_docs TEXT[] := ARRAY['Birth Certificate', 'Previous School Marksheet', 'Identity Proof (Parent)', 'Address Proof'];
+BEGIN
+    FOR child_admission IN 
+        SELECT id FROM public.admissions WHERE parent_id = auth.uid()
+    LOOP
+        FOREACH doc_name IN ARRAY mandatory_docs
+        LOOP
+            INSERT INTO public.document_requirements (admission_id, document_name, is_mandatory)
+            VALUES (child_admission.id, doc_name, true)
+            ON CONFLICT (admission_id, document_name) DO NOTHING;
+        END LOOP;
+    END LOOP;
+END;
+$$;
+
+-- Securely link an uploaded document to a requirement
+CREATE OR REPLACE FUNCTION public.parent_complete_document_upload(
+    p_requirement_id INT,
+    p_admission_id UUID,
+    p_file_name TEXT,
+    p_storage_path TEXT,
+    p_file_size BIGINT,
+    p_mime_type TEXT
+)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+    -- Verify parent owns the admission record
+    IF NOT EXISTS (SELECT 1 FROM public.admissions WHERE id = p_admission_id AND parent_id = auth.uid()) THEN
+        RAISE EXCEPTION 'Unauthorized: You do not own this admission record.';
+    END IF;
+
+    -- Clear previous submissions for this requirement to handle re-uploads
+    DELETE FROM public.admission_documents WHERE requirement_id = p_requirement_id;
+
+    -- Insert new document record
+    INSERT INTO public.admission_documents (requirement_id, file_name, storage_path, file_size, mime_type)
+    VALUES (p_requirement_id, p_file_name, p_storage_path, p_file_size, p_mime_type);
+
+    -- Update requirement status
+    UPDATE public.document_requirements
+    SET status = 'Submitted', updated_at = now()
+    WHERE id = p_requirement_id;
+END;
+$$;
+
+-- Function to get all child profiles for the currently authenticated parent
+-- This resolves the "function public.get_my_children_profiles does not exist" error in the Parent Portal.
+CREATE OR REPLACE FUNCTION public.get_my_children_profiles()
+RETURNS SETOF admissions
+LANGUAGE sql
+SECURITY DEFINER
+AS $$
+    SELECT *
+    FROM public.admissions
+    WHERE parent_id = auth.uid();
+$$;
+
+-- FIX: Resolves "Could not choose the best candidate function" error for document requirements.
+-- This occurs when legacy functions with 'text' or 'bigint' parameters conflict with modern 'uuid' based functions.
+-- The following script removes the ambiguity by dropping the legacy function and ensuring the correct UUID-based function exists.
+DROP FUNCTION IF EXISTS public.parent_get_document_requirements(p_user_id text);
+
+-- FIX: Resolves "cannot change return type of existing function" error.
+-- This ensures any old version of the function with the uuid signature is dropped before recreating it with the new return structure.
+DROP FUNCTION IF EXISTS public.parent_get_document_requirements(p_user_id uuid);
+
+CREATE OR REPLACE FUNCTION public.parent_get_document_requirements(p_user_id uuid)
+RETURNS TABLE (
+    id int,
+    admission_id uuid,
+    document_name text,
+    status text,
+    is_mandatory boolean,
+    notes_for_parent text,
+    rejection_reason text,
+    applicant_name text,
+    profile_photo_url text,
+    admission_documents jsonb
+)
+LANGUAGE sql
+SECURITY DEFINER
+AS $$
+    SELECT
+        dr.id,
+        dr.admission_id,
+        dr.document_name,
+        dr.status,
+        dr.is_mandatory,
+        dr.notes_for_parent,
+        dr.rejection_reason,
+        a.applicant_name,
+        a.profile_photo_url,
+        (
+            SELECT jsonb_agg(
+                jsonb_build_object(
+                    'id', ad.id,
+                    'file_name', ad.file_name,
+                    'storage_path', ad.storage_path,
+                    'uploaded_at', ad.uploaded_at
+                )
+            )
+            FROM public.admission_documents ad
+            WHERE ad.requirement_id = dr.id
+        ) as admission_documents
+    FROM
+        public.document_requirements dr
+    JOIN
+        public.admissions a ON dr.admission_id = a.id
+    WHERE
+        a.parent_id = p_user_id
+    ORDER BY
+        a.submitted_at DESC, dr.is_mandatory DESC, dr.document_name;
+$$;
+
+-- Atomic Role Switching with Handshake Verification
+CREATE OR REPLACE FUNCTION public.switch_active_role(p_target_role text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    v_profile_restored boolean := false;
+BEGIN
+    -- Update the primary identity node
+    UPDATE public.profiles 
+    SET role = p_target_role,
+        profile_completed = true
+    WHERE id = auth.uid();
+    
+    -- Verify if metadata exists in sub-registries (e.g., parent_profiles)
+    IF p_target_role = 'Parent/Guardian' THEN
+        IF EXISTS (SELECT 1 FROM public.parent_profiles WHERE user_id = auth.uid()) THEN
+            v_profile_restored := true;
+        END IF;
+    END IF;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'profile_restored', v_profile_restored
+    );
+END;
+$$;
+
+NOTIFY pgrst, 'reload schema';
+
+
+
+----- V0.5.3
+
+
+-- ===============================================================================================
+--  GURUKUL OS - SCHEMA PATCH (Fix Missing Columns & Upload Logic)
+-- ===============================================================================================
+
+-- 1. Fix Database Schema: Add missing columns to admission_documents
+DO $$ 
+BEGIN 
+    -- Add file_size if missing
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'admission_documents' AND column_name = 'file_size') THEN
+        ALTER TABLE public.admission_documents ADD COLUMN file_size BIGINT;
+    END IF;
+
+    -- Add mime_type if missing
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'admission_documents' AND column_name = 'mime_type') THEN
+        ALTER TABLE public.admission_documents ADD COLUMN mime_type TEXT;
+    END IF;
+
+    -- Add missing 'updated_at' column to document_requirements (from previous fix)
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'document_requirements' AND column_name = 'updated_at') THEN
+        ALTER TABLE public.document_requirements ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();
+    END IF;
+END $$;
+
+-- 2. Update Initialization Function to ensure 5 Mandatory Documents
+CREATE OR REPLACE FUNCTION public.parent_initialize_vault_slots_all()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    adm RECORD;
+    -- The 5 required documents configuration
+    doc_name text;
+    v_category text;
+    required_docs text[] := ARRAY[
+        'Birth Certificate', 
+        'Transfer Certificate', 
+        'Previous Marksheet', 
+        'Aadhar Card', 
+        'Passport Photo'
+    ];
+BEGIN
+    -- Iterate through all admissions for the current parent
+    FOR adm IN SELECT id FROM public.admissions WHERE parent_id = auth.uid()
+    LOOP
+        FOREACH doc_name IN ARRAY required_docs
+        LOOP
+            -- Determine category for better organization
+            IF doc_name = 'Birth Certificate' OR doc_name = 'Aadhar Card' OR doc_name = 'Passport Photo' THEN
+                v_category := 'Identity';
+            ELSIF doc_name = 'Transfer Certificate' OR doc_name = 'Previous Marksheet' THEN
+                v_category := 'Academic';
+            ELSE
+                v_category := 'General';
+            END IF;
+
+            -- Insert if not exists
+            IF NOT EXISTS (
+                SELECT 1 FROM public.document_requirements 
+                WHERE admission_id = adm.id AND document_name = doc_name
+            ) THEN
+                INSERT INTO public.document_requirements (
+                    admission_id, 
+                    document_name, 
+                    is_mandatory, 
+                    status, 
+                    notes_for_parent,
+                    created_at,
+                    updated_at
+                ) VALUES (
+                    adm.id, 
+                    doc_name, 
+                    true, -- Set as Mandatory
+                    'Pending', 
+                    v_category,
+                    NOW(),
+                    NOW()
+                );
+            END IF;
+        END LOOP;
+    END LOOP;
+END;
+$$;
+
+-- 3. Ensure the upload completion function updates correctly AND inserts admission_id
+CREATE OR REPLACE FUNCTION public.parent_complete_document_upload(
+    p_requirement_id BIGINT,
+    p_admission_id UUID,
+    p_file_name TEXT,
+    p_storage_path TEXT,
+    p_file_size BIGINT,
+    p_mime_type TEXT
+)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+    -- Verify ownership
+    IF NOT EXISTS (SELECT 1 FROM public.admissions WHERE id = p_admission_id AND parent_id = auth.uid()) THEN
+        RAISE EXCEPTION 'Unauthorized access to admission record';
+    END IF;
+
+    -- Update requirement status with timestamp
+    UPDATE public.document_requirements
+    SET status = 'Submitted', updated_at = NOW()
+    WHERE id = p_requirement_id;
+
+    -- Insert document record
+    INSERT INTO public.admission_documents (
+        admission_id, -- Added missing column
+        requirement_id, 
+        file_name, 
+        storage_path, 
+        file_size, 
+        mime_type, 
+        uploaded_at
+    ) VALUES (
+        p_admission_id, -- Value from parameter
+        p_requirement_id, 
+        p_file_name, 
+        p_storage_path, 
+        p_file_size, 
+        p_mime_type, 
+        NOW()
+    );
+
+    RETURN jsonb_build_object('success', true);
+END;
+$$;
+
+NOTIFY pgrst, 'reload schema';
+
+
+-----V 0.5.4
+
+
+-- ===============================================================================================
+--  GURUKUL OS - SCHEMA PATCH (Fix Type Mismatch & Missing Columns)
+-- ===============================================================================================
+
+DO $$ 
+DECLARE
+    col_type text;
+BEGIN 
+    -- 1. Fix admission_id type mismatch in admission_documents
+    -- Get current type of admission_id
+    SELECT data_type INTO col_type
+    FROM information_schema.columns 
+    WHERE table_name = 'admission_documents' 
+    AND column_name = 'admission_id';
+
+    -- If it's bigint, convert it to UUID
+    IF col_type = 'bigint' THEN
+        -- Alter column to UUID. We use 'USING NULL' to discard any existing bigint data 
+        -- as it cannot be valid UUIDs referencing the admissions table.
+        ALTER TABLE public.admission_documents 
+        ALTER COLUMN admission_id TYPE UUID USING NULL;
+
+        -- Ensure it references admissions table
+        ALTER TABLE public.admission_documents DROP CONSTRAINT IF EXISTS admission_documents_admission_id_fkey;
+        
+        ALTER TABLE public.admission_documents 
+        ADD CONSTRAINT admission_documents_admission_id_fkey 
+        FOREIGN KEY (admission_id) REFERENCES public.admissions(id);
+    END IF;
+
+    -- 2. Ensure other required columns exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'admission_documents' AND column_name = 'file_size') THEN
+        ALTER TABLE public.admission_documents ADD COLUMN file_size BIGINT;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'admission_documents' AND column_name = 'mime_type') THEN
+        ALTER TABLE public.admission_documents ADD COLUMN mime_type TEXT;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'document_requirements' AND column_name = 'updated_at') THEN
+        ALTER TABLE public.document_requirements ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();
+    END IF;
+END $$;
+
+-- 3. Re-apply Upload Function with strict typing
+CREATE OR REPLACE FUNCTION public.parent_complete_document_upload(
+    p_requirement_id BIGINT,
+    p_admission_id UUID,
+    p_file_name TEXT,
+    p_storage_path TEXT,
+    p_file_size BIGINT,
+    p_mime_type TEXT
+)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+    -- Verify ownership
+    IF NOT EXISTS (SELECT 1 FROM public.admissions WHERE id = p_admission_id AND parent_id = auth.uid()) THEN
+        RAISE EXCEPTION 'Unauthorized access to admission record';
+    END IF;
+
+    -- Update requirement status
+    UPDATE public.document_requirements
+    SET status = 'Submitted', updated_at = NOW()
+    WHERE id = p_requirement_id;
+
+    -- Insert document record
+    INSERT INTO public.admission_documents (
+        admission_id, 
+        requirement_id, 
+        file_name, 
+        storage_path, 
+        file_size, 
+        mime_type, 
+        uploaded_at
+    ) VALUES (
+        p_admission_id, 
+        p_requirement_id, 
+        p_file_name, 
+        p_storage_path, 
+        p_file_size, 
+        p_mime_type, 
+        NOW()
+    );
+
+    RETURN jsonb_build_object('success', true);
+END;
+$$;
+
+NOTIFY pgrst, 'reload schema';
+
+
+----V0.5.5
+
+
+-- ===============================================================================================
+--  GURUKUL OS - v20.3.2 REGISTRY PATCH (Identity Mismatch & Function Signature Fix)
+-- ===============================================================================================
+
+BEGIN;
+
+-- 0. Schema Fix: Add missing columns
+-- Fix for: column "purpose" of relation "share_codes" does not exist
+ALTER TABLE public.share_codes ADD COLUMN IF NOT EXISTS purpose TEXT;
+
+-- 1. Safe Conversion of Admissions Table ID to UUID
+-- This resolves the "operator does not exist: uuid = bigint" error
+DO $$ 
+DECLARE
+    col_type text;
+BEGIN 
+    SELECT data_type INTO col_type FROM information_schema.columns 
+    WHERE table_name = 'admissions' AND column_name = 'id';
+
+    IF col_type = 'bigint' THEN
+        -- Drop constraints temporarily to allow type change
+        ALTER TABLE public.admission_documents DROP CONSTRAINT IF EXISTS admission_documents_admission_id_fkey;
+        ALTER TABLE public.document_requirements DROP CONSTRAINT IF EXISTS document_requirements_admission_id_fkey;
+        
+        -- Convert Admission ID to UUID
+        -- WARNING: This uses gen_random_uuid() for existing rows. 
+        ALTER TABLE public.admissions ALTER COLUMN id TYPE UUID USING gen_random_uuid();
+        
+        -- Convert Foreign Keys in related tables
+        -- We must drop the old column and add a new one or cast it if data matches. 
+        ALTER TABLE public.admission_documents ALTER COLUMN admission_id TYPE UUID USING gen_random_uuid();
+        ALTER TABLE public.document_requirements ALTER COLUMN admission_id TYPE UUID USING gen_random_uuid();
+        
+        -- Restore Constraints
+        ALTER TABLE public.admission_documents 
+        ADD CONSTRAINT admission_documents_admission_id_fkey FOREIGN KEY (admission_id) REFERENCES public.admissions(id);
+        
+        ALTER TABLE public.document_requirements 
+        ADD CONSTRAINT document_requirements_admission_id_fkey FOREIGN KEY (admission_id) REFERENCES public.admissions(id);
+    END IF;
+END $$;
+
+-- 2. Update Document Upload Function
+-- DROP to prevent "cannot change return type" errors if it exists with different signature
+DROP FUNCTION IF EXISTS public.parent_complete_document_upload(bigint, uuid, text, text, bigint, text);
+DROP FUNCTION IF EXISTS public.parent_complete_document_upload(bigint, bigint, text, text, bigint, text);
+
+CREATE OR REPLACE FUNCTION public.parent_complete_document_upload(
+    p_requirement_id BIGINT,
+    p_admission_id UUID,
+    p_file_name TEXT,
+    p_storage_path TEXT,
+    p_file_size BIGINT,
+    p_mime_type TEXT
+)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+    -- Verify ownership
+    IF NOT EXISTS (SELECT 1 FROM public.admissions WHERE id = p_admission_id AND parent_id = auth.uid()) THEN
+        RAISE EXCEPTION 'Unauthorized access to admission record';
+    END IF;
+
+    -- Update requirement status
+    UPDATE public.document_requirements
+    SET status = 'Submitted', updated_at = NOW()
+    WHERE id = p_requirement_id;
+
+    -- Insert document record
+    INSERT INTO public.admission_documents (
+        admission_id, 
+        requirement_id, 
+        file_name, 
+        storage_path, 
+        file_size, 
+        mime_type, 
+        uploaded_at
+    ) VALUES (
+        p_admission_id, 
+        p_requirement_id, 
+        p_file_name, 
+        p_storage_path, 
+        p_file_size, 
+        p_mime_type, 
+        NOW()
+    );
+
+    RETURN jsonb_build_object('success', true);
+END;
+$$;
+
+-- 3. Ensure Requirement Generation handles UUIDs
+CREATE OR REPLACE FUNCTION public.parent_initialize_vault_slots_all()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    adm RECORD;
+    doc_name text;
+    v_category text;
+    required_docs text[] := ARRAY[
+        'Birth Certificate', 
+        'Transfer Certificate', 
+        'Previous Marksheet', 
+        'Aadhar Card', 
+        'Passport Photo'
+    ];
+BEGIN
+    FOR adm IN SELECT id FROM public.admissions WHERE parent_id = auth.uid()
+    LOOP
+        FOREACH doc_name IN ARRAY required_docs
+        LOOP
+            IF doc_name = 'Birth Certificate' OR doc_name = 'Aadhar Card' OR doc_name = 'Passport Photo' THEN
+                v_category := 'Identity';
+            ELSIF doc_name = 'Transfer Certificate' OR doc_name = 'Previous Marksheet' THEN
+                v_category := 'Academic';
+            ELSE
+                v_category := 'General';
+            END IF;
+
+            IF NOT EXISTS (
+                SELECT 1 FROM public.document_requirements 
+                WHERE admission_id = adm.id AND document_name = doc_name
+            ) THEN
+                INSERT INTO public.document_requirements (
+                    admission_id, document_name, is_mandatory, status, notes_for_parent, created_at, updated_at
+                ) VALUES (
+                    adm.id, doc_name, true, 'Pending', v_category, NOW(), NOW()
+                );
+            END IF;
+        END LOOP;
+    END LOOP;
+END;
+$$;
+
+-- 4. Update Share Code Generation for UUID
+-- Fix for 42P13: Explicitly drop conflicting signatures to avoid "cannot change return type" error
+DROP FUNCTION IF EXISTS public.generate_admission_share_code(uuid, text, text);
+DROP FUNCTION IF EXISTS public.generate_admission_share_code(bigint, text, text);
+
+CREATE OR REPLACE FUNCTION public.generate_admission_share_code(
+    p_admission_id UUID,
+    p_purpose TEXT,
+    p_code_type TEXT
+)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    v_code TEXT;
+    v_id BIGINT;
+    v_exists BOOLEAN;
+BEGIN
+    -- Verify ownership
+    IF NOT EXISTS (SELECT 1 FROM public.admissions WHERE id = p_admission_id AND parent_id = auth.uid()) THEN
+        RAISE EXCEPTION 'Unauthorized access to admission record';
+    END IF;
+
+    -- Generate a unique 8-char code
+    LOOP
+        v_code := upper(substring(md5(random()::text) from 1 for 8));
+        SELECT EXISTS(SELECT 1 FROM public.share_codes WHERE code = v_code) INTO v_exists;
+        EXIT WHEN NOT v_exists;
+    END LOOP;
+
+    INSERT INTO public.share_codes (
+        admission_id, code, purpose, code_type, expires_at, created_by
+    ) VALUES (
+        p_admission_id, v_code, p_purpose, p_code_type, NOW() + INTERVAL '24 hours', auth.uid()
+    ) RETURNING id INTO v_id;
+
+    RETURN jsonb_build_object('code', v_code, 'id', v_id);
+END;
+$$;
+
+COMMIT;
+
+
+-- ===============================================================================================
+--  GURUKUL OS - v20.3.4 REGISTRY PATCH (Share Code Schema Fix)
+-- ===============================================================================================
+
+BEGIN;
+
+-- 1. Schema Fix: Add missing 'created_by' column
+ALTER TABLE public.share_codes ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES auth.users(id);
+
+-- 2. Schema Fix: Add 'status' column if missing
+ALTER TABLE public.share_codes ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Active';
+
+-- 3. Schema Fix: Convert share_codes.admission_id to UUID
+-- Resolves: column "admission_id" is of type bigint but expression is of type uuid
+DO $$ 
+DECLARE
+    col_type text;
+BEGIN 
+    SELECT data_type INTO col_type FROM information_schema.columns 
+    WHERE table_name = 'share_codes' AND column_name = 'admission_id';
+
+    IF col_type = 'bigint' THEN
+        -- Drop foreign key constraint if it exists (name might vary, trying common default)
+        ALTER TABLE public.share_codes DROP CONSTRAINT IF EXISTS share_codes_admission_id_fkey;
+        
+        -- Delete existing data because old BIGINT IDs won't match new UUIDs in admissions table
+        -- This prevents foreign key violation errors when re-adding the constraint
+        DELETE FROM public.share_codes; 
+        
+        -- Convert column to UUID
+        ALTER TABLE public.share_codes ALTER COLUMN admission_id TYPE UUID USING gen_random_uuid();
+        
+        -- Re-establish foreign key constraint
+        ALTER TABLE public.share_codes 
+        ADD CONSTRAINT share_codes_admission_id_fkey FOREIGN KEY (admission_id) REFERENCES public.admissions(id);
+    END IF;
+END $$;
+
+-- 4. Re-apply Share Code Generation Function
+CREATE OR REPLACE FUNCTION public.generate_admission_share_code(
+    p_admission_id UUID,
+    p_purpose TEXT,
+    p_code_type TEXT
+)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    v_code TEXT;
+    v_id BIGINT;
+    v_exists BOOLEAN;
+BEGIN
+    -- Verify ownership
+    IF NOT EXISTS (SELECT 1 FROM public.admissions WHERE id = p_admission_id AND parent_id = auth.uid()) THEN
+        RAISE EXCEPTION 'Unauthorized access to admission record';
+    END IF;
+
+    -- Generate a unique 8-char code
+    LOOP
+        v_code := upper(substring(md5(random()::text) from 1 for 8));
+        SELECT EXISTS(SELECT 1 FROM public.share_codes WHERE code = v_code) INTO v_exists;
+        EXIT WHEN NOT v_exists;
+    END LOOP;
+
+    INSERT INTO public.share_codes (
+        admission_id, code, purpose, code_type, expires_at, created_by, status
+    ) VALUES (
+        p_admission_id, v_code, p_purpose, p_code_type, NOW() + INTERVAL '24 hours', auth.uid(), 'Active'
+    ) RETURNING id INTO v_id;
+
+    RETURN jsonb_build_object('code', v_code, 'id', v_id);
+END;
+$$;
+
+COMMIT;
+
+
+----V.0.5.6Share Codes Patch
+
+
+-- ===============================================================================================
+--  GURUKUL OS - v20.3.2 REGISTRY PATCH (Identity Mismatch & Function Signature Fix)
+-- ===============================================================================================
+
+BEGIN;
+
+-- 0. Schema Fix: Add missing columns
+-- Fix for: column "purpose" of relation "share_codes" does not exist
+ALTER TABLE public.share_codes ADD COLUMN IF NOT EXISTS purpose TEXT;
+
+-- 1. Safe Conversion of Admissions Table ID to UUID
+-- This resolves the "operator does not exist: uuid = bigint" error
+DO $$ 
+DECLARE
+    col_type text;
+BEGIN 
+    SELECT data_type INTO col_type FROM information_schema.columns 
+    WHERE table_name = 'admissions' AND column_name = 'id';
+
+    IF col_type = 'bigint' THEN
+        -- Drop constraints temporarily to allow type change
+        ALTER TABLE public.admission_documents DROP CONSTRAINT IF EXISTS admission_documents_admission_id_fkey;
+        ALTER TABLE public.document_requirements DROP CONSTRAINT IF EXISTS document_requirements_admission_id_fkey;
+        
+        -- Convert Admission ID to UUID
+        -- WARNING: This uses gen_random_uuid() for existing rows. 
+        ALTER TABLE public.admissions ALTER COLUMN id TYPE UUID USING gen_random_uuid();
+        
+        -- Convert Foreign Keys in related tables
+        -- We must drop the old column and add a new one or cast it if data matches. 
+        ALTER TABLE public.admission_documents ALTER COLUMN admission_id TYPE UUID USING gen_random_uuid();
+        ALTER TABLE public.document_requirements ALTER COLUMN admission_id TYPE UUID USING gen_random_uuid();
+        
+        -- Restore Constraints
+        ALTER TABLE public.admission_documents 
+        ADD CONSTRAINT admission_documents_admission_id_fkey FOREIGN KEY (admission_id) REFERENCES public.admissions(id);
+        
+        ALTER TABLE public.document_requirements 
+        ADD CONSTRAINT document_requirements_admission_id_fkey FOREIGN KEY (admission_id) REFERENCES public.admissions(id);
+    END IF;
+END $$;
+
+-- 2. Update Document Upload Function
+-- DROP to prevent "cannot change return type" errors if it exists with different signature
+DROP FUNCTION IF EXISTS public.parent_complete_document_upload(bigint, uuid, text, text, bigint, text);
+DROP FUNCTION IF EXISTS public.parent_complete_document_upload(bigint, bigint, text, text, bigint, text);
+
+CREATE OR REPLACE FUNCTION public.parent_complete_document_upload(
+    p_requirement_id BIGINT,
+    p_admission_id UUID,
+    p_file_name TEXT,
+    p_storage_path TEXT,
+    p_file_size BIGINT,
+    p_mime_type TEXT
+)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+    -- Verify ownership
+    IF NOT EXISTS (SELECT 1 FROM public.admissions WHERE id = p_admission_id AND parent_id = auth.uid()) THEN
+        RAISE EXCEPTION 'Unauthorized access to admission record';
+    END IF;
+
+    -- Update requirement status
+    UPDATE public.document_requirements
+    SET status = 'Submitted', updated_at = NOW()
+    WHERE id = p_requirement_id;
+
+    -- Insert document record
+    INSERT INTO public.admission_documents (
+        admission_id, 
+        requirement_id, 
+        file_name, 
+        storage_path, 
+        file_size, 
+        mime_type, 
+        uploaded_at
+    ) VALUES (
+        p_admission_id, 
+        p_requirement_id, 
+        p_file_name, 
+        p_storage_path, 
+        p_file_size, 
+        p_mime_type, 
+        uploaded_at
+    );
+
+    RETURN jsonb_build_object('success', true);
+END;
+$$;
+
+-- 3. Ensure Requirement Generation handles UUIDs
+CREATE OR REPLACE FUNCTION public.parent_initialize_vault_slots_all()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    adm RECORD;
+    doc_name text;
+    v_category text;
+    required_docs text[] := ARRAY[
+        'Birth Certificate', 
+        'Transfer Certificate', 
+        'Previous Marksheet', 
+        'Aadhar Card', 
+        'Passport Photo'
+    ];
+BEGIN
+    FOR adm IN SELECT id FROM public.admissions WHERE parent_id = auth.uid()
+    LOOP
+        FOREACH doc_name IN ARRAY required_docs
+        LOOP
+            IF doc_name = 'Birth Certificate' OR doc_name = 'Aadhar Card' OR doc_name = 'Passport Photo' THEN
+                v_category := 'Identity';
+            ELSIF doc_name = 'Transfer Certificate' OR doc_name = 'Previous Marksheet' THEN
+                v_category := 'Academic';
+            ELSE
+                v_category := 'General';
+            END IF;
+
+            IF NOT EXISTS (
+                SELECT 1 FROM public.document_requirements 
+                WHERE admission_id = adm.id AND document_name = doc_name
+            ) THEN
+                INSERT INTO public.document_requirements (
+                    admission_id, document_name, is_mandatory, status, notes_for_parent, created_at, updated_at
+                ) VALUES (
+                    adm.id, doc_name, true, 'Pending', v_category, NOW(), NOW()
+                );
+            END IF;
+        END LOOP;
+    END LOOP;
+END;
+$$;
+
+-- 4. Update Share Code Generation for UUID
+-- Fix for 42P13: Explicitly drop conflicting signatures to avoid "cannot change return type" error
+DROP FUNCTION IF EXISTS public.generate_admission_share_code(uuid, text, text);
+DROP FUNCTION IF EXISTS public.generate_admission_share_code(bigint, text, text);
+
+CREATE OR REPLACE FUNCTION public.generate_admission_share_code(
+    p_admission_id UUID,
+    p_purpose TEXT,
+    p_code_type TEXT
+)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+    v_code TEXT;
+    v_id BIGINT;
+    v_exists BOOLEAN;
+BEGIN
+    -- Verify ownership
+    IF NOT EXISTS (SELECT 1 FROM public.admissions WHERE id = p_admission_id AND parent_id = auth.uid()) THEN
+        RAISE EXCEPTION 'Unauthorized access to admission record';
+    END IF;
+
+    -- Generate a unique 8-char code
+    LOOP
+        v_code := upper(substring(md5(random()::text) from 1 for 8));
+        SELECT EXISTS(SELECT 1 FROM public.share_codes WHERE code = v_code) INTO v_exists;
+        EXIT WHEN NOT v_exists;
+    END LOOP;
+
+    INSERT INTO public.share_codes (
+        admission_id, code, purpose, code_type, expires_at, created_by
+    ) VALUES (
+        p_admission_id, v_code, p_purpose, p_code_type, NOW() + INTERVAL '24 hours', auth.uid()
+    ) RETURNING id INTO v_id;
+
+    RETURN jsonb_build_object('code', v_code, 'id', v_id);
+END;
+$$;
+
+COMMIT;
+
