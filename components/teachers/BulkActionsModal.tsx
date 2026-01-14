@@ -14,7 +14,6 @@ import { CommunicationIcon } from '../icons/CommunicationIcon';
 import { MegaphoneIcon } from '../icons/MegaphoneIcon';
 import { AlertTriangleIcon } from '../icons/AlertTriangleIcon';
 import { DownloadIcon } from '../icons/DownloadIcon';
-// Fix: Import missing PlusIcon
 import { PlusIcon } from '../icons/PlusIcon';
 
 export type BulkActionType = 'status' | 'department' | 'subject' | 'transfer' | 'import' | 'message';

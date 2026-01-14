@@ -1,107 +1,152 @@
 
 -- ===============================================================================================
---  GURUKUL OS - v20.3.3 IDENTITY SYNC PATCH (Revision 10)
+--  GURUKUL OS - v21.0.4 SCHEMA PATCH (Enrollment Fixes)
 -- ===============================================================================================
 
 BEGIN;
 
--- 1. Identity Discovery RPC
--- Efficiently probes all sub-registries to find established identities for a user node.
-CREATE OR REPLACE FUNCTION public.get_user_completed_roles()
-RETURNS TABLE (role_name TEXT, is_completed BOOLEAN) 
-LANGUAGE plpgsql SECURITY DEFINER AS $$
+-- 1. Schema Repairs
+DO $$
 BEGIN
-    RETURN QUERY
-    SELECT 'Parent/Guardian'::TEXT, EXISTS(SELECT 1 FROM public.parent_profiles WHERE user_id = auth.uid())
-    UNION ALL
-    SELECT 'School Administration'::TEXT, EXISTS(SELECT 1 FROM public.school_admin_profiles WHERE user_id = auth.uid())
-    UNION ALL
-    SELECT 'Teacher'::TEXT, EXISTS(SELECT 1 FROM public.teacher_profiles WHERE user_id = auth.uid())
-    UNION ALL
-    SELECT 'Student'::TEXT, EXISTS(SELECT 1 FROM public.student_profiles WHERE user_id = auth.uid());
-END;
-$$;
+    -- Fix: Add 'updated_at' to admissions if missing (Fixes: column "updated_at" does not exist)
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'admissions' AND column_name = 'updated_at') THEN
+        ALTER TABLE public.admissions ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();
+    END IF;
 
--- 2. Hardened Onboarding RPC
--- FIX: Explicitly drop existing function to allow return type change (Postgres 42P13)
-DROP FUNCTION IF EXISTS public.complete_school_onboarding(TEXT, TEXT, TEXT, TEXT);
+    -- Fix: Ensure 'admission_audit_logs.admission_id' is UUID (Fixes: type mismatch bigint vs uuid)
+    -- We truncate the logs table to ensure a clean type conversion if it contains legacy data
+    IF EXISTS (
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_name = 'admission_audit_logs' 
+        AND column_name = 'admission_id' 
+        AND data_type != 'uuid'
+    ) THEN
+        TRUNCATE TABLE public.admission_audit_logs;
+        ALTER TABLE public.admission_audit_logs DROP COLUMN admission_id;
+        ALTER TABLE public.admission_audit_logs ADD COLUMN admission_id UUID;
+    END IF;
+    
+    -- Fix: Ensure 'document_requirements.admission_id' is UUID
+    IF EXISTS (
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_name = 'document_requirements' 
+        AND column_name = 'admission_id' 
+        AND data_type != 'uuid'
+    ) THEN
+        ALTER TABLE public.document_requirements ALTER COLUMN admission_id TYPE UUID USING admission_id::text::uuid;
+    END IF;
+END $$;
 
--- Finalizes the transition from onboarding to active institutional governance.
-CREATE OR REPLACE FUNCTION public.complete_school_onboarding(
-    p_admin_name TEXT,
-    p_admin_email TEXT,
-    p_admin_phone TEXT,
-    p_designation TEXT
-)
+-- 2. Enhanced Enrollment Finalization Logic
+CREATE OR REPLACE FUNCTION public.admin_finalize_enrollment(p_admission_id UUID)
 RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
-    v_user_id UUID := auth.uid();
+    v_admission RECORD;
+    v_new_student_id TEXT;
+    v_new_roll_no TEXT;
+    v_user_id UUID;
+    v_year TEXT;
+    v_generated_email TEXT;
 BEGIN
-    -- Update Core Identity
-    UPDATE public.profiles 
+    -- Fetch Admission Data
+    SELECT * INTO v_admission FROM public.admissions WHERE id = p_admission_id;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Admission record not found.');
+    END IF;
+
+    IF v_admission.status = 'Enrolled' THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Student is already enrolled.');
+    END IF;
+
+    -- Generate Identifiers (e.g., STU-2025-1234)
+    v_year := to_char(NOW(), 'YYYY');
+    v_new_student_id := 'STU-' || v_year || '-' || floor(random() * (9999-1000 + 1) + 1000)::TEXT;
+    v_new_roll_no := 'R-' || floor(random() * (99-10 + 1) + 10)::TEXT;
+    v_generated_email := 'student.' || v_new_student_id || '@gurukul.system';
+
+    -- Resolve User Identity
+    -- If the admission wasn't linked to a user yet, we use the admission ID as a placeholder UUID for the new user profile
+    v_user_id := COALESCE(v_admission.student_user_id, p_admission_id);
+
+    -- Create/Update Core User Profile
+    INSERT INTO public.profiles (id, display_name, email, role, is_active, profile_completed, created_at)
+    VALUES (
+        v_user_id,
+        v_admission.applicant_name,
+        v_generated_email, 
+        'Student',
+        true,
+        true,
+        NOW()
+    )
+    ON CONFLICT (id) DO UPDATE SET
+        display_name = EXCLUDED.display_name,
+        role = 'Student',
+        is_active = true;
+
+    -- Create Student Directory Entry
+    INSERT INTO public.student_profiles (
+        user_id,
+        student_id_number,
+        roll_number,
+        grade,
+        parent_guardian_details,
+        branch_id,
+        updated_at
+    ) VALUES (
+        v_user_id,
+        v_new_student_id,
+        v_new_roll_no,
+        v_admission.grade,
+        v_admission.parent_name || ' (' || v_admission.parent_phone || ')',
+        v_admission.branch_id,
+        NOW()
+    )
+    ON CONFLICT (user_id) DO UPDATE SET
+        student_id_number = EXCLUDED.student_id_number,
+        roll_number = EXCLUDED.roll_number,
+        grade = EXCLUDED.grade,
+        updated_at = NOW();
+
+    -- Update Admission Status
+    UPDATE public.admissions 
     SET 
-        display_name = p_admin_name,
-        phone = p_admin_phone,
-        profile_completed = true,
+        status = 'Enrolled',
         updated_at = NOW()
-    WHERE id = v_user_id;
+    WHERE id = p_admission_id;
 
-    -- Seal Administrative Context
-    UPDATE public.school_admin_profiles
-    SET
-        admin_contact_name = p_admin_name,
-        admin_contact_email = p_admin_email,
-        admin_contact_phone = p_admin_phone,
-        admin_designation = p_designation,
-        onboarding_step = 'completed',
-        updated_at = NOW()
-    WHERE user_id = v_user_id;
+    -- Log to Audit Trail
+    INSERT INTO public.admission_audit_logs (
+        admission_id,
+        item_type,
+        previous_status,
+        new_status,
+        changed_by,
+        changed_by_name,
+        details
+    ) VALUES (
+        p_admission_id,
+        'ENROLLMENT_FINALIZED',
+        v_admission.status,
+        'Enrolled',
+        auth.uid(),
+        'System Administrator',
+        jsonb_build_object('student_id', v_new_student_id, 'email', v_generated_email)
+    );
 
-    RETURN jsonb_build_object('success', true, 'message', 'Institutional node activation successful.');
+    RETURN jsonb_build_object(
+        'success', true, 
+        'student_id', v_user_id,
+        'student_id_number', v_new_student_id,
+        'message', 'Student successfully enrolled.'
+    );
+
 EXCEPTION WHEN OTHERS THEN
     RETURN jsonb_build_object('success', false, 'message', SQLERRM);
 END;
 $$;
-
--- 3. Admissions Registry Protocol (v2)
--- AMBIGUITY FIX: Explicitly drop overloaded signatures
-DROP FUNCTION IF EXISTS public.get_admissions_v2(INTEGER);
-DROP FUNCTION IF EXISTS public.get_admissions_v2(BIGINT);
-
--- Provides a scoped view of admission nodes for branch administrators.
-CREATE OR REPLACE FUNCTION public.get_admissions_v2(p_branch_id BIGINT DEFAULT NULL)
-RETURNS SETOF public.admissions LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN
-    RETURN QUERY
-    SELECT * FROM public.admissions
-    WHERE (p_branch_id IS NULL OR branch_id = p_branch_id)
-    ORDER BY submitted_at DESC;
-END;
-$$;
-
--- 4. Enquiry Registry Protocol (v2)
--- AMBIGUITY FIX: Explicitly drop overloaded signatures
-DROP FUNCTION IF EXISTS public.get_all_enquiries_v2(INTEGER);
-DROP FUNCTION IF EXISTS public.get_all_enquiries_v2(BIGINT);
-
--- Provides a scoped view of enquiry nodes for branch administrators.
-CREATE OR REPLACE FUNCTION public.get_all_enquiries_v2(p_branch_id BIGINT DEFAULT NULL)
-RETURNS SETOF public.enquiries LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN
-    RETURN QUERY
-    SELECT * FROM public.enquiries
-    WHERE (p_branch_id IS NULL OR branch_id = p_branch_id)
-    ORDER BY updated_at DESC;
-END;
-$$;
-
--- 5. Sync Table Columns
-DO $$ 
-BEGIN 
-    -- Ensure phone column exists on profiles for base contact consistency
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'phone') THEN
-        ALTER TABLE public.profiles ADD COLUMN phone TEXT;
-    END IF;
-END $$;
 
 COMMIT;

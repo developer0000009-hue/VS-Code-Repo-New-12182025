@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, formatError } from '../services/supabase';
 import { StudentForAdmin } from '../types';
@@ -15,7 +16,6 @@ import { GraduationCapIcon } from './icons/GraduationCapIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { XIcon } from './icons/XIcon';
 import { UploadIcon } from './icons/UploadIcon';
-import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { RefreshIcon } from './icons/RefreshIcon';
 import { UserPlusIcon } from './icons/UserPlusIcon';
 import { DocumentTextIcon } from './icons/DocumentTextIcon';
@@ -164,7 +164,7 @@ const StudentManagementTab: React.FC<StudentManagementTabProps> = ({ branchId })
         }
     }, [branchId]);
 
-    // FIX: Listen to hash changes to trigger data refresh and highlighting.
+    // Handle deep linking/highlighting
     useEffect(() => {
         const handleHashChange = () => {
             if (window.location.hash.startsWith('#/Student Management')) {
@@ -184,12 +184,12 @@ const StudentManagementTab: React.FC<StudentManagementTabProps> = ({ branchId })
 
     useEffect(() => { 
         fetchData(); 
-    }, [fetchData, refreshKey]); // Re-fetch when refreshKey changes
+    }, [fetchData, refreshKey]);
 
     const filteredStudents = useMemo(() => {
         return allStudents.filter(s => {
             const searchLower = searchTerm.toLowerCase();
-            const matchesSearch = !searchTerm || s.display_name.toLowerCase().includes(searchLower) || (s.email || '').toLowerCase().includes(searchLower);
+            const matchesSearch = !searchTerm || s.display_name.toLowerCase().includes(searchLower) || (s.email || '').toLowerCase().includes(searchLower) || (s.student_id_number || '').toLowerCase().includes(searchLower);
             let matchesQuick = true;
             if (quickFilter === 'Active') matchesQuick = s.is_active;
             if (quickFilter === 'Pending') matchesQuick = !s.assigned_class_id;
@@ -201,6 +201,7 @@ const StudentManagementTab: React.FC<StudentManagementTabProps> = ({ branchId })
         }).sort((a, b) => {
             const dir = sortConfig.direction === 'asc' ? 1 : -1;
             if (sortConfig.key === 'name') return a.display_name.localeCompare(b.display_name) * dir;
+            if (sortConfig.key === 'grade') return a.grade.localeCompare(b.grade) * dir;
             return 0;
         });
     }, [allStudents, searchTerm, quickFilter, sortConfig]);
@@ -249,9 +250,9 @@ const StudentManagementTab: React.FC<StudentManagementTabProps> = ({ branchId })
                     <table className="w-full text-left text-sm whitespace-nowrap">
                         <thead className="bg-[#0f1115]/80 border-b border-white/5 text-[10px] font-black uppercase text-white/20 tracking-[0.3em] sticky top-0 z-20 backdrop-blur-xl">
                             <tr>
-                                <th className="p-8 pl-10">Subject Identity</th>
+                                <th className="p-8 pl-10 cursor-pointer hover:text-white transition-colors" onClick={() => setSortConfig(p => ({key: 'name', direction: p.direction === 'asc' ? 'desc' : 'asc'}))}>Subject Identity</th>
                                 <th className="p-8">Arbiter / Parent</th>
-                                <th className="p-8">Placement Status</th>
+                                <th className="p-8 cursor-pointer hover:text-white transition-colors" onClick={() => setSortConfig(p => ({key: 'grade', direction: p.direction === 'asc' ? 'desc' : 'asc'}))}>Placement Status</th>
                                 <th className="p-8 text-center">Lifecycle Status</th>
                                 <th className="p-8 text-right pr-10">Protocols</th>
                             </tr>
@@ -266,7 +267,12 @@ const StudentManagementTab: React.FC<StudentManagementTabProps> = ({ branchId })
                                             <PremiumAvatar src={student.profile_photo_url} name={student.display_name} size="xs" className="w-14 h-14 rounded-2xl border border-white/10 shadow-2xl relative z-10" />
                                             <div>
                                                 <p className="font-serif font-black text-white text-lg tracking-tight uppercase group-hover:text-primary transition-colors">{student.display_name}</p>
-                                                <p className="text-[10px] text-white/30 font-mono tracking-widest mt-1 uppercase">NODE_{student.student_id_number || student.id.slice(0, 8)}</p>
+                                                <p className="text-[10px] text-white/30 font-mono tracking-widest mt-1 uppercase">
+                                                    {student.student_id_number || 'ID_PENDING'}
+                                                </p>
+                                                {new Date(student.created_at).toDateString() === new Date().toDateString() && (
+                                                    <span className="text-[8px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 mt-1 inline-block">NEW ENROLLMENT</span>
+                                                )}
                                             </div>
                                         </div>
                                     </td>

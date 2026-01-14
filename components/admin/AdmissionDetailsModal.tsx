@@ -1,20 +1,14 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { AdmissionApplication, DocumentRequirement, TimelineItem } from '../../types';
+import { AdmissionApplication, DocumentRequirement } from '../../types';
 import { XIcon } from '../icons/XIcon';
 import { CheckCircleIcon } from '../icons/CheckCircleIcon';
 import { XCircleIcon } from '../icons/XCircleIcon';
 import { ClockIcon } from '../icons/ClockIcon';
-import { EyeIcon } from '../icons/EyeIcon';
 import { FileTextIcon } from '../icons/FileTextIcon';
 import { PlusIcon } from '../icons/PlusIcon';
 import { GraduationCapIcon } from '../icons/GraduationCapIcon';
-import { ShieldCheckIcon } from '../icons/ShieldCheckIcon';
-import { KeyIcon } from '../icons/KeyIcon';
 import { AlertTriangleIcon } from '../icons/AlertTriangleIcon';
-import { DownloadIcon } from '../icons/DownloadIcon';
-import { HistoryIcon } from '../icons/HistoryIcon';
-import { ChevronRightIcon } from '../icons/ChevronRightIcon';
 import { CalendarIcon } from '../icons/CalendarIcon';
 import { SparklesIcon } from '../icons/SparklesIcon';
 import { supabase, formatError } from '../../services/supabase';
@@ -22,7 +16,7 @@ import Spinner from '../common/Spinner';
 import { RequestDocumentsModal } from '../AdmissionsTab';
 import PremiumAvatar from '../common/PremiumAvatar';
 import { GoogleGenAI } from '@google/genai';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 interface AdmissionDetailsModalProps {
     admission: AdmissionApplication;
@@ -34,24 +28,25 @@ const AdmissionDetailsModal: React.FC<AdmissionDetailsModalProps> = ({ admission
     const [requirements, setRequirements] = useState<DocumentRequirement[]>([]);
     const [auditLogs, setAuditLogs] = useState<any[]>([]);
     const [fetching, setFetching] = useState(true);
-    const [activeView, setActiveView] = useState<'audit' | 'history'>('audit');
+    const [activeView, setActiveView] = useState<'artifacts' | 'audit'>('artifacts');
     const [actioningId, setActioningId] = useState<number | null>(null);
     const [scanningId, setScanningId] = useState<number | null>(null);
     const [finalizeState, setFinalizeState] = useState<'idle' | 'processing' | 'success'>('idle');
     const [provisionedData, setProvisionedData] = useState<{ student_id: string; student_id_number?: string } | null>(null);
     const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
-    const [downloadingPath, setDownloadingPath] = useState<string | null>(null);
+    
     const isMounted = useRef(true);
 
     const fetchRegistry = useCallback(async (isSilent = false) => {
         if (!isSilent) setFetching(true);
         try {
+            // Initialize document slots if they don't exist
             await supabase.rpc('parent_initialize_vault_slots', { p_admission_id: admission.id });
 
             const [reqsRes, logsRes] = await Promise.all([
                 supabase
                     .from('document_requirements')
-                    .select(`*, admission_documents (id, file_name, storage_path, uploaded_at)`)
+                    .select(`*, admission_documents (id, file_name, storage_path, uploaded_at, file_size, mime_type)`)
                     .eq('admission_id', admission.id)
                     .order('is_mandatory', { ascending: false }),
                 supabase
@@ -94,7 +89,7 @@ const AdmissionDetailsModal: React.FC<AdmissionDetailsModalProps> = ({ admission
                 .from('document_requirements')
                 .update({ 
                     status: status as any, 
-                    rejection_reason: status === 'Rejected' ? prompt("Define Rejection Reason:") : null,
+                    rejection_reason: status === 'Rejected' ? prompt("Define Rejection Reason for Record Log:") : null,
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', reqId);
@@ -127,10 +122,41 @@ const AdmissionDetailsModal: React.FC<AdmissionDetailsModalProps> = ({ admission
         }
     };
 
-    /**
-     * AI Artifact Scanning Protocol
-     * Uses Gemini to verify document authenticity and extract key telemetry.
-     */
+    const handleView = async (path: string) => {
+        try {
+            const { data, error } = await supabase.storage.from('guardian-documents').createSignedUrl(path, 3600);
+            if (error) throw error;
+            window.open(data.signedUrl, '_blank');
+        } catch (e) { alert("Access Denied: Could not resolve artifact path."); }
+    };
+
+    const handleFinalize = async () => {
+        setFinalizeState('processing');
+        try {
+            const { data, error } = await supabase.rpc('admin_finalize_enrollment', { 
+                p_admission_id: admission.id 
+            });
+            
+            if (error) throw error;
+            
+            if (data && data.success) {
+                if (isMounted.current) {
+                    setProvisionedData({ 
+                        student_id: data.student_id,
+                        student_id_number: data.student_id_number
+                    });
+                    setFinalizeState('success');
+                    onUpdate();
+                }
+            } else {
+                throw new Error(data?.message || "Protocol rejection.");
+            }
+        } catch (err) { 
+            alert("Enrollment Blocked: " + formatError(err)); 
+            if (isMounted.current) setFinalizeState('idle'); 
+        }
+    };
+
     const handleAIScan = async (reqId: number) => {
         const req = requirements.find(r => r.id === reqId);
         const file = req?.admission_documents?.[0];
@@ -144,7 +170,6 @@ const AdmissionDetailsModal: React.FC<AdmissionDetailsModalProps> = ({ admission
             
             if (urlError) throw urlError;
 
-            // Retrieve image bytes for Gemini analysis
             const response = await fetch(signedData.signedUrl);
             const blob = await response.blob();
             const base64 = await new Promise<string>((resolve) => {
@@ -161,8 +186,8 @@ const AdmissionDetailsModal: React.FC<AdmissionDetailsModalProps> = ({ admission
                         text: `Perform an institutional audit on this artifact: ${req.document_name}. 
                         1. Verify if the document matches the applicant: ${admission.applicant_name}.
                         2. Verify if the document is relevant for Grade ${admission.grade} enrollment.
-                        3. Identify any signs of forgery or tampering.
-                        Output: JSON format {"verified": boolean, "confidence": number, "summary": string, "extracted_name": string}.`
+                        3. Identify any signs of forgery.
+                        Output: JSON format {"verified": boolean, "confidence": number, "summary": string}.`
                     },
                     {
                         inlineData: {
@@ -173,266 +198,194 @@ const AdmissionDetailsModal: React.FC<AdmissionDetailsModalProps> = ({ admission
                 ]
             });
 
-            const result = JSON.parse(aiResponse.text || '{}');
+            const resultText = aiResponse.text || '{}';
+            const jsonStr = resultText.replace(/```json|```/g, '').trim();
+            const result = JSON.parse(jsonStr);
             
             if (result.verified && result.confidence > 0.8) {
                 await handleVerify(reqId, 'Verified');
-                alert(`AI Audit Successful: ${result.summary}`);
+                alert(`AI Audit Passed: ${result.summary}`);
             } else {
-                alert(`AI Audit Flagged Concerns: ${result.summary}. Please perform manual inspection.`);
+                alert(`AI Flagged Concern: ${result.summary}. Manual inspection required.`);
             }
 
         } catch (err: any) {
-            alert("AI Scanning Protocol Interrupted: " + formatError(err));
+            alert("AI Protocol Error: " + formatError(err));
         } finally {
             if (isMounted.current) setScanningId(null);
         }
     };
 
-    const handleView = async (path: string) => {
-        try {
-            const { data, error } = await supabase.storage.from('guardian-documents').createSignedUrl(path, 3600);
-            if (error) throw error;
-            window.open(data.signedUrl, '_blank');
-        } catch (e) { alert("Protocol Failure: Could not resolve artifact path."); }
-    };
-
-    const handleDownload = async (path: string, fileName: string) => {
-        setDownloadingPath(path);
-        try {
-            const { data, error } = await supabase.storage.from('guardian-documents').download(path);
-            if (error) throw error;
-            const blob = new Blob([data], { type: data.type });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-        } catch (err) { alert("Protocol Failure: Asset retrieval timed out."); }
-        finally { setDownloadingPath(null); }
-    };
-
     const mandatoryPending = requirements.filter(r => r.is_mandatory && r.status !== 'Verified').length;
-    const isCleared = requirements.length > 0 && mandatoryPending === 0;
-
-    const handleFinalize = async () => {
-        setFinalizeState('processing');
-        try {
-            const { data, error } = await supabase.rpc('admin_transition_admission', { 
-                p_admission_id: admission.id, 
-                p_next_status: 'Approved' 
-            });
-            
-            if (error) throw error;
-            
-            const isSuccess = data.success === true || (data.student_id && !data.error);
-            if (!isSuccess) throw new Error(data.message || "Protocol rejection.");
-
-            if (isMounted.current) {
-                setProvisionedData({ 
-                    student_id: data.student_id,
-                    student_id_number: data.student_id_number
-                });
-                setFinalizeState('success');
-                onUpdate();
-            }
-        } catch (err) { 
-            alert("Enrollment Protocol Blocked: " + formatError(err)); 
-            if (isMounted.current) setFinalizeState('idle'); 
-        }
-    };
+    const isCleared = (requirements.length > 0 && mandatoryPending === 0) || admission.status === 'Approved';
 
     return (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl flex items-center justify-center z-[300] p-0 sm:p-6" onClick={onClose}>
-            <div 
-                className="bg-[#090a0f] w-full h-full sm:h-[95vh] sm:max-w-7xl sm:rounded-[3.5rem] shadow-[0_64px_128px_-24px_rgba(0,0,0,1)] border-0 sm:border border-white/10 flex flex-col relative ring-1 ring-white/5 animate-in zoom-in-95 duration-500 overflow-hidden" 
+        <div className="fixed inset-0 bg-[#050505]/95 backdrop-blur-2xl flex items-center justify-center z-[500] animate-in fade-in duration-300 font-sans" onClick={onClose}>
+            <motion.div 
+                initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.98, y: 10 }}
+                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                className="w-full h-full md:max-w-[1400px] md:h-[92vh] bg-[#0A0A0A] md:rounded-[24px] border border-white/10 shadow-2xl flex flex-col overflow-hidden relative ring-1 ring-white/5"
                 onClick={e => e.stopPropagation()}
             >
-                {/* Header Area */}
-                <header className="px-8 md:px-12 py-5 md:py-6 border-b border-white/5 bg-[#0f1116]/90 backdrop-blur-xl flex flex-wrap justify-between items-center z-40 relative flex-shrink-0">
-                    <div className="space-y-1.5">
-                        <div className="flex items-center gap-4 flex-wrap">
-                            <h3 className="text-lg md:text-xl font-serif font-black text-white tracking-widest uppercase">Identity Review</h3>
-                            <div className="h-4 w-px bg-white/10 hidden sm:block"></div>
-                            <span className="px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-sm">Admission Scope</span>
-                        </div>
-                        <p className="text-[9px] font-mono font-bold text-white/10 uppercase tracking-[0.2em] flex items-center gap-2">
-                            <KeyIcon className="w-3 h-3" /> TRACE: {admission.id.substring(0, 18).toUpperCase()}...
-                        </p>
+                {/* --- HEADER --- */}
+                <header className="px-6 py-6 md:px-10 md:py-8 border-b border-white/5 bg-[#0C0C0C] flex flex-col md:flex-row justify-between md:items-center gap-6 relative z-20">
+                    <div className="flex items-start gap-6">
+                         <div className="relative group">
+                             <div className="absolute -inset-0.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl opacity-20 group-hover:opacity-40 blur transition duration-500"></div>
+                             <PremiumAvatar 
+                                src={admission.profile_photo_url} 
+                                name={admission.applicant_name} 
+                                size="lg" 
+                                className="w-20 h-20 md:w-24 md:h-24 rounded-2xl shadow-2xl relative z-10"
+                            />
+                         </div>
+                         <div>
+                             <div className="flex items-center gap-3 mb-1">
+                                 <span className="px-2 py-0.5 rounded border border-white/10 bg-white/5 text-[9px] font-black uppercase tracking-[0.2em] text-white/30">Applicant</span>
+                                 <div className="w-1 h-1 rounded-full bg-white/10"></div>
+                                 <span className="text-[10px] font-mono text-white/30 tracking-widest">{admission.application_number || 'ID_PENDING'}</span>
+                             </div>
+                             <h1 className="text-2xl md:text-3xl font-serif font-bold text-white tracking-tight leading-none mb-2">{admission.applicant_name}</h1>
+                             <div className="flex flex-wrap items-center gap-4 text-[11px] font-medium text-white/40">
+                                 <span className="flex items-center gap-1.5"><GraduationCapIcon className="w-3.5 h-3.5"/> Grade {admission.grade}</span>
+                                 <span className="w-px h-3 bg-white/10"></span>
+                                 <span className="flex items-center gap-1.5"><CalendarIcon className="w-3.5 h-3.5"/> Applied {new Date(admission.submitted_at).toLocaleDateString()}</span>
+                                 <span className="w-px h-3 bg-white/10"></span>
+                                 <span className="flex items-center gap-1.5 text-indigo-400"><ClockIcon className="w-3.5 h-3.5"/> {admission.status}</span>
+                             </div>
+                         </div>
                     </div>
-                    <div className="flex items-center gap-3 mt-4 sm:mt-0">
-                        <button 
-                            onClick={() => setActiveView(activeView === 'audit' ? 'history' : 'audit')}
-                            className="p-2.5 px-5 rounded-xl bg-white/5 hover:bg-white/10 text-white/30 hover:text-white transition-all flex items-center gap-2 font-black text-[8px] uppercase tracking-widest border border-white/5 shadow-inner"
-                        >
-                            <HistoryIcon className="w-3.5 h-3.5"/> {activeView === 'history' ? 'View Registry' : 'Security Trace'}
-                        </button>
-                        <button onClick={onClose} className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-white/30 hover:text-white transition-all transform active:scale-90 border border-white/5"><XIcon className="w-5 h-5"/></button>
+
+                    <div className="flex items-center gap-3 w-full md:w-auto">
+                        <div className="flex bg-white/5 p-1 rounded-xl border border-white/5 w-full md:w-auto">
+                            <button 
+                                onClick={() => setActiveView('artifacts')}
+                                className={`flex-1 md:flex-none px-6 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'artifacts' ? 'bg-white/10 text-white shadow-sm' : 'text-white/30 hover:text-white/60'}`}
+                            >
+                                Artifacts
+                            </button>
+                            <button 
+                                onClick={() => setActiveView('audit')}
+                                className={`flex-1 md:flex-none px-6 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'audit' ? 'bg-white/10 text-white shadow-sm' : 'text-white/30 hover:text-white/60'}`}
+                            >
+                                Audit Log
+                            </button>
+                        </div>
+                        <button onClick={onClose} className="p-3 rounded-xl bg-white/5 hover:bg-white/10 text-white/30 hover:text-white transition-all border border-white/5"><XIcon className="w-5 h-5"/></button>
                     </div>
                 </header>
 
-                {/* Body Content */}
-                <div className="flex-grow overflow-y-auto custom-scrollbar p-6 md:p-12 space-y-10 bg-background relative z-30">
-                    {finalizeState === 'success' ? (
-                        <div className="h-full flex flex-col items-center justify-center space-y-8 animate-in zoom-in-95 duration-1000">
-                             <div className="relative">
-                                <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full"></div>
-                                <CheckCircleIcon animate className="w-24 h-24 text-emerald-500 relative z-10 animate-in zoom-in-50" />
-                             </div>
-                             <div className="text-center space-y-3">
-                                <h2 className="text-4xl md:text-5xl font-serif font-black text-white tracking-tighter uppercase leading-none">Protocol <span className="text-white/20 italic">Finalized.</span></h2>
-                                <p className="text-white/40 text-lg font-serif italic">Identity node integrated successfully.</p>
-                                {provisionedData?.student_id_number && (
-                                    <div className="mt-4 p-4 bg-white/5 border border-white/10 rounded-2xl">
-                                        <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">Generated Institutional ID</p>
-                                        <p className="text-2xl font-mono font-black text-primary tracking-widest">{provisionedData.student_id_number}</p>
-                                    </div>
-                                )}
-                             </div>
-                             <button 
-                                onClick={() => {
-                                    onUpdate();
-                                    onClose();
-                                }} 
-                                className="px-12 py-4 bg-white text-black font-black text-[10px] uppercase tracking-[0.5em] rounded-xl hover:bg-white/90 transition-all active:scale-95"
-                             >
-                                Return to Console
-                             </button>
-                        </div>
-                    ) : activeView === 'history' ? (
-                        <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-right-12 duration-700">
-                             <div className="flex items-center gap-3 border-b border-white/5 pb-3">
-                                <div className="p-2 bg-primary/10 rounded-xl text-primary shadow-inner border border-primary/20"><HistoryIcon className="w-5 h-5"/></div>
-                                <h3 className="text-lg font-black text-white uppercase tracking-tighter">Identity Trace Ledger</h3>
-                            </div>
-                             <div className="relative border-l-2 border-white/5 ml-4 space-y-10 py-2">
-                                {auditLogs.length === 0 ? <p className="text-white/10 italic p-8">No security events found.</p> : auditLogs.map(log => (
-                                    <div key={log.id} className="relative pl-10 group">
-                                        <div className="absolute -left-[11px] top-0 w-5 h-5 rounded-full bg-[#090a0f] border-2 border-primary z-10"></div>
-                                        <div className="bg-[#101218] border border-white/5 p-6 rounded-[2rem]">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <h4 className="font-bold text-white text-sm uppercase tracking-wider">{log.item_type}</h4>
-                                                <span className="text-[9px] font-mono text-white/20 uppercase">{new Date(log.created_at).toLocaleString()}</span>
-                                            </div>
-                                            <p className="text-xs text-white/40 italic font-serif">
-                                                Status update: <span className="text-primary font-bold">{log.new_status}</span>
-                                            </p>
-                                        </div>
-                                    </div>
-                                ))}
-                             </div>
-                        </div>
-                    ) : (
-                        <>
-                            {/* Profile Bar */}
-                            <div className="flex flex-col md:flex-row items-center gap-8 bg-[#0c0d12]/60 backdrop-blur-xl p-8 md:p-10 rounded-[3rem] border border-white/5 relative overflow-hidden group">
-                                <div className="absolute -right-20 -top-20 w-80 h-80 bg-primary/10 rounded-full blur-[100px] pointer-events-none opacity-40 animate-pulse"></div>
-                                <PremiumAvatar 
-                                    src={admission.profile_photo_url} 
-                                    name={admission.applicant_name} 
-                                    size="lg" 
-                                    className="ring-[10px] ring-white/[0.01] border-4 border-[#0c0d12] shadow-2xl group-hover:scale-105 transition-transform duration-700"
-                                />
-                                <div className="flex-grow text-center md:text-left space-y-4">
-                                    <h2 className="text-4xl md:text-5xl lg:text-6xl font-serif font-black text-white tracking-tighter uppercase leading-none drop-shadow-2xl">{admission.applicant_name}</h2>
-                                    <div className="flex flex-wrap justify-center md:justify-start items-center gap-3 text-[9px] font-black text-white/30 uppercase tracking-[0.3em]">
-                                        <span className="flex items-center gap-2 bg-white/5 px-4 py-1.5 rounded-xl border border-white/5"><ShieldCheckIcon className="w-3.5 h-3.5 text-primary opacity-60"/> Grade {admission.grade} Node</span>
-                                        <span className="flex items-center gap-2 bg-white/5 px-4 py-1.5 rounded-xl border border-white/5"><CalendarIcon className="w-3.5 h-3.5 text-white/20"/> Registered: {new Date(admission.submitted_at).toLocaleDateString()}</span>
-                                    </div>
+                {/* --- MAIN CONTENT --- */}
+                <div className="flex-grow overflow-hidden relative bg-[#050505]">
+                    <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: `radial-gradient(#fff 1px, transparent 1px)`, backgroundSize: '32px 32px' }}></div>
+                    
+                    <div className="absolute inset-0 overflow-y-auto custom-scrollbar p-6 md:p-10">
+                        {finalizeState === 'success' ? (
+                             <div className="h-full flex flex-col items-center justify-center space-y-8 animate-in zoom-in-95 duration-700">
+                                <div className="w-24 h-24 bg-emerald-500/10 rounded-full flex items-center justify-center border border-emerald-500/20 shadow-[0_0_60px_rgba(16,185,129,0.2)]">
+                                    <CheckCircleIcon className="w-10 h-10 text-emerald-500" />
                                 </div>
-                            </div>
+                                <div className="text-center space-y-4">
+                                    <h2 className="text-4xl font-serif font-black text-white tracking-tight">Identity Provisioned</h2>
+                                    <p className="text-white/40 max-w-md mx-auto text-sm leading-relaxed font-medium">
+                                        The admission cycle is complete. A new student record has been created in the Directory.
+                                    </p>
+                                </div>
+                                
+                                <div className="flex flex-col gap-2 w-full max-w-sm">
+                                    {provisionedData?.student_id_number && (
+                                        <div className="bg-[#111] px-6 py-5 rounded-2xl border border-white/10 flex items-center justify-between group cursor-pointer hover:bg-white/5 transition-all">
+                                            <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">Student ID</span>
+                                            <span className="text-xl font-mono font-bold text-emerald-400 tracking-widest">{provisionedData.student_id_number}</span>
+                                        </div>
+                                    )}
+                                </div>
 
-                            {/* Artifact Registry */}
-                            <div className="space-y-8">
-                                <div className="flex flex-col sm:flex-row justify-between items-end gap-4 border-b border-white/5 pb-5">
-                                    <div className="space-y-1.5">
-                                        <h4 className="text-[11px] font-black uppercase text-white/50 tracking-[0.4em]">Artifact Compliance Registry</h4>
-                                        <p className="text-[10px] text-white/15 font-medium italic">Resolving artifact clearance for identity sealing protocol.</p>
+                                <button onClick={() => { onUpdate(); onClose(); }} className="mt-4 px-10 py-4 bg-white text-black text-xs font-black uppercase tracking-[0.2em] rounded-xl hover:bg-white/90 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-1">
+                                    Close Console
+                                </button>
+                             </div>
+                        ) : activeView === 'artifacts' ? (
+                            <div className="max-w-7xl mx-auto space-y-10">
+                                <div className="flex justify-between items-end border-b border-white/5 pb-4">
+                                    <div>
+                                        <h3 className="text-lg font-bold text-white">Verification Vault</h3>
+                                        <p className="text-xs text-white/30 mt-1">Required compliance documents for admission clearance.</p>
                                     </div>
-                                    <button onClick={() => setIsRequestModalOpen(true)} className="px-6 py-2.5 rounded-2xl bg-primary/10 hover:bg-primary/20 text-primary font-black text-[9px] uppercase tracking-widest transition-all flex items-center gap-2 border border-primary/20 shadow-xl active:scale-95">
-                                        <PlusIcon className="w-3.5 h-3.5"/> New Artifact Request
+                                    <button 
+                                        onClick={() => setIsRequestModalOpen(true)} 
+                                        className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 uppercase tracking-widest flex items-center gap-2 transition-colors"
+                                    >
+                                        <PlusIcon className="w-3.5 h-3.5"/> Request Doc
                                     </button>
                                 </div>
 
                                 {fetching ? (
-                                    <div className="py-24 text-center flex flex-col items-center gap-4">
-                                        <Spinner size="lg" className="text-primary"/>
-                                        <p className="text-[11px] font-black uppercase text-white/20 tracking-[0.4em] animate-pulse">Syncing Registry...</p>
-                                    </div>
+                                    <div className="py-20 flex justify-center"><Spinner size="lg" className="text-white/20"/></div>
                                 ) : (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pb-12">
-                                        {requirements.map(req => {
+                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                                        {requirements.map((req) => {
                                             const file = req.admission_documents?.[0];
                                             const isVerified = req.status === 'Verified';
                                             const isRejected = req.status === 'Rejected';
                                             const isScanning = scanningId === req.id;
-                                            
+
                                             return (
                                                 <motion.div 
                                                     layout
                                                     key={req.id} 
-                                                    className={`p-7 rounded-[2.5rem] border transition-all duration-500 bg-[#101218]/40 backdrop-blur-md flex flex-col group ${isVerified ? 'border-emerald-500/20 bg-emerald-500/[0.02]' : isRejected ? 'border-rose-500/20 bg-rose-500/[0.02]' : 'border-white/5 hover:border-white/10 shadow-xl'}`}
+                                                    className={`
+                                                        group relative p-6 rounded-2xl border transition-all duration-300 flex flex-col h-[280px]
+                                                        ${isVerified ? 'bg-[#0A100D] border-emerald-500/20' : isRejected ? 'bg-[#120505] border-red-500/20' : 'bg-[#0E0E10] border-white/5 hover:border-white/10 hover:bg-[#121214]'}
+                                                    `}
                                                 >
                                                     <div className="flex justify-between items-start mb-6">
-                                                        <div className={`p-3.5 rounded-2xl transition-all duration-500 shadow-inner ${isVerified ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-white/20 border border-white/5'}`}>
-                                                            <FileTextIcon className="w-7 h-7"/>
+                                                        <div className={`p-3 rounded-xl ${isVerified ? 'bg-emerald-500/10 text-emerald-500' : 'bg-white/5 text-white/30'}`}>
+                                                            <FileTextIcon className="w-6 h-6"/>
                                                         </div>
-                                                        <span className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-xl border tracking-widest shadow-lg ${isVerified ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : isRejected ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>
-                                                            {isVerified ? 'Verified' : isRejected ? 'Rejected' : req.status}
+                                                        <span className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-widest border ${
+                                                            isVerified ? 'bg-emerald-500/5 text-emerald-500 border-emerald-500/20' : 
+                                                            isRejected ? 'bg-red-500/5 text-red-500 border-red-500/20' : 
+                                                            'bg-white/5 text-white/30 border-white/5'
+                                                        }`}>
+                                                            {req.is_mandatory && !isVerified ? 'Mandatory' : req.status}
                                                         </span>
                                                     </div>
-                                                    <div className="flex-grow mb-6">
-                                                        <h5 className="text-lg font-black text-white uppercase tracking-tight mb-2 group-hover:text-primary transition-colors">{req.document_name}</h5>
-                                                        {isRejected && req.rejection_reason && (
-                                                            <div className="p-3 bg-rose-500/5 border border-rose-500/10 rounded-xl mb-4 text-[10px] text-rose-300/80 italic leading-relaxed">"{req.rejection_reason}"</div>
-                                                        )}
-                                                        <p className="text-[10px] text-white/30 italic flex items-center gap-2">
-                                                            {file ? <div className="w-2 h-2 rounded-full bg-emerald-500/40 shadow-[0_0_8px_rgba(16,185,129,0.5)]" /> : <div className="w-2 h-2 rounded-full bg-white/5" />}
-                                                            {file ? "Synced" : "Awaiting Protocol Sync"}
+
+                                                    <div className="flex-grow">
+                                                        <h4 className="text-sm font-bold text-white mb-1 line-clamp-2 leading-relaxed" title={req.document_name}>{req.document_name}</h4>
+                                                        <p className="text-[10px] text-white/30">
+                                                            {file ? `Uploaded ${new Date(file.uploaded_at).toLocaleDateString()}` : 'Awaiting Upload'}
                                                         </p>
+                                                        {isRejected && <p className="mt-3 text-[10px] text-red-400 leading-relaxed bg-red-500/5 p-2 rounded border border-red-500/10">"{req.rejection_reason}"</p>}
                                                     </div>
-                                                    
-                                                    <div className="flex flex-col gap-2.5">
+
+                                                    <div className="mt-auto pt-4 border-t border-white/5 grid grid-cols-2 gap-2 opacity-100 md:opacity-40 md:group-hover:opacity-100 transition-opacity">
                                                         {file ? (
                                                             <>
-                                                                <div className="flex gap-2.5">
-                                                                    <button 
-                                                                        onClick={() => handleView(file.storage_path)} 
-                                                                        className="flex-1 py-3.5 rounded-2xl bg-white/[0.03] border border-white/5 text-[9px] font-black text-white/50 hover:text-white uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 group/inspect"
-                                                                    >
-                                                                        <EyeIcon className="w-4 h-4 group-hover/inspect:scale-110 transition-transform"/> Inspect
-                                                                    </button>
-                                                                    <button 
-                                                                        onClick={() => handleDownload(file.storage_path, file.file_name)} 
-                                                                        disabled={downloadingPath === file.storage_path} 
-                                                                        className="px-4 py-3.5 rounded-2xl bg-white/[0.03] border border-white/5 text-white/30 hover:text-primary transition-all active:scale-95"
-                                                                    >
-                                                                        {downloadingPath === file.storage_path ? <Spinner size="sm" /> : <DownloadIcon className="w-4 h-4"/>}
-                                                                    </button>
-                                                                </div>
-                                                                
+                                                                <button onClick={() => handleView(file.storage_path)} className="py-2.5 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold text-white transition-colors">View</button>
+                                                                {isVerified ? (
+                                                                     <div className="flex items-center justify-center gap-2 text-[10px] font-bold text-emerald-500 bg-emerald-500/5 rounded-lg border border-emerald-500/10 cursor-default">
+                                                                         <CheckCircleIcon className="w-3 h-3"/> Locked
+                                                                     </div>
+                                                                ) : (
+                                                                     <div className="flex gap-1">
+                                                                        <button onClick={() => handleVerify(req.id, 'Verified')} disabled={!!actioningId} className="flex-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 rounded-lg flex items-center justify-center transition-colors"><CheckCircleIcon className="w-4 h-4"/></button>
+                                                                        <button onClick={() => handleVerify(req.id, 'Rejected')} disabled={!!actioningId} className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-lg flex items-center justify-center transition-colors"><XCircleIcon className="w-4 h-4"/></button>
+                                                                     </div>
+                                                                )}
                                                                 {!isVerified && (
-                                                                    <div className="flex flex-wrap gap-2 pt-2">
-                                                                        <button 
-                                                                            onClick={() => handleAIScan(req.id)} 
-                                                                            disabled={isScanning || actioningId !== null}
-                                                                            className={`flex-1 py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg border ${isScanning ? 'bg-violet-500/20 text-violet-400 border-violet-500/40 animate-pulse' : 'bg-violet-600 text-white hover:bg-violet-500 border-violet-500 shadow-violet-600/20'}`}
-                                                                        >
-                                                                            {isScanning ? <Spinner size="sm" className="text-white"/> : <SparklesIcon className="w-4 h-4"/>} 
-                                                                            {isScanning ? 'Scanning Artifact...' : 'AI Verify'}
-                                                                        </button>
-                                                                        <div className="flex gap-2">
-                                                                            <button onClick={() => handleVerify(req.id, 'Verified')} disabled={actioningId === req.id || isScanning} className="p-3.5 rounded-2xl bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 border border-emerald-500/20 hover:text-white transition-all shadow-lg active:scale-95">{actioningId === req.id ? <Spinner size="sm"/> : <CheckCircleIcon className="w-5 h-5"/>}</button>
-                                                                            <button onClick={() => handleVerify(req.id, 'Rejected')} disabled={actioningId === req.id || isScanning} className="p-3.5 rounded-2xl bg-rose-500/10 text-rose-500 hover:bg-rose-500 border border-rose-500/20 hover:text-white transition-all shadow-lg active:scale-95">{actioningId === req.id ? <Spinner size="sm"/> : <XCircleIcon className="w-5 h-5"/>}</button>
-                                                                        </div>
-                                                                    </div>
+                                                                     <button onClick={() => handleAIScan(req.id)} disabled={isScanning} className="col-span-2 py-2 text-[9px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center justify-center gap-1.5 transition-colors">
+                                                                         {isScanning ? <Spinner size="sm" className="text-current"/> : <><SparklesIcon className="w-3 h-3"/> AI Analysis</>}
+                                                                     </button>
                                                                 )}
                                                             </>
                                                         ) : (
-                                                            <div className="w-full py-5 border-2 border-dashed border-white/5 rounded-3xl text-center text-[10px] font-black text-white/5 uppercase tracking-[0.3em] italic bg-black/20">Handshake Pending</div>
+                                                            <div className="col-span-2 py-2 text-center text-[10px] font-bold text-white/20 italic">
+                                                                Pending Parent Action
+                                                            </div>
                                                         )}
                                                     </div>
                                                 </motion.div>
@@ -441,36 +394,82 @@ const AdmissionDetailsModal: React.FC<AdmissionDetailsModalProps> = ({ admission
                                     </div>
                                 )}
                             </div>
-                        </>
-                    )}
+                        ) : (
+                            <div className="max-w-3xl mx-auto space-y-8 animate-in slide-in-from-right-8 duration-500">
+                                <div className="border-l-2 border-white/10 pl-8 space-y-10 py-4">
+                                    {auditLogs.length === 0 ? <p className="text-white/20 text-sm">No events recorded.</p> : auditLogs.map((log) => (
+                                        <div key={log.id} className="relative group">
+                                            <div className="absolute -left-[39px] top-1 w-4 h-4 rounded-full bg-[#0A0A0A] border-2 border-white/20 group-hover:border-indigo-500 transition-colors shadow-sm"></div>
+                                            <div className="bg-[#111] p-5 rounded-2xl border border-white/5 transition-all hover:border-white/10">
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-lg border ${
+                                                        log.item_type === 'ENROLLMENT_FINALIZED' ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' :
+                                                        log.item_type === 'ARTIFACT_VERIFICATION' ? 'text-blue-400 bg-blue-500/10 border-blue-500/20' :
+                                                        'text-white/40 bg-white/5 border-white/5'
+                                                    }`}>
+                                                        {log.item_type.replace(/_/g, ' ')}
+                                                    </span>
+                                                    <span className="text-[10px] font-mono text-white/30">{new Date(log.created_at).toLocaleString()}</span>
+                                                </div>
+                                                <p className="text-sm text-white/80 leading-relaxed font-medium">
+                                                    {log.item_type === 'ENROLLMENT_FINALIZED' 
+                                                        ? 'Student successfully enrolled and profile created.' 
+                                                        : `Status updated from ${log.previous_status} to ${log.new_status}`}
+                                                </p>
+                                                {log.details && (
+                                                    <div className="mt-3 p-3 bg-black/40 rounded-xl text-xs font-mono text-white/50 border border-white/5">
+                                                        {JSON.stringify(log.details, null, 2)}
+                                                    </div>
+                                                )}
+                                                <div className="mt-3 flex items-center gap-2">
+                                                    <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[8px] font-bold text-white/60">
+                                                        {(log.changed_by_name || 'Sys').charAt(0)}
+                                                    </div>
+                                                    <p className="text-[10px] text-white/30 font-bold uppercase tracking-wide">{log.changed_by_name || 'System'}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
-                {/* Sticky Governance Bar */}
+                {/* --- FOOTER --- */}
                 {finalizeState !== 'success' && (
-                    <footer className="px-10 py-8 bg-[#0a0a0c] border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-6 z-50 relative shadow-[0_-16px_48px_rgba(0,0,0,0.8)] flex-shrink-0">
-                        <div className="flex items-center gap-6">
-                             <div className={`w-4 h-4 rounded-full transition-all duration-1000 ${isCleared ? 'bg-emerald-500 animate-pulse shadow-[0_0_15px_#10b981]' : 'bg-white/10'}`}></div>
-                             <div className="space-y-1">
-                                <span className="text-[10px] font-black uppercase text-white/20 tracking-[0.4em] leading-none">Governance Protocol</span>
-                                <h5 className={`text-lg font-black uppercase tracking-widest transition-colors duration-1000 ${isCleared ? 'text-emerald-500' : 'text-white/30'}`}>
-                                    {isCleared ? 'CLEARED FOR ENROLLMENT' : 'PENDING ARTIFACT CLEARANCE'}
-                                </h5>
-                             </div>
+                    <footer className="px-6 py-4 md:px-10 md:py-6 bg-[#0C0C0C] border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-4 z-50">
+                        <div className="flex items-center gap-4 w-full md:w-auto">
+                            <div className={`p-2 rounded-full ${isCleared ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                {isCleared ? <CheckCircleIcon className="w-5 h-5"/> : <AlertTriangleIcon className="w-5 h-5"/>}
+                            </div>
+                            <div>
+                                <p className={`text-xs font-bold uppercase tracking-wider ${isCleared ? 'text-emerald-500' : 'text-amber-500'}`}>
+                                    {isCleared ? 'Cleared for Enrollment' : 'Pending Clearance'}
+                                </p>
+                                <p className="text-[10px] text-white/30 font-medium mt-0.5">
+                                    {isCleared ? 'All mandatory artifacts verified.' : `${mandatoryPending} mandatory items remaining.`}
+                                </p>
+                            </div>
                         </div>
 
                         <button 
                             onClick={handleFinalize}
                             disabled={!isCleared || finalizeState !== 'idle'}
-                            className={`w-full md:w-auto px-12 h-16 rounded-[2rem] flex items-center justify-center gap-4 font-black text-[12px] uppercase tracking-[0.3em] transition-all duration-700 shadow-2xl ${isCleared ? 'bg-primary text-white hover:bg-primary/90 hover:scale-105 active:scale-95 shadow-primary/30 ring-4 ring-primary/10' : 'bg-white/5 text-white/5 cursor-not-allowed grayscale border border-white/5'}`}
+                            className={`
+                                w-full md:w-auto px-8 py-3.5 rounded-xl font-black text-[11px] uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3
+                                ${isCleared 
+                                    ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-[0_0_30px_rgba(5,150,105,0.3)] hover:shadow-[0_0_40px_rgba(5,150,105,0.5)] transform hover:-translate-y-0.5 active:scale-95' 
+                                    : 'bg-white/5 text-white/20 cursor-not-allowed border border-white/5'}
+                            `}
                         >
-                            {finalizeState === 'processing' ? <Spinner size="md" className="text-white"/> : <GraduationCapIcon className="w-7 h-7" />}
-                            <span>{finalizeState === 'processing' ? 'PROCESSING IDENTITY...' : 'FINALIZE ENROLLMENT'}</span>
+                            {finalizeState === 'processing' ? <Spinner size="sm" className="text-current"/> : <><GraduationCapIcon className="w-4 h-4"/> Finalize Enrollment</>}
                         </button>
                     </footer>
                 )}
-            </div>
+            </motion.div>
 
-            {isRequestModalOpen && (
+             {isRequestModalOpen && (
                 <RequestDocumentsModal 
                     admissionId={admission.id} applicantName={admission.applicant_name}
                     onClose={() => setIsRequestModalOpen(false)}

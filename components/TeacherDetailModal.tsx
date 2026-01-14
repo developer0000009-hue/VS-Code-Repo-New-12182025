@@ -28,7 +28,6 @@ import { TrashIcon } from './icons/TrashIcon';
 import { UsersIcon } from './icons/UsersIcon';
 import { GridIcon } from './icons/GridIcon';
 import { InfoIcon } from './icons/InfoIcon';
-import { ChevronRightIcon } from './icons/ChevronRightIcon';
 import { DownloadIcon } from './icons/DownloadIcon';
 import { ActivityIcon } from './icons/ActivityIcon';
 import { ShieldAlertIcon } from './icons/ShieldAlertIcon';
