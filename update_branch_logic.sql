@@ -1,2 +1,0 @@
-
--- File content reset to fix "Invalid or unexpected token" error caused by binary corruption.
