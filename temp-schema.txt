@@ -1,2 +1,0 @@
--- DEPRECATED: This file has been consolidated into public.schema.txt (v20.0.0).
--- Please use the master schema for all database operations.
