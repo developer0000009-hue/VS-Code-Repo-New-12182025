@@ -1,9 +1,0 @@
-{
-  "requestFramePermissions": [
-    "camera",
-    "microphone",
-    "geolocation"
-  ],
-  "name": "Gurukul v9.099_Current",
-  "description": ""
-}
