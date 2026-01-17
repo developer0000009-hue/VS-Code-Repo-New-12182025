@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { supabase } from '../../services/supabase';
+import { supabase, formatError } from '../../services/supabase';
 import { UserProfile, Course } from '../../types';
 import Spinner from '../common/Spinner';
 import { XIcon } from '../icons/XIcon';
@@ -24,37 +24,6 @@ interface CreateClassWizardProps {
 }
 
 const STEPS = ['Basic Details', 'Faculty', 'Capacity', 'Subjects', 'Review'];
-
-/**
- * Robust error formatting utility to prevent [object Object].
- */
-const formatError = (err: any): string => {
-    if (!err) return "An unknown error occurred.";
-    if (typeof err === 'string') {
-         return (err === "[object Object]" || err === "{}") ? "Protocol error." : err;
-    }
-    
-    const candidates = [
-        err.message,
-        err.error_description,
-        err.details,
-        err.hint,
-        err.error?.message,
-        err.error
-    ];
-
-    for (const val of candidates) {
-        if (typeof val === 'string' && val !== "[object Object]" && val !== "{}") return val;
-        if (typeof val === 'object' && val?.message && typeof val.message === 'string') return val.message;
-    }
-    
-    try {
-        const json = JSON.stringify(err);
-        if (json && json !== '{}' && json !== '[]' && !json.includes("[object Object]")) return json;
-    } catch { }
-
-    return "An unexpected error occurred.";
-};
 
 const CreateClassWizard: React.FC<CreateClassWizardProps> = ({ onClose, onSuccess, branchId }) => {
     const [currentStep, setCurrentStep] = useState(0);
@@ -97,7 +66,6 @@ const CreateClassWizard: React.FC<CreateClassWizardProps> = ({ onClose, onSucces
         try {
             const name = `Grade ${formData.grade} - ${formData.section}`;
             
-            // 1. Create Class
             const { error: classError } = await supabase.rpc('manage_class', {
                 p_id: null,
                 p_name: name,
@@ -111,7 +79,6 @@ const CreateClassWizard: React.FC<CreateClassWizardProps> = ({ onClose, onSucces
 
             if (classError) throw classError;
 
-            // Fetch the newly created class ID to map subjects
             const { data: newClass, error: fetchError } = await supabase
                 .from('school_classes')
                 .select('id')
@@ -124,7 +91,6 @@ const CreateClassWizard: React.FC<CreateClassWizardProps> = ({ onClose, onSucces
 
             if (fetchError || !newClass) throw new Error("Class created but ID retrieval failed.");
 
-            // 2. Map Subjects
             if (formData.subjects.length > 0) {
                 const { error: mapError } = await supabase.rpc('map_class_subjects', {
                     p_class_id: newClass.id,
@@ -333,8 +299,6 @@ const CreateClassWizard: React.FC<CreateClassWizardProps> = ({ onClose, onSucces
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
             <div className="bg-card w-full max-w-2xl rounded-[2rem] shadow-2xl border border-white/10 overflow-hidden flex flex-col max-h-[90vh] ring-1 ring-black/5" onClick={e => e.stopPropagation()}>
-                
-                {/* Header */}
                 <div className="p-6 border-b border-border bg-muted/10 flex justify-between items-center">
                     <div className="flex items-center gap-4">
                         <div className="p-3 bg-primary/10 rounded-xl text-primary shadow-inner ring-1 ring-primary/5">
@@ -347,18 +311,12 @@ const CreateClassWizard: React.FC<CreateClassWizardProps> = ({ onClose, onSucces
                     </div>
                     <button onClick={onClose} className="p-2 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"><XIcon className="w-5 h-5"/></button>
                 </div>
-
-                {/* Stepper */}
                 <div className="px-10 pt-6 pb-2">
                    <Stepper steps={STEPS} currentStep={currentStep} />
                 </div>
-
-                {/* Content */}
                 <div className="p-8 flex-grow overflow-y-auto custom-scrollbar bg-background">
                     {renderStepContent()}
                 </div>
-
-                {/* Footer */}
                 <div className="p-6 border-t border-border bg-muted/10 flex justify-between items-center">
                     <button 
                         onClick={currentStep === 0 ? onClose : handleBack} 

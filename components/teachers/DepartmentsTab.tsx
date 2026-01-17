@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase } from '../../services/supabase';
+import { supabase, formatError } from '../../services/supabase';
 import { SchoolDepartment, TeacherExtended } from '../../types';
 import Spinner from '../common/Spinner';
 import { GridIcon } from '../icons/GridIcon';
@@ -21,13 +20,6 @@ interface DepartmentsTabProps {
     teachers: TeacherExtended[];
     branchId: number | null;
 }
-
-// Helper to safely format errors
-const formatError = (err: any): string => {
-    if (typeof err === 'string') return err;
-    if (err?.message) return err.message;
-    return "An unknown error occurred";
-};
 
 const DepartmentsTab: React.FC<DepartmentsTabProps> = ({ teachers, branchId }) => {
     const [departments, setDepartments] = useState<SchoolDepartment[]>([]);
@@ -75,7 +67,6 @@ const DepartmentsTab: React.FC<DepartmentsTabProps> = ({ teachers, branchId }) =
             hod_id: dept?.hod_id || ''
         });
         
-        // Pre-select teachers currently in this department
         if (dept) {
             const deptTeachers = teachers.filter(t => t.details?.department === dept.name).map(t => t.id);
             setSelectedTeacherIds(new Set(deptTeachers));
@@ -92,7 +83,6 @@ const DepartmentsTab: React.FC<DepartmentsTabProps> = ({ teachers, branchId }) =
         e.preventDefault();
         setIsSaving(true);
         try {
-            // 1. Save Department (Create or Update)
             const { error: deptError } = await supabase.rpc('manage_school_department', {
                 p_id: editingDept?.id || null,
                 p_name: formData.name,
@@ -104,19 +94,12 @@ const DepartmentsTab: React.FC<DepartmentsTabProps> = ({ teachers, branchId }) =
 
             if (deptError) throw deptError;
 
-            // 2. Handle Teacher Assignments
-            // Identify original teachers in this department (if editing)
             const originalTeachers = editingDept 
                 ? teachers.filter(t => t.details?.department === editingDept.name).map(t => t.id) 
                 : [];
             
             const currentSelection = Array.from(selectedTeacherIds);
-            
-            // Teachers to remove (were in dept, but now unchecked)
             const toRemove = originalTeachers.filter(id => !selectedTeacherIds.has(id));
-            
-            // Teachers to add/update (checked)
-            // Note: This includes teachers who were already there (to handle renaming) and new additions
             const toUpdate = currentSelection;
 
             const updates: Promise<any>[] = [];
@@ -124,14 +107,14 @@ const DepartmentsTab: React.FC<DepartmentsTabProps> = ({ teachers, branchId }) =
             if (toRemove.length > 0) {
                 updates.push(supabase.rpc('bulk_update_teacher_profiles', {
                     p_teacher_ids: toRemove,
-                    p_updates: { department: null } // Remove from dept
+                    p_updates: { department: null }
                 }));
             }
 
             if (toUpdate.length > 0) {
                 updates.push(supabase.rpc('bulk_update_teacher_profiles', {
                     p_teacher_ids: toUpdate,
-                    p_updates: { department: formData.name } // Assign new/updated name
+                    p_updates: { department: formData.name }
                 }));
             }
 
@@ -140,8 +123,7 @@ const DepartmentsTab: React.FC<DepartmentsTabProps> = ({ teachers, branchId }) =
             }
             
             setIsModalOpen(false);
-            fetchDepartments(); // Refresh stats
-            // Ideally trigger a refresh of teachers in parent component too, but for now stats update is key
+            fetchDepartments();
         } catch (error: any) {
             alert(`Error: ${formatError(error)}`);
         } finally {
@@ -179,7 +161,6 @@ const DepartmentsTab: React.FC<DepartmentsTabProps> = ({ teachers, branchId }) =
         setSelectedTeacherIds(newSet);
     };
 
-    // Filter teachers for the modal list
     const filteredTeachersForModal = useMemo(() => {
         return teachers.filter(t => 
             t.display_name.toLowerCase().includes(teacherSearch.toLowerCase()) ||
@@ -187,10 +168,9 @@ const DepartmentsTab: React.FC<DepartmentsTabProps> = ({ teachers, branchId }) =
         );
     }, [teachers, teacherSearch]);
 
-    // Mock Workload Data generation based on departments
     const workloadData = departments.slice(0, 5).map(dept => ({
         name: dept.name,
-        load: Math.floor(Math.random() * 40) + 60, // Random load 60-100%
+        load: Math.floor(Math.random() * 40) + 60,
         teachers: dept.teacher_count || 0
     }));
 
@@ -275,7 +255,6 @@ const DepartmentsTab: React.FC<DepartmentsTabProps> = ({ teachers, branchId }) =
                 </div>
             )}
 
-            {/* Workload Distribution Section */}
             {departments.length > 0 && (
                 <div className="bg-card border border-border rounded-2xl p-8 shadow-sm mt-8">
                     <div className="flex justify-between items-center mb-8">

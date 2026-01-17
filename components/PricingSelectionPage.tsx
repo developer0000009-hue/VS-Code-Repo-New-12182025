@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from '../services/supabase';
+import { supabase, formatError } from '../services/supabase';
 import Spinner from './common/Spinner';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { ChevronLeftIcon } from './icons/ChevronLeftIcon';
@@ -52,41 +52,6 @@ const basePlans: BasePlan[] = [
 ];
 
 /**
- * Standardized error formatter to prevent [object Object].
- */
-const formatError = (err: any): string => {
-    if (!err) return "An unknown error occurred.";
-    
-    if (typeof err === 'string') {
-        const isJunk = err === "[object Object]" || err === "{}" || err === "null" || err === "undefined";
-        return isJunk ? "Pricing update protocol failure." : err;
-    }
-    
-    const candidates = [
-        err.message,
-        err.error_description,
-        err.details,
-        err.hint,
-        err.error?.message,
-        err.error
-    ];
-
-    for (const val of candidates) {
-        if (typeof val === 'string' && val !== "[object Object]" && val !== "{}") return val;
-        if (typeof val === 'object' && val?.message && typeof val.message === 'string') return val.message;
-    }
-
-    try {
-        const str = JSON.stringify(err);
-        if (str && str !== '{}' && str !== '[]' && !str.includes("[object Object]")) {
-            return str.length > 200 ? str.substring(0, 197) + "..." : str;
-        }
-    } catch { }
-
-    return "An unexpected system error occurred during pricing selection.";
-};
-
-/**
  * Component for selecting an institutional deployment plan.
  */
 const PricingSelectionPage: React.FC<PricingSelectionPageProps> = ({ onComplete, onBack }) => {
@@ -99,7 +64,6 @@ const PricingSelectionPage: React.FC<PricingSelectionPageProps> = ({ onComplete,
         return () => { isMounted.current = false; };
     }, []);
 
-    // Fix: Completed the missing plan selection logic and persistence call
     const handleSelectPlan = async (planId: string) => {
         setSelectedPlan(planId);
         setLoading(true);
@@ -131,7 +95,7 @@ const PricingSelectionPage: React.FC<PricingSelectionPageProps> = ({ onComplete,
             </div>
 
             {error && (
-                <div className="mb-8 p-4 bg-destructive/10 border border-destructive/20 text-destructive rounded-2xl text-center font-bold animate-pulse">
+                <div className="mb-8 p-4 bg-destructive/10 text-destructive rounded-2xl text-center font-bold animate-pulse border border-destructive/20">
                     {error}
                 </div>
             )}
@@ -205,5 +169,4 @@ const PricingSelectionPage: React.FC<PricingSelectionPageProps> = ({ onComplete,
     );
 };
 
-// Fix: Added default export
 export default PricingSelectionPage;

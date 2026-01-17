@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase, formatError } from './services/supabase';
-import { AdmissionApplication, AdmissionStatus } from './types';
+import { AdmissionApplication } from './types';
 import Spinner from './components/common/Spinner';
 import { XIcon } from './components/icons/XIcon';
 import { CheckCircleIcon } from './components/icons/CheckCircleIcon';
@@ -273,7 +272,7 @@ const AdmissionsTab: React.FC<{ branchId?: number | null }> = ({ branchId }) => 
                          </div>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto w-full custom-scrollbar">
+                    <div className="overflow-x-auto w-full custom-scrollbar h-full">
                         <table className="w-full text-left text-sm min-w-[900px]">
                             <thead className="bg-white/[0.02] text-[10px] font-black uppercase text-white/20 tracking-[0.3em] border-b border-white/5">
                                 <tr>

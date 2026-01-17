@@ -11,7 +11,7 @@ import { UploadIcon } from '../icons/UploadIcon';
 import { FileTextIcon } from '../icons/FileTextIcon';
 import { ClockIcon } from '../icons/ClockIcon';
 import Spinner from '../common/Spinner';
-import { supabase } from '../../services/supabase';
+import { supabase, formatError } from '../../services/supabase';
 import CustomSelect from '../common/CustomSelect';
 import { SparklesIcon } from '../icons/SparklesIcon';
 import { PlusIcon } from '../icons/PlusIcon';
@@ -84,7 +84,7 @@ export const CourseCreationWizard: React.FC<WizardProps> = ({ onClose, onSuccess
              const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
              if (response.text) handleChange('description', response.text);
         } catch (err: any) {
-            alert("AI Generation failed: " + err.message);
+            alert("AI Generation failed: " + formatError(err));
         } finally {
             setAiGenerating(false);
         }
@@ -104,7 +104,7 @@ export const CourseCreationWizard: React.FC<WizardProps> = ({ onClose, onSuccess
                  setCurriculum(mappedUnits);
              }
         } catch (err: any) {
-            alert("AI Syllabus Generation failed: " + err.message);
+            alert("AI Syllabus Generation failed: " + formatError(err));
         } finally {
             setAiSyllabusGenerating(false);
         }
@@ -132,7 +132,7 @@ export const CourseCreationWizard: React.FC<WizardProps> = ({ onClose, onSuccess
             onSuccess();
             onClose();
         } catch (err: any) {
-            alert('Failed to create course: ' + err.message);
+            alert('Failed to create course: ' + formatError(err));
         } finally {
             setLoading(false);
         }
@@ -164,7 +164,7 @@ export const CourseCreationWizard: React.FC<WizardProps> = ({ onClose, onSuccess
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
             <div className="bg-card w-full max-w-2xl rounded-[2rem] shadow-2xl border border-white/10 overflow-hidden flex flex-col max-h-[90vh] ring-1 ring-black/5" onClick={e => e.stopPropagation()}>
-                <div className="p-6 border-b border-border bg-muted/10 flex justify-between items-center"><div className="flex items-center gap-4"><div className="p-3 bg-primary/10 rounded-xl text-primary"><BookIcon className="w-6 h-6"/></div><div><h3 className="text-xl font-extrabold text-foreground">Create Course</h3><p className="text-xs text-muted-foreground font-medium mt-0.5">Step {currentStep + 1}: {STEPS[currentStep]}</p></div></div><button onClick={onClose} className="p-2 hover:bg-muted rounded-full text-muted-foreground"><XIcon className="w-5 h-5"/></button></div>
+                <div className="p-6 border-b border-border bg-muted/10 flex justify-between items-center"><div className="flex items-center gap-4"><div className="p-3 bg-primary/10 rounded-xl text-primary"><BookIcon className="w-6 h-6"/></div><div><h3 className="text-xl font-extrabold text-foreground">Create Course</h3><p className="text-xs text-muted-foreground font-medium mt-0.5">Step {currentStep + 1}: {STEPS[currentStep]}</p></div></div><button onClick={onClose} className="p-2 rounded-full hover:bg-muted text-muted-foreground"><XIcon className="w-5 h-5"/></button></div>
                 <div className="px-10 pt-6 pb-2"><Stepper steps={STEPS} currentStep={currentStep} /></div>
                 <div className="p-8 overflow-y-auto flex-grow bg-background custom-scrollbar">{renderStepContent()}</div>
                 <div className="p-6 border-t border-border bg-muted/10 flex justify-between items-center">

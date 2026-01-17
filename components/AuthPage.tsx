@@ -22,7 +22,7 @@ const AuthPage: React.FC = () => {
 
     const variants = {
         enter: (direction: number) => ({
-            x: direction > 0 ? 30 : -30,
+            x: direction > 0 ? 50 : -50,
             opacity: 0,
         }),
         center: {
@@ -32,7 +32,7 @@ const AuthPage: React.FC = () => {
         },
         exit: (direction: number) => ({
             zIndex: 0,
-            x: direction < 0 ? 30 : -30,
+            x: direction < 0 ? 50 : -50,
             opacity: 0,
         })
     };
@@ -75,24 +75,24 @@ const AuthPage: React.FC = () => {
                 <div className="absolute top-6 right-6 z-30 flex items-center gap-4">
                     <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-md">
                         <ShieldCheckIcon className="w-3.5 h-3.5 text-emerald-500" />
-                        <span className="text-[9px] font-black text-white/40 uppercase tracking-widest">Type-Safe Identity Node</span>
+                        <span className="text-[9px] font-black text-white/40 uppercase tracking-widest">Secured Handshake</span>
                     </div>
                     <ThemeSwitcher />
                 </div>
 
-                <div className="flex-grow flex items-center justify-center p-6 sm:p-12 relative">
+                <div className="flex-grow flex items-center justify-center p-4 sm:p-12 relative">
                     <div className="w-full max-w-[440px] z-10 relative">
                         <AnimatePresence mode="wait">
                             {signupSuccess ? (
                                 <motion.div 
                                     initial={{ opacity: 0, scale: 0.95 }}
                                     animate={{ opacity: 1, scale: 1 }}
-                                    className="bg-[#0d0f14]/80 backdrop-blur-3xl p-10 md:p-14 rounded-[3rem] border border-white/10 text-center shadow-2xl relative overflow-hidden"
+                                    className="bg-[#0d0f14]/80 backdrop-blur-3xl p-8 sm:p-14 rounded-[3rem] border border-white/10 text-center shadow-2xl relative overflow-hidden"
                                 >
                                     <div className="w-20 h-20 bg-emerald-500/10 text-emerald-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-inner border border-emerald-500/20">
                                         <CheckCircleIcon animate className="w-10 h-10" />
                                     </div>
-                                    <h3 className="text-3xl font-serif font-black text-white mb-4 tracking-tighter uppercase">Protocol Initialized.</h3>
+                                    <h3 className="text-3xl font-serif font-black text-white mb-4 tracking-tighter uppercase leading-none">Protocol Initialized.</h3>
                                     <p className="text-white/50 mb-10 text-sm leading-relaxed font-serif italic">
                                         Your institutional node has been provisioned. A verification link has been dispatched to <strong className="text-white">{userEmail}</strong>.
                                     </p>
@@ -100,7 +100,7 @@ const AuthPage: React.FC = () => {
                                         onClick={() => { setSignupSuccess(false); setView('login'); }}
                                         className="w-full h-14 flex items-center justify-center py-3.5 px-8 rounded-2xl text-[10px] font-black text-white bg-primary hover:bg-primary/90 transition-all transform active:scale-95 uppercase tracking-[0.4em] shadow-xl shadow-primary/20"
                                     >
-                                        Proceed to Dashboard
+                                        Proceed to Login
                                     </button>
                                 </motion.div>
                             ) : (
@@ -112,6 +112,7 @@ const AuthPage: React.FC = () => {
                                     animate="center"
                                     exit="exit"
                                     transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+                                    className="w-full"
                                 >
                                     {view === 'login' && (
                                         <LoginForm 

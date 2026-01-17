@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Role, BuiltInRoles, UserProfile } from '../types';
-import { supabase } from '../services/supabase';
+import { supabase, formatError } from '../services/supabase';
 import Spinner from './common/Spinner';
 import SchoolAdminForm from './profile_forms/SchoolAdminForm';
 import ParentForm from './profile_forms/ParentForm';
@@ -13,12 +13,6 @@ import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { XIcon } from './icons/XIcon';
 import { ChevronLeftIcon } from './icons/ChevronLeftIcon';
 import { motion, AnimatePresence } from 'framer-motion';
-
-const formatError = (err: any): string => {
-    if (!err) return "Synchronization failed.";
-    if (typeof err === 'string') return err;
-    return err.message || "Institutional system error.";
-};
 
 interface ProfileCreationPageProps {
     profile: UserProfile;
@@ -159,7 +153,6 @@ export const ProfileCreationPage: React.FC<ProfileCreationPageProps> = ({ profil
 
     return (
         <div className="w-full max-w-2xl mx-auto space-y-8 pb-32 font-sans">
-            {/* Main Header Identity Card */}
             <div 
                 className="relative bg-slate-900/60 backdrop-blur-xl rounded-3xl overflow-hidden border border-white/5 shadow-2xl transition-all duration-500 animate-in fade-in slide-in-from-bottom-4"
             >

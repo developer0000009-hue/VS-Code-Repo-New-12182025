@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, formatError } from '../services/supabase';
 import { EnquiryService } from '../services/enquiry';
@@ -29,7 +28,6 @@ const LocalSendIcon = (props: React.SVGProps<SVGSVGElement>) => (
     </svg>
 );
 
-// FIX: Legacy status keys were replaced with the unified `ENQUIRY_*` format to align with the `EnquiryStatus` type definition.
 const STATUS_CONFIG: Record<string, { icon: React.ReactNode, label: string, color: string }> = {
     'ENQUIRY_ACTIVE': { icon: <div className="w-2 h-2 rounded-full bg-blue-500/80 shadow-sm"/>, label: 'Active', color: 'text-blue-400' },
     'ENQUIRY_VERIFIED': { icon: <ShieldCheckIcon className="w-4 h-4 text-teal-500/80"/>, label: 'Verified', color: 'text-teal-500' },
@@ -39,7 +37,6 @@ const STATUS_CONFIG: Record<string, { icon: React.ReactNode, label: string, colo
     'ENQUIRY_CONVERTED': { icon: <CheckCircleIcon className="w-4 h-4 text-emerald-500/80"/>, label: 'Converted', color: 'text-emerald-500' },
 };
 
-// FIX: Legacy status values were replaced with the unified `ENQUIRY_*` format to align with the `EnquiryStatus` type definition, resolving multiple compilation errors.
 const ORDERED_STATUSES: EnquiryStatus[] = ['ENQUIRY_ACTIVE', 'ENQUIRY_VERIFIED', 'ENQUIRY_IN_REVIEW', 'ENQUIRY_CONTACTED', 'ENQUIRY_REJECTED', 'ENQUIRY_CONVERTED'];
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -182,11 +179,8 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
                 ? `${enquiry.notes || ''}${enquiry.notes ? '\n' : ''}${customNote}`
                 : enquiry.notes || null;
 
-            // USE SERVICE PROTOCOL (RPC) TO BYPASS RLS AND ENSURE ATOMICITY
             await EnquiryService.updateStatus(idString, targetStatus, newNotes);
             
-            // The service call only updates the status and notes. It doesn't log to timeline.
-            // So we need to do it here.
             if (UUID_REGEX.test(idString)) {
                 await supabase.rpc('send_enquiry_message_v3', { 
                     p_enquiry_id: idString, 
@@ -194,27 +188,25 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
                 });
             }
 
-            onUpdate(); // Re-fetches data in parent
-            onClose(); // Closes modal
+            onUpdate();
+            onClose();
         } catch (err: any) {
-            alert(`Save failed: ${err.message || formatError(err)}`);
+            alert(`Save failed: ${formatError(err)}`);
         } finally {
             if (isMounted.current) setLoading(prev => ({ ...prev, saving: false }));
         }
     };
 
     const handleFinalizeSave = async () => {
-        // FIX: The component was using 'CONVERTED' which is not a valid `EnquiryStatus`. Changed to 'ENQUIRY_CONVERTED'.
         if (pendingStatus === 'ENQUIRY_CONVERTED') {
             handleConvert();
             return;
         }
 
         let customNote = "";
-        // FIX: The component was using 'REJECTED' which is not a valid `EnquiryStatus`. Changed to 'ENQUIRY_REJECTED'.
         if (pendingStatus === 'ENQUIRY_REJECTED') {
             const reason = prompt("Specify the reason for record rejection:");
-            if (!reason) return; // User cancelled
+            if (!reason) return; 
             customNote = `Rejected: ${reason}`;
         }
 
@@ -270,7 +262,6 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl flex items-center justify-center z-[150] p-0 sm:p-4 md:p-12 overflow-hidden font-sans" onClick={onClose}>
             <div className="bg-[#08090a] rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-[1400px] h-full sm:h-[90vh] flex flex-col border border-white/5 overflow-hidden ring-1 ring-white/10 animate-in fade-in zoom-in-98 duration-300" onClick={e => e.stopPropagation()}>
                 
-                {/* Header Area */}
                 <header className="px-8 py-6 border-b border-white/[0.04] bg-[#0c0d12]/80 flex justify-between items-center z-40 flex-shrink-0">
                     <div className="flex items-center gap-6">
                         <div className="w-14 h-14 bg-white/5 rounded-xl text-white/90 flex items-center justify-center border border-white/10 shadow-sm">
@@ -305,7 +296,6 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
                 </header>
 
                 <div className="flex-grow overflow-hidden flex flex-col lg:flex-row relative">
-                    {/* Message Area */}
                     <div className="flex-1 flex flex-col bg-transparent relative z-10 border-r border-white/[0.03]">
                         <div className="flex-grow overflow-y-auto p-8 md:p-12 space-y-6 custom-scrollbar flex flex-col scroll-smooth bg-[#08090a]/40">
                             {loading.timeline && timeline.length === 0 ? (
@@ -343,7 +333,6 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
                             )}
                         </div>
                         
-                        {/* Input Composer */}
                         <div className="p-8 border-t border-white/[0.04] bg-[#0c0d12]/90 backdrop-blur-md">
                             <form onSubmit={handleSendMessage} className="flex gap-4 items-center max-w-4xl mx-auto">
                                 <div className="flex-grow relative">
@@ -371,10 +360,7 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
                         </div>
                     </div>
 
-                    {/* Right Control Panel */}
                     <div className="w-full lg:w-[400px] bg-[#090a0f] p-8 space-y-10 overflow-y-auto custom-scrollbar relative z-20">
-                        
-                        {/* Status Focus Card */}
                         <section className="space-y-6">
                             <h3 className="text-[13px] font-semibold uppercase text-white/30 tracking-wider">Lifecycle Status</h3>
                             
@@ -394,8 +380,7 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
                                     <button 
                                         key={s} 
                                         onClick={() => setPendingStatus(s)}
-                                        // FIX: The component was using 'CONVERTED' which is not a valid `EnquiryStatus`. Changed to 'ENQUIRY_CONVERTED'.
-                                        disabled={loading.saving || enquiry.status === 'ENQUIRY_CONVERTED'}
+                                        disabled={loading.saving || enquiry.status === 'ENQUIRY_CONVERTED' || enquiry.status === 'ENQUIRY_REJECTED'}
                                         className={`w-full flex items-center justify-between px-5 py-4 rounded-xl border transition-all duration-200 group/btn ${pendingStatus === s ? 'bg-primary/10 border-primary/40 text-white' : 'bg-white/[0.01] border-white/[0.03] text-white/20 hover:border-white/10'}`}
                                     >
                                         <div className="flex items-center gap-4">
@@ -419,7 +404,6 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
                             </button>
                         </section>
 
-                        {/* Identity Intel Section */}
                         <section className="space-y-6">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-[13px] font-semibold uppercase text-white/30 tracking-wider">Identity Intel</h3>
@@ -492,13 +476,12 @@ const EnquiryDetailsModal: React.FC<EnquiryDetailsModalProps> = ({ enquiry, onCl
                             </div>
                         </section>
 
-                        {/* FIX: The component was using 'CONVERTED' which is not a valid `EnquiryStatus`. Changed to 'ENQUIRY_CONVERTED'. */}
                         {enquiry.status !== 'ENQUIRY_CONVERTED' && (
                             <section className="pt-6 border-t border-white/[0.04]">
                                 <button 
                                     onClick={handleConvert}
-                                    disabled={loading.converting || enquiry.status === 'ENQUIRY_ACTIVE'}
-                                    className={`w-full h-14 rounded-xl flex items-center justify-center gap-3 font-bold text-xs uppercase tracking-widest transition-all ${enquiry.status !== 'ENQUIRY_ACTIVE' ? 'bg-[#10b981]/90 text-white hover:bg-[#10b981] shadow-lg shadow-emerald-900/20' : 'bg-white/5 text-white/10 cursor-not-allowed border border-white/5 grayscale'}`}
+                                    disabled={loading.converting || ['ENQUIRY_ACTIVE', 'ENQUIRY_REJECTED', 'ENQUIRY_CONVERTED'].includes(enquiry.status)}
+                                    className={`w-full h-14 rounded-xl flex items-center justify-center gap-3 font-bold text-xs uppercase tracking-widest transition-all ${!['ENQUIRY_ACTIVE', 'ENQUIRY_REJECTED', 'ENQUIRY_CONVERTED'].includes(enquiry.status) ? 'bg-[#10b981]/90 text-white hover:bg-[#10b981] shadow-lg shadow-emerald-900/20' : 'bg-white/5 text-white/10 cursor-not-allowed border border-white/5 grayscale'}`}
                                 >
                                     <GraduationCapIcon className="w-5 h-5 opacity-60" />
                                     <span>Promote to Admission</span>

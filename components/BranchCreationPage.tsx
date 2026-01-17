@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { supabase } from '../services/supabase';
+import { supabase, formatError } from '../services/supabase';
 import { SchoolBranch, UserProfile, SchoolAdminProfileData, BuiltInRoles } from '../types';
 import Spinner from './common/Spinner';
 import { SchoolIcon } from './icons/SchoolIcon';
@@ -23,14 +23,6 @@ interface BranchCreationPageProps {
     profile?: UserProfile;
     onBack?: () => void;
 }
-
-const formatError = (err: any): string => {
-    if (!err) return "An unknown error occurred.";
-    if (typeof err === 'string') return err;
-    const message = err.message || err.error_description || err.details || err.hint;
-    if (message && typeof message === 'string') return message;
-    return "An unexpected system error occurred.";
-};
 
 const FloatingLabelInput: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label: string, icon?: React.ReactNode, action?: React.ReactNode }> = ({ label, icon, action, className, ...props }) => (
     <div className="relative group">

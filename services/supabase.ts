@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://jforwngnlqyvlpqzuqpz.supabase.co';
@@ -19,62 +18,77 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 /**
  * Institutional Error Protocol
  * Translates low-level SQL/API errors into actionable user guidance.
- * Strengthened to strictly prevent [object Object] fallbacks.
+ * Prevent [object Object] fallbacks through strict type checking and recursive probing.
  */
 export const formatError = (err: any): string => {
     if (!err) return "Synchronization error.";
     
-    // 1. Handle String Inputs directly
+    // 1. Direct string check for generic object stringifications
     if (typeof err === 'string') {
-        // Check for generic object strings
-        if (err === "[object Object]" || err === "{}") {
-            return "Institutional protocol failure (Empty Error Context).";
+        const trimmed = err.trim();
+        if (trimmed === "[object Object]" || trimmed === "{}" || !trimmed) {
+            return "An unexpected system error occurred (Protocol Exception).";
         }
-        return err;
+        return trimmed;
     }
 
-    // 2. Handle Error Objects (Standard JS Error)
-    if (err instanceof Error) {
-        return err.message;
-    }
-
-    // 3. Primary Key Extraction (Standard Supabase/PostgREST)
-    // Supabase errors often look like { message: "...", code: "...", details: "...", hint: "..." }
-    let candidate = err.message || err.error_description || err.details?.message || err.details || err.hint;
-    
-    // 4. Nested Auth/Error Object Probing
-    if (!candidate && err.error) {
-        if (typeof err.error === 'string') candidate = err.error;
-        else if (typeof err.error === 'object') {
-            candidate = err.error.message || err.error.description || err.error.details;
+    // 2. Standard Error object check
+    if (err instanceof Error && err.message) {
+        const msg = String(err.message).trim();
+        if (msg !== "[object Object]" && msg !== "{}") {
+            return msg;
         }
     }
 
-    // 5. Final Candidate Validation
-    if (candidate) {
-        if (typeof candidate === 'string') {
-            if (candidate === "[object Object]" || candidate === "{}") {
-                 return "Identity synchronization exception.";
+    // 3. Deep probe for priority fields in custom objects
+    const findMessage = (obj: any, depth = 0): string | null => {
+        if (!obj || depth > 5) return null;
+        
+        if (typeof obj === 'string') {
+            const trimmed = obj.trim();
+            if (trimmed === "[object Object]" || trimmed === "{}" || !trimmed) return null;
+            return trimmed;
+        }
+
+        // Check for specific known conflict messages
+        if (obj.message && typeof obj.message === 'string' && obj.message.includes('choose the best candidate function')) {
+            return "Structural Registry Conflict: Multiple versions of the database function exist. Please apply the latest SQL migrations.";
+        }
+        
+        // Priority fields for common error structures (Supabase/Postgres)
+        const priorityFields = ['message', 'error_description', 'error', 'details', 'hint', 'msg', 'code'];
+        
+        for (const field of priorityFields) {
+            const val = obj[field];
+            
+            // If the priority field is a string, return it if it's not a generic object string
+            if (typeof val === 'string') {
+                const trimmed = val.trim();
+                if (trimmed && trimmed !== "[object Object]" && trimmed !== "{}") {
+                    return trimmed;
+                }
             }
-            return candidate;
+            
+            // If the priority field is itself an object, probe it recursively
+            if (typeof val === 'object' && val !== null) {
+                const nested = findMessage(val, depth + 1);
+                if (nested) return nested;
+            }
         }
-        // If candidate is not a string, stringify it
-        try {
-            return JSON.stringify(candidate);
-        } catch {
-            return "Invalid error response format.";
-        }
-    }
+        return null;
+    };
 
-    // 6. Safe JSON Stringification Fallback
+    const message = findMessage(err);
+    if (message) return message;
+
+    // 4. Last-ditch JSON stringification attempt
     try {
         const str = JSON.stringify(err);
         if (str && str !== '{}' && str !== '[]' && !str.includes("[object Object]")) {
-            // Return a snippet of the JSON if it's not too long, or a generic message
             return `System Error: ${str.substring(0, 150)}${str.length > 150 ? '...' : ''}`;
         }
     } catch { }
 
-    // 7. Last Resort
-    return "An unexpected system error occurred.";
+    // Hard fallback to a human-readable generic message
+    return "An unexpected system error occurred (Identity Handshake Protocol Exception).";
 };

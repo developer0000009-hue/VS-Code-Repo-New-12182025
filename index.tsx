@@ -2,8 +2,8 @@ import React, { Component, ErrorInfo, ReactNode } from 'react';
 import ReactDOMClient from 'react-dom/client';
 import { HashRouter } from 'react-router-dom';
 import App from './App';
-import { ThemeProvider } from './contexts/ThemeContext.tsx';
-import { RoleProvider } from './contexts/RoleContext.tsx';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { RoleProvider } from './contexts/RoleContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

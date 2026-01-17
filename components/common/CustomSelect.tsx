@@ -22,6 +22,7 @@ interface CustomSelectProps {
     className?: string;
     searchable?: boolean;
     isSynced?: boolean;
+    emptyState?: React.ReactNode;
 }
 
 const CustomSelect: React.FC<CustomSelectProps> = ({ 
@@ -34,7 +35,8 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
     disabled, 
     className,
     searchable = false,
-    isSynced = false
+    isSynced = false,
+    emptyState
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -84,33 +86,32 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
                 </label>
             )}
             
-            <div className="relative h-[48px]">
+            <div className="relative h-[56px]">
                 <button
                     type="button"
                     onClick={() => !disabled && setIsOpen(!isOpen)}
                     disabled={disabled}
                     className={`
-                        peer w-full h-full text-left rounded-xl border transition-all duration-300 ease-in-out outline-none select-none
-                        flex items-center px-5 pt-3 pb-1
+                        peer w-full h-full text-left rounded-xl transition-all duration-300 ease-in-out outline-none select-none
+                        flex items-center px-5
                         ${icon ? 'pl-12' : 'pl-5'}
-                        ${isSynced ? 'border-primary/40 bg-primary/5 shadow-[0_0_15px_rgba(var(--primary),0.05)]' : 'border-white/10 bg-black/30'}
                         ${isOpen 
-                            ? 'border-primary/40 ring-4 ring-primary/5 shadow-xl' 
-                            : 'hover:border-white/20'
+                            ? 'bg-black/40 border border-primary/40 ring-4 ring-primary/5 shadow-xl' 
+                            : 'bg-transparent border border-transparent hover:border-white/10'
                         }
                     `}
                 >
                     <span className="flex items-center h-full min-w-0 flex-grow">
                         {selectedOption ? (
-                            <span className="text-white font-medium text-[15px] tracking-tight truncate">{selectedOption.label}</span>
+                            <span className="text-white font-bold text-[15px] tracking-tight truncate">{selectedOption.label}</span>
                         ) : (
-                            <span className="text-white/20 font-normal text-[15px] truncate">{placeholder}</span>
+                            <span className="text-white/40 font-medium text-[15px] truncate italic">{placeholder}</span>
                         )}
                     </span>
                 </button>
                 
                 {icon && (
-                    <div className={`absolute left-4 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none transition-all duration-300 ${isOpen ? 'text-primary' : isSynced ? 'text-primary' : 'text-white/10'}`}>
+                    <div className={`absolute left-4 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none transition-all duration-300 ${isOpen ? 'text-primary' : 'text-white/20'}`}>
                         {icon}
                     </div>
                 )}
@@ -127,25 +128,25 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.98, y: 4 }}
                         transition={{ duration: 0.15, ease: "easeOut" }}
-                        className="absolute z-[110] mt-2 w-full bg-[#1e293b] rounded-2xl shadow-[0_30px_80px_-15px_rgba(0,0,0,0.8)] border border-white/10 overflow-hidden origin-top backdrop-blur-2xl ring-1 ring-white/10"
+                        className="absolute z-[110] mt-2 w-full bg-[#0a0a0c] rounded-[1.8rem] shadow-[0_30px_80px_-15px_rgba(0,0,0,0.9)] border border-white/10 overflow-hidden origin-top backdrop-blur-2xl ring-1 ring-white/10"
                     >
                         {searchable && (
-                            <div className="p-3 border-b border-white/[0.05] bg-white/[0.01]">
-                                <div className="relative">
-                                    <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                            <div className="p-4 border-b border-white/[0.05] bg-white/[0.01]">
+                                <div className="relative group/search">
+                                    <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within/search:text-primary transition-colors" />
                                     <input
                                         ref={searchInputRef}
                                         type="text"
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                        placeholder="Search..."
-                                        className="w-full pl-10 pr-3 py-2 text-xs rounded-lg bg-black/40 border border-white/5 focus:border-primary/50 outline-none text-white placeholder:text-white/10 font-medium"
+                                        placeholder="Filter records..."
+                                        className="w-full pl-11 pr-4 py-3 text-xs rounded-xl bg-black/60 border border-white/5 focus:border-primary/50 outline-none text-white placeholder:text-white/10 font-bold uppercase tracking-widest"
                                     />
                                 </div>
                             </div>
                         )}
 
-                        <div className="max-h-60 overflow-auto p-1.5 custom-scrollbar">
+                        <div className="max-h-60 overflow-auto p-2 custom-scrollbar">
                             {filteredOptions.length > 0 ? (
                                 filteredOptions.map((option) => (
                                     <button
@@ -156,23 +157,30 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
                                             handleSelect(option.value);
                                         }}
                                         className={`
-                                            w-full flex items-center gap-3 px-4 py-2.5 text-sm rounded-xl transition-all duration-200 group select-none cursor-pointer mb-1 last:mb-0
+                                            w-full flex items-center gap-3 px-5 py-4 text-xs font-bold uppercase tracking-widest rounded-xl transition-all duration-200 group select-none cursor-pointer mb-1 last:mb-0 border border-transparent
                                             ${value === option.value 
-                                                ? 'bg-primary/10 text-primary shadow-sm' 
-                                                : 'text-white/60 hover:bg-white/[0.05] hover:text-white'
+                                                ? 'bg-primary/20 text-primary border-primary/20 shadow-lg' 
+                                                : 'text-white/40 hover:bg-white/[0.05] hover:text-white hover:border-white/5'
                                             }
                                         `}
                                     >
-                                        <span className={`flex-grow text-left truncate font-medium ${value === option.value ? 'font-semibold' : ''}`}>{option.label}</span>
+                                        <span className="flex-grow text-left truncate">{option.label}</span>
                                         {value === option.value && (
                                             <CheckCircleIcon className="w-4 h-4 text-primary animate-in zoom-in-50" />
                                         )}
                                     </button>
                                 ))
                             ) : (
-                                <div className="px-6 py-8 text-xs text-white/20 text-center italic select-none font-medium uppercase tracking-widest">
-                                    No records found
-                                </div>
+                                emptyState || (
+                                    <div className="px-6 py-12 text-center space-y-3">
+                                        <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mx-auto border border-white/5">
+                                            <SearchIcon className="w-6 h-6 text-white/10" />
+                                        </div>
+                                        <p className="text-[10px] text-white/20 text-center italic select-none font-black uppercase tracking-[0.2em]">
+                                            No Matching Registry Found
+                                        </p>
+                                    </div>
+                                )
                             )}
                         </div>
                     </motion.div>

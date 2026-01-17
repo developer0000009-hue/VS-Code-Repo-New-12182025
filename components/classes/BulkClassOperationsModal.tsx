@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../services/supabase';
-import { SchoolBranch, BulkImportResult } from '../../types';
+import { supabase, formatError } from '../../services/supabase';
+import { SchoolClass, SchoolBranch, BulkImportResult } from '../../types';
 import Spinner from '../common/Spinner';
 import { XIcon } from '../icons/XIcon';
 import { CheckCircleIcon } from '../icons/CheckCircleIcon';
@@ -23,70 +22,22 @@ interface BulkClassOperationsModalProps {
     academicYear: string;
 }
 
-/**
- * Robust CSV parser that handles quoted strings, escaped characters, and whitespace.
- */
 const parseCSVLine = (line: string): string[] => {
-    // Regex to split by comma but ignore commas inside double quotes
     const pattern = /(".*?"|[^",\s]+)(?=\s*,|\s*$)/g;
     const matches = line.match(pattern) || [];
     return matches.map(m => m.replace(/^"|"$/g, '').trim());
 };
 
-/**
- * Normalizes class names to match the system standard "Grade X - Y"
- * e.g. "Grade 1-A" -> "Grade 1 - A"
- */
 const normalizeClassName = (name: string): string => {
     if (!name) return '';
     let processed = name.trim();
-    // Ensure "Grade X - Y" format (consistent spacing around hyphen)
     processed = processed.replace(/Grade\s*(\d+)\s*-\s*([A-Z0-9]+)/i, (match, g, s) => {
         return `Grade ${g} - ${s.toUpperCase()}`;
     });
-    // Fallback for simple "1-A" format
     processed = processed.replace(/^(\d+)\s*-\s*([A-Z0-9]+)$/i, (match, g, s) => {
         return `Grade ${g} - ${s.toUpperCase()}`;
     });
     return processed;
-};
-
-/**
- * Enhanced error formatter to provide specific debugging context for bulk failures and prevent [object Object].
- */
-const formatError = (err: any): string => {
-    if (!err) return "An unknown error occurred.";
-    if (typeof err === 'string') {
-         return (err === "[object Object]" || err === "{}") ? "Mapping protocol failed." : err;
-    }
-    
-    // Handle specific object structures returned from DB functions
-    if (typeof err === 'object') {
-        let context = "";
-        if (err.row) context += `Row ${err.row}: `;
-        if (err.row_index) context += `Row ${err.row_index}: `;
-        if (err.subject_code) context += `Subject [${err.subject_code}] `;
-        if (err.class_name) context += `Class [${err.class_name}] `;
-        if (err.teacher_email) context += `Teacher [${err.teacher_email}] `;
-        if (err.student_email) context += `Student [${err.student_email}] `;
-        
-        const message = err.message || err.error_description || err.details?.message || err.details || err.hint;
-        if (message && typeof message === 'string' && !message.includes("[object Object]")) {
-            return context ? `${context}${message}` : message;
-        }
-        
-        // If message is an object, try to unpack it
-        if (typeof message === 'object' && message?.message && typeof message.message === 'string') {
-             return context ? `${context}${message.message}` : message.message;
-        }
-    }
-
-    try {
-        const json = JSON.stringify(err);
-        if (json && json !== '{}' && json !== '[]' && !json.includes("[object Object]")) return json;
-    } catch { }
-    
-    return "The system could not find the specified record or mapping.";
 };
 
 const BulkClassOperationsModal: React.FC<BulkClassOperationsModalProps> = ({ onClose, onSuccess, branchId, academicYear }) => {
@@ -108,7 +59,6 @@ const BulkClassOperationsModal: React.FC<BulkClassOperationsModalProps> = ({ onC
         }
     }, [action, branchId]);
 
-    // --- Templates ---
     const getTemplate = (type: BulkClassActionType) => {
         switch (type) {
             case 'create_classes':
@@ -153,7 +103,6 @@ const BulkClassOperationsModal: React.FC<BulkClassOperationsModalProps> = ({ onC
                         return;
                     }
 
-                    // Map rows to JSON based on action with strict whitespace trimming and naming normalization
                     const data = lines.slice(1).map((line) => {
                         const cols = parseCSVLine(line);
                         if (cols.length === 0 || (cols.length === 1 && !cols[0])) return null;
@@ -222,7 +171,6 @@ const BulkClassOperationsModal: React.FC<BulkClassOperationsModalProps> = ({ onC
             
             setProgress(100);
             
-            // Map consistent response keys from bulk RPCs, guard against null data
             const success = data?.success_count ?? (data?.success || 0);
             const failed = data?.failure_count ?? (data?.failed || 0);
             const rawErrors = data?.errors || [];
@@ -395,7 +343,7 @@ const BulkClassOperationsModal: React.FC<BulkClassOperationsModalProps> = ({ onC
                             </p>
                         </div>
                     </div>
-                    {step !== 'processing' && <button onClick={onClose} className="p-2 rounded-full hover:bg-muted text-muted-foreground transition-colors"><XIcon className="w-6 h-6"/></button>}
+                    {step !== 'processing' && <button onClick={onClose} className="p-2 rounded-full hover:bg-muted text-muted-foreground transition-colors"><XIcon className="w-5 h-5"/></button>}
                 </div>
                 <div className="p-8 overflow-y-auto custom-scrollbar flex-grow bg-background">
                     {step === 'select' && renderSelectStep()}

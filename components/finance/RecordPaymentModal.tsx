@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { supabase, formatError } from '../../services/supabase';
 import Spinner from '../common/Spinner';
@@ -7,7 +6,6 @@ import { DollarSignIcon } from '../icons/DollarSignIcon';
 import { CheckCircleIcon } from '../icons/CheckCircleIcon';
 import { ReceiptIcon } from '../icons/ReceiptIcon';
 import { ShieldCheckIcon } from '../icons/ShieldCheckIcon';
-// FIX: Added missing AlertTriangleIcon import to resolve "Cannot find name" error.
 import { AlertTriangleIcon } from '../icons/AlertTriangleIcon';
 
 interface RecordPaymentModalProps {

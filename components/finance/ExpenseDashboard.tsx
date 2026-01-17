@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase, formatError } from '../../services/supabase';
-import { ExpenseDashboardData, Expense } from '../../types';
+import { ExpenseDashboardData, Expense, SchoolBranch } from '../../types';
 import { PlusIcon } from '../icons/PlusIcon';
 import { DownloadIcon } from '../icons/DownloadIcon';
 import { BriefcaseIcon } from '../icons/BriefcaseIcon';
@@ -13,7 +12,6 @@ import { FilterIcon } from '../icons/FilterIcon';
 import { SearchIcon } from '../icons/SearchIcon';
 import { BuildingIcon } from '../icons/BuildingIcon';
 import { TrendingUpIcon } from '../icons/TrendingUpIcon';
-// FIX: Added missing icon imports to resolve "Cannot find name" errors.
 import { DollarSignIcon } from '../icons/DollarSignIcon';
 import { ClockIcon } from '../icons/ClockIcon';
 
@@ -24,9 +22,11 @@ const EXPENSE_CATEGORIES = [
 interface ExpenseDashboardProps {
     data: ExpenseDashboardData;
     onRefresh: () => void;
+    branchId: number | null;
+    branches: SchoolBranch[];
 }
 
-const ExpenseDashboard: React.FC<ExpenseDashboardProps> = ({ onRefresh }) => {
+const ExpenseDashboard: React.FC<ExpenseDashboardProps> = ({ onRefresh, branchId, branches }) => {
     const [expenses, setExpenses] = useState<Expense[]>([]);
     const [loading, setLoading] = useState(true);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -38,10 +38,14 @@ const ExpenseDashboard: React.FC<ExpenseDashboardProps> = ({ onRefresh }) => {
     const fetchExpenses = useCallback(async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('school_expenses')
-                .select('*')
-                .order('expense_date', { ascending: false });
+            let query = supabase.from('school_expenses').select('*');
+            
+            // Contextual Scoping
+            if (branchId !== null) {
+                query = query.eq('branch_id', branchId);
+            }
+
+            const { data, error } = await query.order('expense_date', { ascending: false });
             if (error) throw error;
             setExpenses(data || []);
         } catch (err) {
@@ -49,7 +53,7 @@ const ExpenseDashboard: React.FC<ExpenseDashboardProps> = ({ onRefresh }) => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [branchId]);
 
     useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
 
@@ -87,7 +91,7 @@ const ExpenseDashboard: React.FC<ExpenseDashboardProps> = ({ onRefresh }) => {
             fetchExpenses();
             onRefresh();
         } catch (err: any) {
-            alert(`Status synchronization failed: ${err.message}`);
+            alert(`Status synchronization failed: ${formatError(err)}`);
         } finally {
             setUpdatingStatus(prev => ({ ...prev, [expenseId]: false }));
         }
@@ -167,7 +171,7 @@ const ExpenseDashboard: React.FC<ExpenseDashboardProps> = ({ onRefresh }) => {
                 </div>
                 
                 <div className="overflow-x-auto flex-grow custom-scrollbar">
-                     <table className="w-full text-left text-sm whitespace-nowrap">
+                     <table className="w-full text-left text-sm whitespace-nowrap border-collapse">
                         <thead className="text-[9px] font-black uppercase text-white/20 tracking-[0.4em] bg-white/[0.01] border-b border-white/5">
                             <tr>
                                 <th className="p-10 pl-12">Registry Pulse</th>
@@ -231,7 +235,7 @@ const ExpenseDashboard: React.FC<ExpenseDashboardProps> = ({ onRefresh }) => {
                 </div>
             </div>
 
-            {isAddModalOpen && <AddExpenseModal onClose={() => setIsAddModalOpen(false)} onSave={() => { fetchExpenses(); onRefresh(); }} />}
+            {isAddModalOpen && <AddExpenseModal branches={branches} branchId={branchId} onClose={() => setIsAddModalOpen(false)} onSave={() => { fetchExpenses(); onRefresh(); }} />}
         </div>
     );
 };

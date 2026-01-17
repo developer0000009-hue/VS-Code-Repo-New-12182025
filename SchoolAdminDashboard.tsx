@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { UserProfile, Role, SchoolAdminProfileData, SchoolBranch, BuiltInRoles } from './types';
 import Navbar from './components/admin/Navbar';
@@ -7,7 +6,7 @@ import DashboardOverview from './components/admin/DashboardOverview';
 import AdmissionsTab from './components/AdmissionsTab';
 import EnquiryTab from './components/EnquiryTab';
 import AttendanceTab from './components/AttendanceTab';
-import FinanceTab from './components/FinanceTab';
+import FinanceTab from './FinanceTab';
 import CommunicationTab from './components/CommunicationTab';
 import { UserManagementTab } from './components/UserManagementTab';
 import { ProfileCreationPage } from './components/ProfileCreationPage';
@@ -198,7 +197,7 @@ const SchoolAdminDashboard: React.FC<SchoolAdminDashboardProps> = ({ profile, on
             case 'Courses': return <CoursesTab profile={profile} />;
             case 'Attendance': return <AttendanceTab />;
             case 'Timetable': return <TimetableTab />;
-            case 'Finance': return <FinanceTab profile={profile} branchId={currentBranchId} />;
+            case 'Finance': return <FinanceTab profile={profile} branchId={currentBranchId} branches={branches} />;
             case 'Communication': return <CommunicationTab profile={profile} />;
             case 'User Management': return <UserManagementTab profile={profile} isHeadOfficeAdmin={isHeadOfficeAdmin} />;
             case 'Analytics': return <AnalyticsTab />;

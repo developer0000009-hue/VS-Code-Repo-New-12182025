@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../services/supabase';
+import { supabase, formatError } from '../../services/supabase';
 import { UserProfile } from '../../types';
 import Spinner from '../common/Spinner';
 import { XIcon } from '../icons/XIcon';
@@ -114,7 +113,7 @@ const BulkCourseActionsModal: React.FC<BulkCourseActionsModalProps> = ({ action,
             setImportStats({ 
                 success_count: 0, 
                 failure_count: previewData.length, 
-                errors: [{ error: err.message || "Failed to process records.", row_index: 0, title: 'Import Process Error' }] 
+                errors: [{ error: formatError(err), row_index: 0, title: 'Import Process Error' }] 
             });
         } finally {
             setLoading(false);

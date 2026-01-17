@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../../services/supabase';
+import { supabase, formatError } from '../../services/supabase';
 import { SchoolClass, StudentForAdmin, Course, SchoolAdminProfileData } from '../../types';
 import Spinner from '../common/Spinner';
 import { XIcon } from '../icons/XIcon';
@@ -57,21 +56,6 @@ const StatWidget: React.FC<{ title: string, value: string | number, icon: React.
     </div>
 );
 
-const formatError = (err: any): string => {
-    if (!err) return "An unknown error occurred.";
-    if (typeof err === 'string') {
-         if (err.includes("[object Object]")) return "An unexpected error occurred.";
-         return err;
-    }
-    const message = err.message || err.error_description || err.details || err.hint;
-    if (message && typeof message === 'string') return message;
-    try {
-        return JSON.stringify(err);
-    } catch {
-        return "An error occurred.";
-    }
-};
-
 const ClassWorkspace: React.FC<ClassWorkspaceProps> = ({ classData, onClose, onUpdate, schoolProfile }) => {
     const [activeTab, setActiveTab] = useState<TabType>('overview');
     const [loading, setLoading] = useState(false);
@@ -124,7 +108,7 @@ const ClassWorkspace: React.FC<ClassWorkspaceProps> = ({ classData, onClose, onU
                         {/* KPI Grid */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                             <StatWidget title="Total Students" value={students.length} icon={<UsersIcon className="w-6 h-6"/>} color="bg-blue-500"/>
-                            <StatWidget title="Subjects" value={subjects.length} icon={<BookIcon className="w-6 h-6"/>} color="bg-purple-500"/>
+                            <StatWidget title="Subjects" value={students.length > 0 ? subjects.length : 0} icon={<BookIcon className="w-6 h-6"/>} color="bg-purple-500"/>
                             <StatWidget title="Avg Attendance" value={`${stats.attendanceRate}%`} icon={<CheckCircleIcon className="w-6 h-6"/>} color="bg-emerald-500"/>
                             <StatWidget title="Pending Fees" value={stats.pendingFees} icon={<AlertTriangleIcon className="w-6 h-6"/>} color="bg-amber-500"/>
                         </div>

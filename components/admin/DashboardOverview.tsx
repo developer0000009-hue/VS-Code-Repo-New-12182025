@@ -72,9 +72,10 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ schoolProfile, cu
                     <div className="space-y-8 w-full max-w-4xl">
                         {loading && !currentBranch ? (
                             <div className="space-y-6">
-                                <Skeleton className="w-32 h-6 rounded-full" />
-                                <Skeleton className="w-96 h-20 rounded-2xl" />
-                                <Skeleton className="w-64 h-6 rounded-xl" />
+                                {/* FIX: Replaced <Skeleton /> with <Skeleton.Line /> and set width to auto to let CSS classes take precedence */}
+                                <Skeleton.Line width="auto" className="w-32 h-6 rounded-full" />
+                                <Skeleton.Line width="auto" className="w-96 h-20 rounded-2xl" />
+                                <Skeleton.Line width="auto" className="w-64 h-6 rounded-xl" />
                             </div>
                         ) : (
                             <>

@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { TeacherExtended, TeacherDocument, SchoolClass, Course, TeacherSubjectMapping } from '../types';
-import { supabase } from '../services/supabase';
+import { supabase, formatError } from '../services/supabase';
 import Spinner from './common/Spinner';
 import { XIcon } from './icons/XIcon';
 import { UserIcon } from './icons/UserIcon';
@@ -12,6 +11,8 @@ import { BookIcon } from './icons/BookIcon';
 import { FileTextIcon } from './icons/FileTextIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { XCircleIcon } from './icons/XCircleIcon';
+import { ClockIcon } from './icons/ClockIcon';
+// Fix: Added missing CalendarIcon import to resolve "Cannot find name" errors in InfoRow usage.
 import { CalendarIcon } from './icons/CalendarIcon';
 import { ChartBarIcon } from './icons/ChartBarIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
@@ -22,7 +23,7 @@ import { CommunicationIcon } from './icons/CommunicationIcon';
 import { EditIcon } from './icons/EditIcon';
 import { SaveIcon } from './icons/SaveIcon';
 import OffboardingModal from './teachers/OffboardingModal';
-import { ClockIcon } from './icons/ClockIcon';
+// Fix: Removed duplicate ClockIcon import to resolve "Duplicate identifier" compiler error.
 import { PlusIcon } from './icons/PlusIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { UsersIcon } from './icons/UsersIcon';
@@ -41,14 +42,6 @@ interface TeacherDetailModalProps {
 }
 
 type TabType = 'personal' | 'employment' | 'academics' | 'timetable' | 'documents' | 'attendance' | 'performance' | 'account';
-
-const formatError = (err: any): string => {
-    if (!err) return "An unknown error occurred.";
-    if (typeof err === 'string') return err;
-    const message = err.message || err.error_description || err.details || err.hint;
-    if (message && typeof message === 'string') return message;
-    return "An unexpected system error occurred.";
-};
 
 const generateEmployeeId = () => {
     const year = new Date().getFullYear();
@@ -498,7 +491,7 @@ const TeacherDetailModal: React.FC<TeacherDetailModalProps> = ({ teacher, onClos
                                                         </p>
                                                         <span className="text-[10px] text-muted-foreground/60">•</span>
                                                         <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                                                            <ClockIcon className="w-3 h-3 opacity-40"/> {map.credits || 4} Hrs/Week
+                                                            <ClockIcon className="w-3.5 h-3.5 opacity-40"/> {map.credits || 4} Hrs/Week
                                                         </p>
                                                     </div>
                                                 </div>
@@ -595,7 +588,7 @@ const TeacherDetailModal: React.FC<TeacherDetailModalProps> = ({ teacher, onClos
                                                         <FileTextIcon className="w-6 h-6" />
                                                     </div>
                                                     <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                                                        doc.status === 'Verified' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                                                        doc.status === 'Verified' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
                                                     }`}>
                                                         {doc.status}
                                                     </span>
@@ -659,7 +652,7 @@ const TeacherDetailModal: React.FC<TeacherDetailModalProps> = ({ teacher, onClos
                                             <div className="space-y-6 flex-grow">
                                                 {securityLogs.map(log => (
                                                     <div key={log.id} className="relative pl-6 border-l-2 border-border last:border-transparent pb-1">
-                                                        <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-background border-2 border-primary"></div>
+                                                        <div className="absolute -left-[9px] top-1.5 w-4 h-4 rounded-full bg-background border-2 border-primary"></div>
                                                         <p className="text-sm font-bold text-foreground">{log.action}</p>
                                                         <p className="text-[10px] text-muted-foreground mt-0.5">{log.device} • {log.time}</p>
                                                         <p className="text-[10px] text-muted-foreground font-mono mt-1 opacity-60">{log.location}</p>
